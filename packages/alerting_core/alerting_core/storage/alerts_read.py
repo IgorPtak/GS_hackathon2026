@@ -39,15 +39,21 @@ def decode_cursor(cursor: str) -> tuple[datetime, str]:
 
 async def list_alerts(
     connection: asyncpg.Connection | asyncpg.Pool,
-    team: str,
+    team: str | None,
     status: list[AlertStatus] | None = None,
     limit: int = 50,
     cursor: str | None = None,
 ) -> AlertPage:
-    """One page of a team's alerts, newest activity first (keyset on last_seen desc, id desc)."""
+    """One page of alerts, newest activity first (keyset on last_seen desc, id desc).
+
+    `team` is optional as in openapi (`GET /api/v1/alerts`); None lists every team.
+    """
     limit = max(1, min(limit, MAX_PAGE_SIZE))
-    arguments: list[object] = [team]
-    conditions = ["team = $1"]
+    arguments: list[object] = []
+    conditions = ["TRUE"]
+    if team is not None:
+        arguments.append(team)
+        conditions.append(f"team = ${len(arguments)}")
     if status:
         arguments.append([item.value for item in status])
         conditions.append(f"status = ANY(${len(arguments)}::text[])")

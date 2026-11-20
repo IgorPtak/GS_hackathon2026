@@ -26,6 +26,7 @@ from alerting_contracts.api import AlertDetail, AlertPage, IngestAccepted, Phone
 FIXTURES = Path(__file__).resolve().parent.parent / "contracts" / "fixtures" / "events"
 GATES = ["3h", "7h", "11h", "14h"]
 RATES_SOURCE = "rates-oms"
+RATES_RULE_ID = "rates-large-rejections"
 SETTLEMENTS_SOURCE = "settlements-engine"
 RATES_RULE_ID = "rates-large-rejections"
 WORKFLOW_ID = "wf-settle-20261120-0042"
@@ -167,7 +168,34 @@ def make_worker_healthz_check(service: str, port: int) -> Callable[[Ctx], str]:
     return check
 
 
+def resolve_open_rates_alerts(ctx: Ctx) -> int:
+    """Resolve earlier runs' rates alerts (best effort; the api may not exist at this gate).
+
+    The fixture's fingerprint has no tradeId, so without this the smoke event would fold into an
+    alert from a previous run and send no new notification for the email check to find.
+    """
+    try:
+        page = AlertPage.model_validate(
+            get_json(ctx, f"{ctx.base_url}/api/v1/alerts", team="rates", status="open", limit=200)
+        )
+    except (CheckFailed, httpx.HTTPError, ValueError):
+        return 0
+    resolved = 0
+    for alert in page.items:
+        if alert.rule_id != RATES_RULE_ID:
+            continue
+        url = f"{ctx.base_url}/api/v1/alerts/{alert.id}/resolve"
+        body = {"actor": {"id": "smoke-test"}, "comment": f"smoke {ctx.run_id}"}
+        try:
+            if ctx.client.post(url, json=body).status_code == 200:
+                resolved += 1
+        except httpx.HTTPError:
+            pass
+    return resolved
+
+
 def check_post_rates_fixture(ctx: Ctx) -> str:
+    resolve_open_rates_alerts(ctx)
     event, trade_id = rates_event(ctx, "main")
     ctx.state["rates_trade_id"] = trade_id
     post_event(ctx, RATES_SOURCE, event)
