@@ -92,7 +92,7 @@ async def find_mail(token: str) -> dict[str, Any]:
 def test_registry_lookup_by_type() -> None:
     assert plugin(ChannelType.ui).channel_type == ChannelType.ui
     assert plugin(ChannelType.email).channel_type == ChannelType.email
-    assert get_channel_plugin(ChannelType.webhook) is None
+    assert get_channel_plugin(ChannelType.webhook) is not None
 
 
 async def test_ui_publishes_notification_to_team_channel(context: ChannelContext) -> None:

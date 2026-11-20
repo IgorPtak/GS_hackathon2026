@@ -1,6 +1,6 @@
 # plugins/channels
 
-Channel plugins: base interface, registry, one file per channel type (`ui`, `email`; A-15 adds sms/phone/webhook).
+Channel plugins: base interface, registry, one file per channel type: `ui`, `email`, `sms`, `phone` (mock gateway + phone simulator; `sms.py`/`phone.py` share `_gateway.py`) and `webhook` (renders `settings.body_template` to JSON; 5xx/timeout retryable, 4xx permanent).
 
 Owner: track A. Tasks: A-12, A-15. See `docs/IMPLEMENTATION_PLAN.md`.
 
