@@ -16,3 +16,13 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-05 RecentEventsPanel: polls /api/v1/events/recent every 2 s (paused while hidden) with source filter, collapsible JSON payload and error banner; Schemas and Alerts tabs.
 - B-10 action plugins: registry + http_get, webhook (YAML-only), retry_workflow, restart_service, open_ticket, escalate; every config/actions/*.yaml resolves to a plugin.
 - B-08 LLM client: alerting_core.llm LlmClient (OpenAI-compatible, json_schema output, one validation retry, think-block strip, LLM_ALLOWED_HOSTS), Luhn-aware redact_secrets, in-memory/Redis cache, LlmConfig.from_settings, scripts/check_llm.py.
+- A-03 config: YAML loader per kind, Postgres config_documents store with atomic startup sync, hot-reloading ConfigRegistry (subscribe-then-load, coalesced reloads, per-document validation, 30 s reconcile) and one-process file watcher.
+- A-19 alert storage: keyset-paginated list_alerts, get_alert_detail, acknowledge/resolve transitions with audit, outbox enqueue helpers, SSE publish helpers, uuid7.
+- A-11 outbox relay: FOR UPDATE SKIP LOCKED batches to deliveries/runbook-jobs, delivery_id = outbox id, invalid rows to <stream>-dlq, lag and batch metrics.
+- A-14 mock gateway: /sms, /phone, /workflows retry and service restart endpoints with outage toggles for demos.
+- A-05 generator: synthetic event generator for fixtures and load scenarios.
+- A-10 routing: recipients x channels from rule routes and preferences (working hours with DST, ui once), per-recipient throttle that fails open.
+- A-08 rules and templating: compiled conditions (numeric coercion, ReDoS guard, rule index by normalized.type), EventContext layering, {{path}} templates.
+- A-07 schema profiles: ProfileMatcher (precompiled, priority order, unknown-shape flag), normalization with value maps, stable canonical fingerprints.
+- A-06 sources: Alertmanager webhook split with source-scoped idempotency keys; log_tail runner with Redis lock, generation-scoped offsets, rotation/truncation handling and DLQ for bad lines.
+- B-01 api service skeleton: app factory with lifespan (pool, lazy Redis, config source), one router per tag, /healthz, /api/v1/config, /api/v1/events/recent, ErrorResponse handlers, /metrics, route drift test; DirectoryConfigSource until A-03.

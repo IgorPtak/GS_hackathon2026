@@ -1,5 +1,6 @@
 """Ingest HTTP service (track A, port 8001): accepts events and appends them to stream `events`."""
 
+import asyncio
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -9,7 +10,7 @@ from typing import Any
 import orjson
 from alerting_contracts.api import ErrorResponse, IngestAccepted
 from alerting_contracts.config import SourceConfig
-from alerting_contracts.events import EventEnvelope
+from alerting_contracts.events import EventEnvelope, SourceType
 from alerting_core.connections import create_redis_client
 from alerting_core.logging import configure_logging, get_logger
 from alerting_core.metrics import LATENCY_BUCKETS, render_metrics
@@ -24,6 +25,7 @@ from redis.exceptions import RedisError
 from ulid import ULID
 
 from plugins.sources import get_source_plugin
+from plugins.sources.log_tail import LogTailRunner
 
 from .sources import load_sources
 
@@ -126,6 +128,8 @@ def build_envelopes(
         elif key_path:
             found = lookup_path(payload, key_path)
             key = None if found is None else str(found)
+        else:
+            key = plugin.idempotency_key(payload, source)
         try:
             envelopes.append(
                 EventEnvelope(
@@ -213,6 +217,26 @@ async def handle_ingest(request: Request, source_id: str, *, is_batch: bool) -> 
     return JSONResponse(accepted.model_dump(mode="json"), status_code=202)
 
 
+def start_log_tails(app: FastAPI) -> list[asyncio.Task[None]]:
+    """Start one background tail task per enabled log_tail source (one process wins the lock)."""
+    tasks = []
+    for source in app.state.sources.values():
+        if source.type != SourceType.log_tail or not source.enabled:
+            continue
+
+        async def append(envelopes: list[EventEnvelope], source_id: str = source.id) -> None:
+            event_ids, duplicates = await append_envelopes(
+                app.state.redis, app.state.append_script, envelopes
+            )
+            EVENTS_TOTAL.labels(source_id, "accepted").inc(len(event_ids))
+            if duplicates:
+                EVENTS_TOTAL.labels(source_id, "duplicate").inc(duplicates)
+
+        runner = LogTailRunner(source, app.state.redis, append)
+        tasks.append(asyncio.create_task(runner.run(), name=f"log-tail-{source.id}"))
+    return tasks
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the app; Settings and the Redis client live in the lifespan (app.state)."""
     resolved = settings or get_settings()
@@ -224,8 +248,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.sources = load_sources(resolved.config_dir)
         app.state.redis = create_redis_client(resolved)
         app.state.append_script = app.state.redis.register_script(APPEND_SCRIPT)
+        tail_tasks = start_log_tails(app)
         log.info("ingest_started", extra={"sources": sorted(app.state.sources)})
         yield
+        for task in tail_tasks:
+            task.cancel()
+        await asyncio.gather(*tail_tasks, return_exceptions=True)
         await app.state.redis.aclose()
 
     app = FastAPI(lifespan=lifespan)

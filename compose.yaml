@@ -87,6 +87,9 @@ services:
 
   ingest:
     <<: *python-service
+    volumes:
+      - ./config:/app/config:ro
+      - ./data/logs:/var/log/pricing:ro
     command: ["uvicorn", "services.ingest.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "${INGEST_WORKERS:-2}", "--loop", "uvloop"]
     ports:
       - "8001:8001"

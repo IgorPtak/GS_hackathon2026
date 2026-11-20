@@ -206,7 +206,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             state.unhealthy_services.discard(name)
         else:
             state.unhealthy_services.add(name)
-        log.info("gateway_service_health_set", extra={"name": name, "is_healthy": body.is_healthy})
+        log.info(
+            "gateway_service_health_set",
+            extra={"service_name": name, "is_healthy": body.is_healthy},
+        )
         return {"name": name, "is_healthy": body.is_healthy}
 
     @app.get("/admin/outage")
