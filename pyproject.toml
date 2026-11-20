@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest", "pytest-asyncio", "ruff", "respx"]
+dev = ["pytest", "pytest-asyncio", "ruff", "respx", "jsonschema"]
 
 [tool.uv]
 # Virtual root: the workspace members are installed, the root itself is not a package.
