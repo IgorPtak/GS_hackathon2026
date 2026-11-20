@@ -12,10 +12,11 @@ from alerting_contracts.config import SourceConfig
 from alerting_contracts.events import EventEnvelope
 from alerting_core.connections import create_redis_client
 from alerting_core.logging import configure_logging, get_logger
+from alerting_core.metrics import LATENCY_BUCKETS, render_metrics
 from alerting_core.settings import Settings, get_settings
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from prometheus_client import Counter, Histogram
 from redis.asyncio import Redis
 from ulid import ULID
 
@@ -29,8 +30,9 @@ STREAM = "events"
 IDEMPOTENCY_TTL_SECONDS = 86400
 
 EVENTS_TOTAL = Counter("ingest_events_total", "Events seen by ingest", ["source_id", "outcome"])
-# alerting_core.metrics is not on this branch yet; switch to LATENCY_BUCKETS when it lands.
-REQUEST_SECONDS = Histogram("ingest_request_seconds", "Ingest request duration")
+REQUEST_SECONDS = Histogram(
+    "ingest_request_seconds", "Ingest request duration", buckets=LATENCY_BUCKETS
+)
 
 
 class RequestError(Exception):
@@ -199,7 +201,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/metrics")
     async def metrics() -> Response:
         """Prometheus exposition."""
-        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+        body, content_type = render_metrics()
+        return Response(body, media_type=content_type)
 
     @app.post("/api/v1/ingest/{source_id}/batch")
     async def ingest_event_batch(request: Request, source_id: str) -> Response:
