@@ -43,3 +43,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-16 group windows: group-buffer + group-deadlines, Lua claim with retry entry, one summary alert per window (alert_grouped, purpose group_summary), deterministic ids
 - A-17 rule preview: pure preview_rule (dedup, group windows, routing, in-memory throttle) + paged event log reader; 50k events ~0.7–1.3 s
 - A-18 auto-resolve: resolution events resolve open alerts (source_resolved); after_silence via silence-deadlines (GT, Lua claim) in every processor
+- A-15 demo config: piotr gets settlements alerts and approvals by sms (+ phone when critical); Mailpit email tests skip when localhost:1025 is unreachable
