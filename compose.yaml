@@ -26,6 +26,9 @@ services:
   postgres:
     image: postgres:16
     env_file: *env-file
+    # Published so host-side tests (pytest, smoke, load test) reach the same database.
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       # Runs *.sql once, on first start of an empty volume.
@@ -38,6 +41,9 @@ services:
 
   redis:
     image: redis:7
+    # Published so host-side stream tests run against the real Redis.
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s
