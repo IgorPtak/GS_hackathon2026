@@ -11,13 +11,15 @@ interface RuleYamlFieldProps {
   readonly ruleId: string;
   readonly serverErrors: readonly ConfigValidationError[];
   readonly onRuleChange: (rule: Rule | null) => void;
+  /** Replaces the editor text (e.g. an AI draft); a new `nonce` re-applies it. */
+  readonly prefill?: { readonly yaml: string; readonly nonce: number } | null;
 }
 
 function Editor({
   initial,
   serverErrors,
   onRuleChange,
-}: Omit<RuleYamlFieldProps, "ruleId"> & { initial: string }) {
+}: Omit<RuleYamlFieldProps, "ruleId" | "prefill"> & { initial: string }) {
   const [text, setText] = useState(initial);
   const validation = useRuleValidation(text);
   const { rule } = validation;
@@ -40,7 +42,12 @@ function Editor({
 }
 
 /** Loads the current rule YAML of the alert and edits it with live validation. */
-export function RuleYamlField({ ruleId, serverErrors, onRuleChange }: RuleYamlFieldProps) {
+export function RuleYamlField({
+  ruleId,
+  serverErrors,
+  onRuleChange,
+  prefill = null,
+}: RuleYamlFieldProps) {
   const [loaded, setLoaded] = useState<{
     id: string;
     yaml: string | null;
@@ -77,5 +84,12 @@ export function RuleYamlField({ ruleId, serverErrors, onRuleChange }: RuleYamlFi
         {loaded.error}
       </p>
     );
-  return <Editor initial={loaded.yaml} serverErrors={serverErrors} onRuleChange={onRuleChange} />;
+  return (
+    <Editor
+      key={prefill?.nonce ?? 0}
+      initial={prefill?.yaml ?? loaded.yaml}
+      serverErrors={serverErrors}
+      onRuleChange={onRuleChange}
+    />
+  );
 }

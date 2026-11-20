@@ -2,7 +2,7 @@
 
 A responder proposes a change to the rule or runbook behind an alert; the rule's owner team
 accepts or rejects it. Accepting is idempotent (see below).
-`/fix-proposals/draft` (B-24, LLM draft) is intentionally not routed yet.
+The LLM draft route (B-24) lives in `fix_proposal_drafts.py`.
 
 Accept ordering (documented because `save_config_document` / `save_runbook` use their own
 pool connection, so they cannot join the proposal's transaction): the proposal row is locked

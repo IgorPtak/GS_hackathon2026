@@ -38,3 +38,14 @@ export function buildStep(draft: StepDraft): RunbookStep | null {
     max_attempts: 1,
   };
 }
+
+/** Fills the step form from an API step (e.g. an AI draft). */
+export function draftFromStep(step: RunbookStep): StepDraft {
+  return {
+    index: step.index,
+    kind: step.kind,
+    text: step.text,
+    action: step.action ?? "",
+    params: Object.entries(step.params ?? {}).map(([key, value]) => ({ key, value })),
+  };
+}
