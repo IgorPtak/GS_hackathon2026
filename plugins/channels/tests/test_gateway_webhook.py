@@ -17,6 +17,7 @@ from alerting_contracts.sse import PhoneMessageEvent
 from alerting_core.connections import create_database_pool
 from alerting_core.settings import Settings
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 from plugins.channels import (
     ChannelContext,
@@ -30,6 +31,7 @@ TEST_DATABASE = "alerting_channels_test"
 SMS_URL = "http://gateway.test/sms"
 PHONE_URL = "http://gateway.test/phone"
 HOOK_URL = "http://hooks.test/slack"
+ALLOWED_HOSTS = ["gateway.test", "hooks.test", "localhost"]
 
 ALICE = Recipient(
     id="alice",
@@ -73,7 +75,12 @@ async def pool() -> AsyncIterator[asyncpg.Pool]:
 async def context(pool: asyncpg.Pool) -> AsyncIterator[ChannelContext]:
     redis = Redis.from_url("redis://localhost:6379/6")
     async with httpx.AsyncClient() as http:
-        yield ChannelContext(redis=redis, http=http, settings=Settings(), database=pool)
+        yield ChannelContext(
+            redis=redis,
+            http=http,
+            settings=Settings(channel_allowed_hosts=ALLOWED_HOSTS),
+            database=pool,
+        )
     await redis.aclose()
 
 
@@ -326,4 +333,93 @@ async def test_webhook_timeout_is_unavailable(context: ChannelContext) -> None:
     respx.post(HOOK_URL).mock(side_effect=httpx.ReadTimeout("slow"))
     hook = config(ChannelType.webhook, url=HOOK_URL, body_template=SLACK_TEMPLATE)
     with pytest.raises(ChannelUnavailableError):
+        await plugin(ChannelType.webhook).send(make_job(ChannelType.webhook), None, hook, context)
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("status", "error"),
+    [(408, ChannelUnavailableError), (429, ChannelUnavailableError), (302, ChannelRejectedError)],
+)
+async def test_transient_and_redirect_statuses(
+    context: ChannelContext, status: int, error: type[Exception]
+) -> None:
+    respx.post(SMS_URL).respond(status)
+    respx.post(HOOK_URL).respond(status)
+    with pytest.raises(error):
+        await plugin(ChannelType.sms).send(
+            make_job(ChannelType.sms), ALICE, config(ChannelType.sms, gateway_url=SMS_URL), context
+        )
+    hook = config(ChannelType.webhook, url=HOOK_URL, body_template=SLACK_TEMPLATE)
+    with pytest.raises(error):
+        await plugin(ChannelType.webhook).send(make_job(ChannelType.webhook), None, hook, context)
+
+
+@respx.mock
+async def test_publish_failure_does_not_fail_send(
+    context: ChannelContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    respx.post(SMS_URL).respond(200, json={"message_id": "m1"})
+
+    async def failing_publish(*args: Any, **kwargs: Any) -> int:
+        raise RedisError("down")
+
+    monkeypatch.setattr(context.redis, "publish", failing_publish)
+    await plugin(ChannelType.sms).send(
+        make_job(ChannelType.sms), ALICE, config(ChannelType.sms, gateway_url=SMS_URL), context
+    )
+    assert context.database is not None
+    assert len(await stored_rows(context.database)) == 1
+
+
+@respx.mock
+async def test_database_error_is_unavailable_and_bad_alert_id_rejected(
+    context: ChannelContext,
+) -> None:
+    respx.post(SMS_URL).respond(200, json={"message_id": "m1"})
+    sms = config(ChannelType.sms, gateway_url=SMS_URL)
+    bad_id = make_job(ChannelType.sms).model_copy(update={"alert_id": "not-a-uuid"})
+    with pytest.raises(ChannelRejectedError):
+        await plugin(ChannelType.sms).send(bad_id, ALICE, sms, context)
+    assert context.database is not None
+    await context.database.execute("ALTER TABLE phone_messages RENAME TO phone_messages_x")
+    try:
+        with pytest.raises(ChannelUnavailableError):
+            await plugin(ChannelType.sms).send(make_job(ChannelType.sms), ALICE, sms, context)
+    finally:
+        await context.database.execute("ALTER TABLE phone_messages_x RENAME TO phone_messages")
+
+
+@respx.mock
+async def test_host_outside_allowlist_is_rejected_before_request(context: ChannelContext) -> None:
+    route = respx.post("http://evil.test/x").respond(200)
+    with pytest.raises(ChannelRejectedError):
+        await plugin(ChannelType.sms).send(
+            make_job(ChannelType.sms),
+            ALICE,
+            config(ChannelType.sms, gateway_url="http://evil.test/x"),
+            context,
+        )
+    hook = config(ChannelType.webhook, url="http://evil.test/x", body_template="{}")
+    with pytest.raises(ChannelRejectedError):
+        await plugin(ChannelType.webhook).send(make_job(ChannelType.webhook), None, hook, context)
+    assert not route.called
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"url": HOOK_URL, "body_template": 5},
+        {"url": HOOK_URL, "headers": ["a"]},
+        {"url": HOOK_URL, "method": 1},
+        {"url": "http://hooks.test/slack", "body_template": "[1]"},
+        {"url": "ftp://hooks.test/x"},
+        {"url": "http://localhost:abc/x"},
+    ],
+)
+async def test_webhook_config_errors_are_rejected(
+    context: ChannelContext, settings: dict[str, Any]
+) -> None:
+    hook = config(ChannelType.webhook, **settings)
+    with pytest.raises(ChannelRejectedError):
         await plugin(ChannelType.webhook).send(make_job(ChannelType.webhook), None, hook, context)
