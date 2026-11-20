@@ -16,3 +16,19 @@ class MySource(HttpSourcePlugin):
 
 register_source_plugin(SourceType.alertmanager, MySource())
 ```
+
+## Alertmanager
+
+`alertmanager.py` splits `alerts[]` into one event per alert (item `status` wins, `receiver` and
+`groupKey` copied in). Override `idempotency_key(payload, source)` to dedupe re-sends when the
+request has no `Idempotency-Key` header and no `idempotency_key_path`.
+
+## Log tail (not HTTP)
+
+`log_tail.py` is a `LogTailRunner` that ingest starts as a background task for every enabled
+`log_tail` source. Settings: `path`, `line_format` (`json` | `regex`), `line_pattern` (named
+groups), `start_at` (`end` | `beginning`, only without a stored offset). Payload = named groups
+(strings) + `raw_line`. Lines that fail to parse go to stream `events-dlq` with the raw line.
+Only one ingest worker tails a file (Redis lock `log-tail-lock:<source_id>`); the offset lives in
+`log-tail-offset:<source_id>` (`inode:offset`). Rotation and truncation are detected by inode change
+or size shrink. The compose `ingest` service mounts `./data/logs` at `/var/log/pricing`.
