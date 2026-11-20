@@ -1,0 +1,3 @@
+Workflow rozliczeniowy sie zawiesil
+
+Jak dostaniesz alert ze workflow stoi, to najpierw odpal go jeszcze raz (retry workflow). Potem poczekaj 10 minut i sprawdz na dashboardzie czy ruszyl. Jesli nie, zadzwon do Piotra z settlements. Na koniec załóż ticket z numerem workflow.

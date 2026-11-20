@@ -1,0 +1,5 @@
+{"steps": [
+  {"kind": "text", "action": null, "requires_approval": false},
+  {"kind": "action", "action": "retry-workflow", "requires_approval": true},
+  {"kind": "action", "action": "open-ticket", "requires_approval": false}
+]}

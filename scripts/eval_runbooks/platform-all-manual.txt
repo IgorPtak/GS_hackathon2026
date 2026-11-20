@@ -1,0 +1,3 @@
+Disk space warning on the build server
+
+Nothing to click here honestly. Go to the server room dashboard, look at which folder is huge, ask Kasia whether the old artifacts can be deleted, and then delete them by hand. Write in the platform channel when done.

@@ -1,0 +1,3 @@
+Rates feed lagging - what to do
+
+hi team, if the rates feed is lagging (the alert says feed is behind) then first poke the feed helth page at http://rates-gateway:8080/health and see if it anwsers. If it does not answer ask Bob from the rates desk if they changed anything today. After that make a ticket so we dont forget, put the feed name in it. Thx, Anna (ps. lunch is at 12)

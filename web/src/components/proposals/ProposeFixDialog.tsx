@@ -4,7 +4,9 @@ import type { Alert, FixKind, FixProposal, Rule } from "../../api/types";
 import { RuleYamlField } from "./RuleYamlField";
 import { RunbookStepForm } from "./RunbookStepForm";
 import { RunbookStepPreview } from "./RunbookStepPreview";
-import { EMPTY_STEP_DRAFT, buildStep, type StepDraft } from "./stepDraft";
+import { EMPTY_STEP_DRAFT, buildStep, draftFromStep, type StepDraft } from "./stepDraft";
+import { toYamlLines } from "./yamlLite";
+import { useDraftFixProposal } from "./useDraftFixProposal";
 import { useRunbookSteps } from "./useRunbookSteps";
 import { useSubmitFixProposal } from "./useSubmitFixProposal";
 
@@ -24,6 +26,8 @@ export function ProposeFixDialog({ alert, onClose, onCreated }: ProposeFixDialog
   const [draft, setDraft] = useState<StepDraft>(EMPTY_STEP_DRAFT);
   const runbook = useRunbookSteps(kind === "runbook_step" ? alert.runbook_id : null);
   const sender = useSubmitFixProposal(alert.id, alert.team);
+  const drafter = useDraftFixProposal(alert.id);
+  const [prefill, setPrefill] = useState<{ yaml: string; nonce: number } | null>(null);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -44,6 +48,18 @@ export function ProposeFixDialog({ alert, onClose, onCreated }: ProposeFixDialog
     !hasNoRunbook &&
     (!isRuleKind || rule !== null) &&
     (!isStepKind || step !== null);
+
+  async function handleDraft() {
+    const suggestion = await drafter.draft();
+    if (!suggestion) return;
+    setKind(suggestion.kind);
+    setDescription(suggestion.description);
+    if (suggestion.proposed_rule) {
+      const yaml = toYamlLines(suggestion.proposed_rule).join("\n");
+      setPrefill((previous) => ({ yaml, nonce: (previous?.nonce ?? 0) + 1 }));
+    }
+    if (suggestion.proposed_runbook_step) setDraft(draftFromStep(suggestion.proposed_runbook_step));
+  }
 
   async function handleSubmit() {
     const created = await sender.submit({
@@ -73,6 +89,23 @@ export function ProposeFixDialog({ alert, onClose, onCreated }: ProposeFixDialog
           Alert <span className="font-mono">{alert.id}</span> · rule{" "}
           <span className="font-mono">{alert.rule_id}</span>
         </p>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            disabled={drafter.isDrafting}
+            onClick={() => {
+              void handleDraft();
+            }}
+            className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-40"
+          >
+            {drafter.isDrafting ? "Drafting..." : "Draft with AI"}
+          </button>
+          {drafter.message ? (
+            <p role="alert" className="text-sm text-red-700">
+              {drafter.message}
+            </p>
+          ) : null}
+        </div>
         <div className="mt-4 space-y-4">
           <label className="block text-sm">
             Fix kind
@@ -106,6 +139,7 @@ export function ProposeFixDialog({ alert, onClose, onCreated }: ProposeFixDialog
               ruleId={alert.rule_id}
               serverErrors={sender.details}
               onRuleChange={setRule}
+              prefill={prefill}
             />
           ) : null}
           {hasNoRunbook ? (

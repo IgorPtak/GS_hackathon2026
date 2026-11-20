@@ -22,9 +22,12 @@ from .routers import (
     alerts,
     approvals,
     config,
+    fix_proposal_drafts,
     fix_proposals,
+    metrics,
     ops,
     phone_simulator,
+    recipients,
     rules,
     runbooks,
     schema_profiles,
@@ -40,6 +43,7 @@ ROUTERS = (
     alerts,
     runbooks,
     fix_proposals,
+    fix_proposal_drafts,
     config,
     rules,
     schema_profiles,
@@ -47,6 +51,8 @@ ROUTERS = (
     phone_simulator,
     stream,
     ops,
+    metrics,
+    recipients,
 )
 
 

@@ -12,11 +12,13 @@ from alerting_contracts.config import Rule
 from alerting_contracts.proposals import FixProposal, ProposalStatus
 from alerting_contracts.runbooks import Runbook
 from alerting_core.config.store import canonical_document
+from alerting_core.llm import LlmHostNotAllowedError, LlmOutputInvalidError, LlmUnavailableError
 from alerting_core.settings import Settings
 from fastapi.testclient import TestClient
 
 from services.api.dependencies import get_pool, get_redis, get_registry
 from services.api.main import create_app
+from services.api.routers import fix_proposal_drafts as draftr
 from services.api.routers import fix_proposals as fixr
 from services.api.routers.runbooks import get_catalog
 
@@ -195,6 +197,7 @@ def env(monkeypatch: pytest.MonkeyPatch) -> Env:
         state.published.append(f"{team}:{event.type}")
 
     monkeypatch.setattr(fixr, "get_alert", get_alert)
+    monkeypatch.setattr(draftr, "get_alert", get_alert)
     monkeypatch.setattr(store, "insert_proposal", insert)
     monkeypatch.setattr(store, "lock_proposal", lock)
     monkeypatch.setattr(store, "mark_decided", mark)
@@ -220,7 +223,9 @@ def client(env: Env) -> TestClient:
         return SimpleNamespace(rules=lambda: {"r1": rule})
 
     app.dependency_overrides[get_registry] = registry
-    app.dependency_overrides[get_catalog] = lambda: SimpleNamespace(get=lambda _id: env.runbook)
+    app.dependency_overrides[get_catalog] = lambda: SimpleNamespace(
+        get=lambda _id: env.runbook, actions=dict
+    )
     with TestClient(app) as test_client:
         yield test_client
 
@@ -389,7 +394,9 @@ def test_save_failure_marks_nothing_and_publishes_nothing(env: Env) -> None:
     app.dependency_overrides[get_pool] = lambda: FakePool(env)
     app.dependency_overrides[get_redis] = lambda: object()
     app.dependency_overrides[get_registry] = lambda: None
-    app.dependency_overrides[get_catalog] = lambda: SimpleNamespace(get=lambda _id: env.runbook)
+    app.dependency_overrides[get_catalog] = lambda: SimpleNamespace(
+        get=lambda _id: env.runbook, actions=dict
+    )
     with TestClient(app, raise_server_exceptions=False) as client:
         create(client, kind="threshold", proposed_rule=rule_doc("New"))
         env.fail_save = True
@@ -412,7 +419,9 @@ def _crashing_client(env: Env) -> TestClient:
     app.dependency_overrides[get_pool] = lambda: FakePool(env)
     app.dependency_overrides[get_redis] = lambda: object()
     app.dependency_overrides[get_registry] = lambda: None
-    app.dependency_overrides[get_catalog] = lambda: SimpleNamespace(get=lambda _id: env.runbook)
+    app.dependency_overrides[get_catalog] = lambda: SimpleNamespace(
+        get=lambda _id: env.runbook, actions=dict
+    )
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -438,3 +447,96 @@ def test_reaccept_after_crash_saves_runbook_step_once(env: Env) -> None:
         assert decide(client, "accept").status_code == 200
     assert len(env.saved_runbooks) == 1
     assert [s.text for s in env.runbook.steps] == ["a", "inserted", "b", "c"]
+
+
+# --- draft (B-24) ---
+
+
+class FakeLlm:
+    """Stands in for LlmClient: returns a canned proposal or raises."""
+
+    def __init__(self, answer: Any = None, error: Exception | None = None) -> None:
+        self.answer = answer
+        self.error = error
+        self.prompts: list[str] = []
+
+    async def generate(self, prompt: str, response_model: Any, *, system: str | None = None) -> Any:
+        self.prompts.append(prompt)
+        if self.error is not None:
+            raise self.error
+        return response_model.model_validate(self.answer)
+
+
+def draft_body(**fields: Any) -> dict[str, Any]:
+    return {"kind": "other", "description": "Raise it", "proposed_by": {"id": "llm"}, **fields}
+
+
+def post_draft(client: TestClient, llm: Any, alert_id: str = ALERT_ID) -> Any:
+    client.app.state.llm = llm
+    return client.post(f"/api/v1/alerts/{alert_id}/fix-proposals/draft")
+
+
+def test_draft_returns_suggestion_and_persists_nothing(client: TestClient, env: Env) -> None:
+    rule = rule_doc(title="Better {{payload.currency}}")
+    llm = FakeLlm(draft_body(kind="fields", proposed_rule=rule))
+    response = post_draft(client, llm)
+    assert response.status_code == 200
+    assert response.json()["proposed_rule"]["present"]["title"] == "Better {{payload.currency}}"
+    assert response.json()["proposed_by"]["id"] == "llm"
+    assert env.events == [] and env.rows == {} and env.published == [] and env.audits == []
+
+
+def test_draft_without_llm_is_503(client: TestClient) -> None:
+    response = post_draft(client, None)
+    assert response.status_code == 503
+    assert ErrorResponse.model_validate(response.json()).error == "llm_unavailable"
+
+
+def test_draft_llm_unavailable_is_503(client: TestClient, env: Env) -> None:
+    response = post_draft(client, FakeLlm(error=LlmUnavailableError("timeout")))
+    assert response.status_code == 503 and "timeout" in response.json()["message"]
+    assert env.rows == {}
+
+
+def test_draft_host_not_allowed_is_503(client: TestClient) -> None:
+    response = post_draft(client, FakeLlm(error=LlmHostNotAllowedError("host")))
+    assert response.status_code == 503
+
+
+def test_draft_invalid_output_is_503_after_retry(client: TestClient, env: Env) -> None:
+    response = post_draft(client, FakeLlm(error=LlmOutputInvalidError("bad")))
+    assert response.status_code == 503
+    assert ErrorResponse.model_validate(response.json()).error == "llm_invalid_output"
+    assert env.rows == {}
+
+
+def test_draft_inconsistent_kind_payload_is_rejected(client: TestClient) -> None:
+    response = post_draft(client, FakeLlm(draft_body(kind="threshold")))
+    assert response.status_code == 503
+    assert response.json()["error"] == "llm_invalid_output"
+
+
+def test_draft_that_changes_ownership_is_rejected(client: TestClient, env: Env) -> None:
+    llm = FakeLlm(draft_body(kind="threshold", proposed_rule=rule_doc(team="other")))
+    response = post_draft(client, llm)
+    assert response.status_code == 503
+    assert response.json()["error"] == "llm_invalid_output"
+    assert env.rows == {}
+
+
+def test_draft_unknown_alert_is_404(client: TestClient, env: Env) -> None:
+    env.alert = None
+    assert post_draft(client, FakeLlm(draft_body())).status_code == 404
+
+
+def test_draft_prompt_is_redacted_and_has_rule_and_runbook(client: TestClient, env: Env) -> None:
+    env.alert = make_alert().model_copy(
+        update={
+            "last_event": {"token": "Bearer abcdefghijklmnop12345", "api_key": "sk-secret123456"}
+        }
+    )
+    llm = FakeLlm(draft_body())
+    assert post_draft(client, llm).status_code == 200
+    prompt = llm.prompts[0]
+    assert "abcdefghijklmnop12345" not in prompt and "sk-secret123456" not in prompt
+    assert "Current rule (YAML)" in prompt and "Runbook rb1 steps" in prompt

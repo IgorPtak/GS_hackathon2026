@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { RuleRecord } from "../api/types";
+import { RecipientsSection } from "../components/recipients/RecipientsSection";
 import { RuleEditor } from "../components/rules/RuleEditor";
 import { useRules } from "../components/rules/useRules";
 
@@ -81,6 +82,7 @@ export function RulesPage({ teamId }: { readonly teamId: string | null }) {
       ) : (
         <RulesView key={teamId} team={teamId} />
       )}
+      {teamId === null ? null : <RecipientsSection key={`recipients-${teamId}`} team={teamId} />}
     </section>
   );
 }

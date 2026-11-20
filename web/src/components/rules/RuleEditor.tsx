@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { apiClient } from "../../api/client";
 import type { ConfigValidationError, RuleRecord } from "../../api/types";
+import { RuleConditionForm } from "./RuleConditionForm";
 import { RulePreviewPanel } from "./RulePreviewPanel";
 import { ValidationErrorList } from "./ValidationErrorList";
 import { YamlEditor } from "./YamlEditor";
@@ -64,6 +65,7 @@ export function RuleEditor({ record, team, onSaved }: RuleEditorProps) {
         </span>
         {isChanged ? <span className="text-xs text-amber-700">Unsaved changes</span> : null}
       </div>
+      <RuleConditionForm yaml={text} onChange={handleChange} />
       <YamlEditor value={text} errorLines={lines} onChange={handleChange} />
       <ValidationErrorList
         errors={shownErrors}
