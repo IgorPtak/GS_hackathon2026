@@ -142,3 +142,20 @@ Joining `deliveries`, `outbox`, and `alerts` (`NOT is_fallback`) breaks down `de
    - **To raise throughput above ~400–450 msg/s:** scale `delivery` (and avoid single-connection/unbatched HTTP ingest saturation with batching or more `ingest` workers/concurrency).
    - **To reduce baseline latency (~500 ms floor at all rates):** lower `interval_seconds` in `services/outbox_relay/relay.py` (currently `0.5 s`, adding ~255 ms p50 / ~512 ms p99 even when idle/moderate); scaling relay replicas is unnecessary at these rates.
    - `processor` (41–45% avg CPU, `events` lag <= 20, drain <= 0.20 s) and `postgres` (61–71% avg across 10 VM vCPUs) still have headroom at 500 msg/s.
+
+### A-24 fixes and re-measurement
+
+Changes: `outbox-relay` polls every 50 ms instead of 500 ms; `delivery` runs 2 replicas by default (`deploy.replicas` in compose; the load tests restore delivery=2).
+
+| Run | Target / achieved msg/s | p50 | p95 | p99 | Lost |
+|---|---|---|---|---|---|
+| steady 30 s, before (A-21, 200 msg/s) | 200 / 200 | 373 ms | — | 572 ms | 0 |
+| steady 30 s, after (`steady-c51a8d37`) | 350 / 350 | **56 ms** | 111 ms | **163 ms** | 0 |
+| steady 30 s, after (`steady-f20ae006`) | 500 / 463 | 1516 ms | — | 2575 ms | 0 |
+
+- Relay wait (`outbox.relayed_at - created_at`) fell from ~255 ms to ~29 ms p50.
+- With 2 delivery replicas at 350 msg/s each uses 33–41% CPU and the `deliveries` lag stays 0.
+- At 500 msg/s the generator only reaches ~463 msg/s: the latency is spent before ingest (open-loop client queue on 16 connections and 2 ingest workers), not in the pipeline. Next lever: more ingest workers or batched ingest.
+- Saturation runs right after the rebuild were noisy (p99 ~2.9 s at 350 msg/s) while another agent's compose stack (`agent-a8f146d5f18928360-*`) was running on the same machine; the steady runs above are the clean numbers.
+
+Max sustainable rate (p99 < 2 s, lag drained): **≥ 350 msg/s, below ~460 msg/s** on this laptop; the limit is now ingest, not the pipeline.

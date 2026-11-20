@@ -169,7 +169,8 @@ async def run_relay(
     redis: Redis,
     stop: asyncio.Event,
     *,
-    interval_seconds: float = 0.5,
+    # 50 ms: a 0.5 s poll added ~255 ms p50 to every alert (A-24); the query is cheap.
+    interval_seconds: float = 0.05,
     batch_size: int = 500,
     max_backoff_seconds: float = 5.0,
 ) -> None:
