@@ -19,13 +19,19 @@ function HighlightedText({ text, code }: { text: string; code: string | null }) 
 }
 
 /** One SMS or call on the mock phone. */
-export function PhoneMessageBubble({ message }: { message: PhoneMessage }) {
+export function PhoneMessageBubble({
+  message,
+  isMissed = false,
+}: {
+  message: PhoneMessage;
+  isMissed?: boolean;
+}) {
   const isCall = message.channel_type === "phone";
   return (
     <li className="rounded-2xl rounded-tl-sm bg-white p-3 text-sm shadow-sm">
       <div className="mb-1 flex items-center gap-2 text-xs text-slate-500">
         <span aria-hidden>{isCall ? "☎" : "✉"}</span>
-        <span className="font-medium">{isCall ? "Call" : "SMS"}</span>
+        <span className="font-medium">{isCall ? (isMissed ? "Missed call" : "Call") : "SMS"}</span>
         <span>{new Date(message.at).toLocaleTimeString()}</span>
       </div>
       <p className="break-words whitespace-pre-wrap">
