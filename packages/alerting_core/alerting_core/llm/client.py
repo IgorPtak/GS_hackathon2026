@@ -7,7 +7,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import httpx
@@ -17,6 +17,9 @@ from .cache import LlmCache
 from .errors import LlmHostNotAllowedError, LlmOutputInvalidError, LlmUnavailableError
 from .redaction import redact_secrets
 
+if TYPE_CHECKING:
+    from ..settings import Settings
+
 logger = logging.getLogger("alerting_core.llm")
 
 DEFAULT_ALLOWED_HOSTS = ("ollama", "localhost", "127.0.0.1")
@@ -25,7 +28,7 @@ _THINK = re.compile(r"^\s*<think>.*?</think>", re.DOTALL)
 
 @dataclass(frozen=True)
 class LlmConfig:
-    """LLM connection settings. Replace with A-02 settings when they land."""
+    """LLM connection settings; services build it with `from_settings(get_settings())`."""
 
     base_url: str = "http://ollama:11434/v1"
     api_key: str | None = None
@@ -38,6 +41,18 @@ class LlmConfig:
         return f"LlmConfig(base_url={self.base_url!r}, model={self.model!r}, api_key=<{key}>)"
 
     @classmethod
+    def from_settings(cls, settings: "Settings") -> "LlmConfig":
+        """Build from the shared process settings (A-02), the normal path inside services."""
+        hosts = tuple(h.strip() for h in settings.llm_allowed_hosts.split(",") if h.strip())
+        return cls(
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key.strip() or None,
+            model=settings.llm_model,
+            timeout_seconds=settings.llm_timeout_seconds,
+            allowed_hosts=hosts or DEFAULT_ALLOWED_HOSTS,
+        )
+
+    @classmethod
     def from_env(cls) -> "LlmConfig":
         """Read LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, LLM_TIMEOUT_SECONDS, LLM_ALLOWED_HOSTS."""
         default = cls()
@@ -47,8 +62,7 @@ class LlmConfig:
             api_key=os.environ.get("LLM_API_KEY", "").strip() or None,
             model=os.environ.get("LLM_MODEL", "").strip() or default.model,
             timeout_seconds=float(
-                os.environ.get("LLM_TIMEOUT_SECONDS", "").strip()
-                or default.timeout_seconds
+                os.environ.get("LLM_TIMEOUT_SECONDS", "").strip() or default.timeout_seconds
             ),
             allowed_hosts=tuple(h.strip() for h in hosts.split(",") if h.strip())
             or default.allowed_hosts,
@@ -151,7 +165,10 @@ class LlmClient:
                 {"role": "assistant", "content": content},
                 {
                     "role": "user",
-                    "content": f"Your previous answer failed validation:\n{error}\nReturn corrected JSON only.",
+                    "content": (
+                        f"Your previous answer failed validation:\n{error}\n"
+                        "Return corrected JSON only."
+                    ),
                 },
             ]
             content = await self._call(messages, response_format)
@@ -166,9 +183,7 @@ class LlmClient:
             await self._cache.set(key, result.model_dump_json(), self._cache_ttl)
         return result
 
-    async def _call(
-        self, messages: list[dict[str, str]], response_format: dict[str, Any]
-    ) -> str:
+    async def _call(self, messages: list[dict[str, str]], response_format: dict[str, Any]) -> str:
         body = {
             "model": self.model,
             "temperature": 0,
@@ -177,9 +192,7 @@ class LlmClient:
             "chat_template_kwargs": {"enable_thinking": False},
         }
         headers = (
-            {"Authorization": f"Bearer {self._config.api_key}"}
-            if self._config.api_key
-            else {}
+            {"Authorization": f"Bearer {self._config.api_key}"} if self._config.api_key else {}
         )
         started = time.perf_counter()
         try:
@@ -192,9 +205,7 @@ class LlmClient:
                 f"LLM request timed out after {self._config.timeout_seconds}s"
             ) from error
         except httpx.HTTPError as error:
-            raise LlmUnavailableError(
-                f"LLM request failed: {type(error).__name__}"
-            ) from error
+            raise LlmUnavailableError(f"LLM request failed: {type(error).__name__}") from error
         latency_ms = round((time.perf_counter() - started) * 1000)
         _log(
             "llm_call",
@@ -204,13 +215,9 @@ class LlmClient:
             latency_ms=latency_ms,
         )
         if not response.is_success:
-            raise LlmUnavailableError(
-                f"LLM endpoint returned HTTP {response.status_code}"
-            )
+            raise LlmUnavailableError(f"LLM endpoint returned HTTP {response.status_code}")
         try:
             content = response.json()["choices"][0]["message"]["content"] or ""
         except (ValueError, KeyError, IndexError, TypeError) as error:
-            raise LlmUnavailableError(
-                "LLM endpoint returned a malformed response"
-            ) from error
+            raise LlmUnavailableError("LLM endpoint returned a malformed response") from error
         return _THINK.sub("", content).strip()

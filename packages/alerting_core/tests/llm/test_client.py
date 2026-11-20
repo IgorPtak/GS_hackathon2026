@@ -99,9 +99,7 @@ async def test_connection_error_and_non_2xx(config: LlmConfig) -> None:
 @respx.mock
 @pytest.mark.asyncio
 async def test_host_not_allowed() -> None:
-    route = respx.post("https://evil.example/v1/chat/completions").respond(
-        200, json=chat("{}")
-    )
+    route = respx.post("https://evil.example/v1/chat/completions").respond(200, json=chat("{}"))
     with pytest.raises(LlmHostNotAllowedError):
         LlmClient(LlmConfig(base_url="https://evil.example/v1"))
     assert route.call_count == 0
@@ -136,9 +134,7 @@ async def test_cache_hit_skips_http(config: LlmConfig) -> None:
 @pytest.mark.asyncio
 async def test_no_authorization_without_key() -> None:
     route = respx.post(URL).respond(200, json=chat('{"value": 1}'))
-    await LlmClient(LlmConfig(base_url="http://localhost:11434/v1")).generate(
-        "x", Answer
-    )
+    await LlmClient(LlmConfig(base_url="http://localhost:11434/v1")).generate("x", Answer)
     assert "authorization" not in route.calls.last.request.headers
 
 
@@ -151,3 +147,22 @@ def test_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cfg.api_key is None
     assert cfg.timeout_seconds == 7
     assert cfg.allowed_hosts == ("127.0.0.1", "foo")
+
+
+def test_from_settings() -> None:
+    from alerting_core.settings import Settings
+
+    settings = Settings(
+        llm_base_url="https://llm.example.test/v1",
+        llm_api_key=" secret-value ",
+        llm_allowed_hosts="llm.example.test, localhost",
+        llm_model="some-model",
+        llm_timeout_seconds=12.5,
+    )
+    config = LlmConfig.from_settings(settings)
+    assert config.base_url == "https://llm.example.test/v1"
+    assert config.api_key == "secret-value"
+    assert config.allowed_hosts == ("llm.example.test", "localhost")
+    assert config.model == "some-model"
+    assert config.timeout_seconds == 12.5
+    assert "secret-value" not in repr(config)
