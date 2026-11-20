@@ -173,3 +173,8 @@ Max sustainable rate (p99 < 2 s, lag drained): **≥ 350 msg/s, below ~460 msg/s
 - The loss was relayed-but-undelivered jobs: the outbox row said relayed, the `deliveries` entry vanished with the snapshot rollback.
 - Events not accepted during the outage (~700–900) got an error, not a 202, so the source knows to retry.
 - `everysec` can still lose up to ~1 s on a crash. The relay reconciler (`services/outbox_relay/reconcile.py`) closes that gap from Postgres: every 10 s it re-publishes deliveries still `pending` 30 s after relaying. Started after the RDB-only run above, it found exactly the 378 lost jobs and all 22 236 deliveries of that run ended `delivered`.
+
+### Lost delivery jobs (deterministic)
+
+`loadtest/lost_jobs_test.sh <log>`: steady 100 msg/s for 60 s; at t = 15 s delivery is stopped for 3 s and the `deliveries` stream is trimmed to 0, wiping 717 unread jobs.
+Result (`steady-9b6d7c12`): 12 000 / 12 000 delivered, lost = 0, 755 re-published by the reconciler (717 wiped + jobs in flight at the stop, absorbed by `delivery-done`), p50 40 ms, p99 37.7 s = 30 s stale threshold + up to 10 s tick.
