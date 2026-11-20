@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiClient } from "../../api/client";
-import type { Alert, AlertDetail, AuditEntry, Delivery } from "../../api/types";
+import type {
+  ActionRun,
+  Alert,
+  AlertDetail,
+  ApprovalRequest,
+  AuditEntry,
+  Delivery,
+} from "../../api/types";
 
 interface DetailState {
   readonly alertId: string | null;
@@ -16,6 +23,8 @@ export interface AlertDetailApi {
   readonly applyAlert: (alert: Alert, isForced?: boolean) => void;
   readonly applyAudit: (entry: AuditEntry) => void;
   readonly applyDelivery: (delivery: Delivery) => void;
+  readonly applyActionRun: (run: ActionRun) => void;
+  readonly applyApproval: (request: ApprovalRequest) => void;
   readonly reload: () => void;
 }
 
@@ -99,6 +108,31 @@ export function useAlertDetail(alertId: string | null): AlertDetailApi {
     [update],
   );
 
+  const applyActionRun = useCallback(
+    (run: ActionRun) => {
+      update(run.alert_id, (detail) => {
+        const runs = detail.action_runs ?? [];
+        const existing = runs.find((item) => item.id === run.id);
+        if (existing && Date.parse(run.updated_at) < Date.parse(existing.updated_at)) return detail;
+        return { ...detail, action_runs: [...runs.filter((item) => item.id !== run.id), run] };
+      });
+    },
+    [update],
+  );
+
+  const applyApproval = useCallback(
+    (request: ApprovalRequest) => {
+      update(request.alert_id, (detail) => {
+        const requests = detail.approval_requests ?? [];
+        return {
+          ...detail,
+          approval_requests: [...requests.filter((item) => item.id !== request.id), request],
+        };
+      });
+    },
+    [update],
+  );
+
   const isCurrent = state.alertId === alertId;
   return {
     detail: isCurrent ? state.detail : null,
@@ -107,6 +141,8 @@ export function useAlertDetail(alertId: string | null): AlertDetailApi {
     applyAlert,
     applyAudit,
     applyDelivery,
+    applyActionRun,
+    applyApproval,
     reload: () => {
       void load();
     },

@@ -35,5 +35,10 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-12/A-15 channels: ui, email (smtplib in a thread instead of aiosmtplib), sms/phone via mock gateway with phone_messages, webhook body_template; shared HTTP status classification, header-injection guard, CHANNEL_ALLOWED_HOSTS.
 - A-13 delivery worker: delivery-done idempotency (pending/done), backoff retries via delivery-retries (atomic Lua poller), deliveries-dlq + fallback channel, shared circuit breaker, alert_e2e_latency_seconds.
 - A-01 smoke test: resolves earlier rates alerts before posting so the email check sees a new alert; compose project is named `alerting` for everyone.
+- B-06 runbook API: list/get/normalize/put runbook routes (registry with config/ fallback), runbook kind registered in api; B-07 rendered_runbook in alert detail.
+- B-14 rules API and config validation: GET/PUT/DELETE /api/v1/rules on config_documents with canonical YAML and versions; POST /api/v1/config/validate with dot-path errors; 422 responses carry ErrorResponse.details.
+- B-12 approvals API and phone replies: atomic decision (FOR UPDATE, 409 already_decided, approve enqueues execute_action_run), APPROVE/REJECT/ACK replies checked against the recipient's teams, audited and published after commit.
+- B-13 UI: RunbookPanel (source next to steps, live action-run status, Run button), Runbooks tab, ApprovalQueue, PhoneSimulator with live phone.message and quick replies.
+- B-11 runbook runner: runbook-jobs consumer with per-alert advisory lock, automatic steps via action plugins (run_if, max_attempts, bounded timeouts), approvals with 4-digit codes and on-call deliveries, resume after approval, idempotent replays, missing runbooks retried, garbage to runbook-jobs-dlq.
 - A-16 group windows: group-buffer + group-deadlines, Lua claim with retry entry, one summary alert per window (alert_grouped, purpose group_summary), deterministic ids
 - A-17 rule preview: pure preview_rule (dedup, group windows, routing, in-memory throttle) + paged event log reader; 50k events ~0.7–1.3 s
