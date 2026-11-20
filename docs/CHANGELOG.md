@@ -8,3 +8,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-00 web scaffold: Vite + React + TS strict + Tailwind + ESLint/Prettier, tab layout, TeamPicker from GET /api/v1/config, openapi-fetch client, nginx Dockerfile with API proxy.
 - S-03 seed demo configuration: full demo set in config/, loadtest/fixtures, scripts/validate_config.py.
 - B-08 hour-1 LLM check: Qwen3.8-27B @ llm.hpc.psnc.pl (OpenAI-compatible, json_schema), 4.7/4.5/4.7 s, median 4.7 s, 3/3 valid, restart-pricing-adapter approval=required.
+- S-00 contracts v1 frozen: hour-0 review applied (A1–A7, B2–B8, hybrid LLM endpoint); further changes only via feat(contracts) commits acked by both people
