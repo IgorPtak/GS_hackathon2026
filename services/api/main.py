@@ -8,6 +8,7 @@ from alerting_core.config import ConfigRegistry
 from alerting_core.connections import create_database_pool, create_redis_client
 from alerting_core.logging import configure_logging, get_logger
 from alerting_core.metrics import render_metrics
+from alerting_core.runbooks import register_runbook_kind
 from alerting_core.settings import Settings, get_settings
 from fastapi import FastAPI, Response
 from redis.exceptions import RedisError
@@ -63,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             log.error("database_unavailable", extra={"error": str(error)})
             app.state.pool = None
         app.state.config_source = DirectoryConfigSource(resolved.config_dir)
+        register_runbook_kind()  # before ConfigRegistry.start so the kind is loaded
         if app.state.pool is not None:
             registry = ConfigRegistry()
             try:

@@ -13,7 +13,9 @@ from alerting_contracts.api import (
     AlertPage,
     AlertResolveRequest,
 )
+from alerting_core.logging import get_logger
 from alerting_core.publishing import publish_alert_change
+from alerting_core.runbooks.rendering import render_runbook
 from alerting_core.storage import (
     AlertNotFoundError,
     InvalidCursorError,
@@ -27,6 +29,9 @@ from fastapi import APIRouter, Path, Query
 
 from ..dependencies import PoolDep, RedisDep
 from ..errors import ApiError
+from .runbooks import CatalogDep
+
+log = get_logger(__name__)
 
 router = APIRouter(tags=["alerts"])
 
@@ -55,13 +60,24 @@ async def list_alerts_route(
 
 
 @router.get("/api/v1/alerts/{alert_id}")
-async def get_alert_route(alert_id: AlertId, pool: PoolDep) -> AlertDetail:
+async def get_alert_route(alert_id: AlertId, pool: PoolDep, catalog: CatalogDep) -> AlertDetail:
     """Alert with audit, deliveries, action runs and approvals."""
     try:
         detail = await get_alert_detail(pool, alert_id)
     except AlertNotFoundError as error:
         raise _not_found(alert_id) from error
-    # B-07 plugs in here: detail.rendered_runbook = render_runbook(...)
+    runbook_id = detail.alert.runbook_id
+    if runbook_id is not None:
+        try:
+            runbook = catalog.get(runbook_id)
+            if runbook is not None:
+                detail.rendered_runbook = render_runbook(runbook, detail.alert, catalog.actions())
+        except Exception as error:  # noqa: BLE001 - the detail call must survive any render failure
+            log.error(
+                "runbook_render_failed",
+                extra={"alert_id": alert_id, "runbook_id": runbook_id, "error": repr(error)},
+            )
+            detail.rendered_runbook = None
     return detail
 
 
