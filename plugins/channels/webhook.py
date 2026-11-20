@@ -13,6 +13,8 @@ from .base import (
     ChannelPlugin,
     ChannelRejectedError,
     ChannelUnavailableError,
+    check_host_allowed,
+    classify_http_status,
 )
 from .registry import register_channel_plugin
 
@@ -62,33 +64,44 @@ class WebhookChannel(ChannelPlugin):
         config: ChannelConfig,
         context: ChannelContext,
     ) -> None:
-        url = config.settings.get("url")
-        if not url:
+        settings = config.settings
+        url = settings.get("url")
+        template = settings.get("body_template", "{}")
+        headers = settings.get("headers", {})
+        method = settings.get("method", "POST")
+        if not isinstance(url, str) or not url:
             raise ChannelRejectedError("webhook channel has no settings.url")
-        body = render_body(
-            config.settings.get("body_template", "{}"), build_context(job, recipient)
-        )
+        if not isinstance(template, str):
+            raise ChannelRejectedError("webhook body_template must be a string")
+        if not isinstance(headers, dict) or not all(
+            isinstance(key, str) and isinstance(value, str) for key, value in headers.items()
+        ):
+            raise ChannelRejectedError("webhook headers must be a mapping of strings")
+        if not isinstance(method, str):
+            raise ChannelRejectedError("webhook method must be a string")
+        check_host_allowed(url, context)
+        body = render_body(template, build_context(job, recipient))
         try:
-            json.loads(body)
+            parsed = json.loads(body)
         except json.JSONDecodeError as error:
             raise ChannelRejectedError(
                 f"body_template did not render valid JSON: {error}"
             ) from error
-        headers = {"Content-Type": "application/json"} | config.settings.get("headers", {})
+        if not isinstance(parsed, dict):
+            raise ChannelRejectedError("body_template must render a JSON object")
         try:
             response = await context.http.request(
-                config.settings.get("method", "POST"),
+                method,
                 url,
                 content=body.encode(),
-                headers=headers,
+                headers={"Content-Type": "application/json"} | headers,
                 timeout=TIMEOUT_SECONDS,
             )
+        except (httpx.InvalidURL, httpx.UnsupportedProtocol) as error:
+            raise ChannelRejectedError(f"invalid webhook url: {error}") from error
         except httpx.HTTPError as error:
             raise ChannelUnavailableError(f"webhook unreachable: {error!r}") from error
-        if response.status_code >= 500:
-            raise ChannelUnavailableError(f"webhook http {response.status_code}")
-        if response.status_code >= 400:
-            raise ChannelRejectedError(f"webhook http {response.status_code}")
+        classify_http_status(response.status_code)
 
 
 register_channel_plugin(WebhookChannel())
