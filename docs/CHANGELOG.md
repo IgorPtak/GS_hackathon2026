@@ -47,3 +47,8 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-16 rule preview endpoint: POST /api/v1/rules/preview runs a draft rule over the recent events stream via A-17 preview_rule; read-only (spy-tested), 422 with dot-path details, 503 without registry.
 - B-09 free-text runbooks with the LLM: normalized at save time only (PUT), validate_llm_steps (unknown actions → text, approval forced for gated actions), normalized_by llm + llm_model, fallback on any LLM error.
 - B-15 RuleEditor and RulePreviewPanel: CodeMirror YAML editor with live validation by path, save as new version, preview with counts, deliveries per recipient × channel and sample alerts.
+- B-19 schema-profile API: list/save profiles, unknown-schema inbox, deterministic heuristic propose (seam for B-21), read-only test of a draft over recent events.
+- B-22 fix-proposals API: create from an alert (kind/payload validated, ownership cannot change), list, decide under FOR UPDATE; accept saves a rule version or inserts a runbook step, skipped when already applied (idempotent re-accept); 409 on a second decision.
+- B-20 SchemaOnboarding UI: inbox or pasted JSON, prefilled mapping form, fingerprint picker, live test, save and jump to Rules.
+- B-23 Propose a fix UI: dialog on every alert (rule YAML, runbook step, free text) and owner-team review with line diff on the Approvals tab.
+- B-13 phone call screen: ringing incoming call, speech-synthesis read-out, keypad for the approval code (* rejects, # repeats).
