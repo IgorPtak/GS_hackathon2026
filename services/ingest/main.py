@@ -13,7 +13,7 @@ from alerting_contracts.config import SourceConfig
 from alerting_contracts.events import EventEnvelope, SourceType
 from alerting_core.connections import create_redis_client
 from alerting_core.logging import configure_logging, get_logger
-from alerting_core.metrics import LATENCY_BUCKETS, render_metrics
+from alerting_core.metrics import EVENTS_INGESTED, LATENCY_BUCKETS, render_metrics
 from alerting_core.settings import Settings, get_settings
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
@@ -211,6 +211,7 @@ async def handle_ingest(request: Request, source_id: str, *, is_batch: bool) -> 
     finally:
         REQUEST_SECONDS.observe(time.perf_counter() - started)
     EVENTS_TOTAL.labels(source_id, "accepted").inc(len(event_ids))
+    EVENTS_INGESTED.inc(len(event_ids))
     if duplicate_count:
         EVENTS_TOTAL.labels(source_id, "duplicate").inc(duplicate_count)
     accepted = IngestAccepted(event_ids=event_ids, duplicate_count=duplicate_count)
@@ -229,6 +230,7 @@ def start_log_tails(app: FastAPI) -> list[asyncio.Task[None]]:
                 app.state.redis, app.state.append_script, envelopes
             )
             EVENTS_TOTAL.labels(source_id, "accepted").inc(len(event_ids))
+            EVENTS_INGESTED.inc(len(event_ids))
             if duplicates:
                 EVENTS_TOTAL.labels(source_id, "duplicate").inc(duplicates)
 

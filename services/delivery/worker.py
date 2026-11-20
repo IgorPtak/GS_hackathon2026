@@ -18,6 +18,7 @@ from alerting_contracts.sse import AuditAppendedEvent, DeliveryUpdatedEvent
 from alerting_core.config.registry import ConfigRegistry
 from alerting_core.durations import parse_duration_ms
 from alerting_core.logging import get_logger
+from alerting_core.metrics import DEAD_LETTERED, DELIVERIES, DELIVERY_RETRIES
 from alerting_core.publishing import publish_team_event
 from alerting_core.streams import StreamMessage
 from pydantic import ValidationError
@@ -172,6 +173,7 @@ class DeliveryWorker:
         if recorded.delivery is None:
             return  # already recorded as delivered
         DELIVERY_ATTEMPTS.labels(job.channel_type.value, "delivered").inc()
+        DELIVERIES.labels(job.channel_type.value, "delivered").inc()
         if observe_latency and job.event_sent_at is not None and not job.is_fallback:
             latency = (now - job.event_sent_at).total_seconds()
             E2E_LATENCY_SECONDS.labels(job.channel_type.value).observe(max(latency, 0.0))
@@ -198,6 +200,8 @@ class DeliveryWorker:
             due_ms,
         )
         DELIVERY_ATTEMPTS.labels(job.channel_type.value, "retry").inc()
+        DELIVERIES.labels(job.channel_type.value, "failed").inc()
+        DELIVERY_RETRIES.inc()
         log.warning(
             "delivery_retry_scheduled",
             extra={"alert_id": job.alert_id, "delivery_id": job.delivery_id, "attempt": attempt},
@@ -215,6 +219,8 @@ class DeliveryWorker:
         recorded = await record_outcome(self._pool, job, outcome, fallback)
         await dead_letter_job(self._redis, job.model_dump_json().encode(), error, attempt)
         DELIVERY_ATTEMPTS.labels(job.channel_type.value, "dead_lettered").inc()
+        DELIVERIES.labels(job.channel_type.value, "dead_lettered").inc()
+        DEAD_LETTERED.inc()
         log.error(
             "delivery_dead_lettered",
             extra={"alert_id": job.alert_id, "delivery_id": job.delivery_id, "error": error},

@@ -34,6 +34,7 @@ from alerting_core.durations import parse_duration_ms
 from alerting_core.grouping import GroupEvent
 from alerting_core.ids import new_uuid7
 from alerting_core.logging import get_logger
+from alerting_core.metrics import ALERTS_CREATED, EVENTS_PROCESSED
 from alerting_core.outbox import OutboxRow, enqueue_outbox_rows
 from alerting_core.publishing import publish_team_event
 from alerting_core.routing import DeliveryTarget
@@ -53,7 +54,7 @@ from .deliveries import build_side_effects, throttle_targets
 from .evaluation import EventOutcome, RuleSet, evaluate_event
 from .folds import FoldTracker
 from .groups import BufferedEvent, buffer_group_events
-from .metrics import ALERTS_CREATED, EVENT_TO_ALERT_SECONDS, EVENTS_PROCESSED
+from .metrics import EVENT_TO_ALERT_SECONDS, EVENTS_BY_OUTCOME
 from .plan import BatchPlan, Fold, MatchGroup, decide, group_matches
 from .silences import push_alert_silences
 from .unknown_shapes import collect_unknown_samples, publish_new_samples
@@ -124,11 +125,12 @@ class EventProcessor:
         await buffer_group_events(self._redis, _buffered_events(outcomes), int(time.time() * 1000))
         # Only after the batch is safely written, so a retried batch never dead-letters twice.
         if invalid:
-            EVENTS_PROCESSED.labels("invalid").inc(len(invalid))
+            EVENTS_BY_OUTCOME.labels("invalid").inc(len(invalid))
             if self.dead_letter is not None:
                 await self.dead_letter(invalid, "invalid_envelope")
         await self._run_resolution_hook(outcomes)
-        EVENTS_PROCESSED.labels("processed").inc(len(outcomes))
+        EVENTS_BY_OUTCOME.labels("processed").inc(len(outcomes))
+        EVENTS_PROCESSED.inc(len(outcomes))
         return failures
 
     async def _run_resolution_hook(self, outcomes: list[EventOutcome]) -> None:

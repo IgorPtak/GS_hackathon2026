@@ -30,6 +30,7 @@ from alerting_core.grouping import (
     summarize_group,
 )
 from alerting_core.logging import get_logger
+from alerting_core.metrics import ALERTS_CREATED
 from alerting_core.outbox import enqueue_outbox_rows
 from alerting_core.publishing import publish_team_event
 from alerting_core.settings import Settings
@@ -38,7 +39,6 @@ from pydantic import ValidationError
 from redis.asyncio import Redis
 
 from .deliveries import build_side_effects, throttle_targets
-from .metrics import ALERTS_CREATED
 from .silences import push_alert_silences
 
 log = get_logger(__name__)
