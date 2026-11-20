@@ -35,7 +35,7 @@ class AlertmanagerSource(HttpSourcePlugin):
         fingerprint = payload.get("fingerprint")
         if fingerprint is None:
             return None
-        return f"{fingerprint}:{payload.get('status')}:{payload.get('startsAt')}"
+        return f"{source.id}:{fingerprint}:{payload.get('status')}:{payload.get('startsAt')}"
 
 
 register_source_plugin(SourceType.alertmanager, AlertmanagerSource())

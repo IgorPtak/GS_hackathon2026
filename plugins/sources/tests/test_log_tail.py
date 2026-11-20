@@ -85,7 +85,7 @@ async def test_fixture_lines_match_expected_payload(client: aioredis.Redis, tmp_
     expected = json.loads((FIXTURES / "pricing_price_stale.json").read_text())
     assert tail.envelopes[0].payload == expected
     assert tail.envelopes[0].source_type == "log_tail"
-    assert tail.envelopes[0].idempotency_key is None
+    assert tail.envelopes[0].idempotency_key == f"pricing-log:{path.stat().st_ino}:0"
 
 
 async def test_partial_line_waits_for_newline(client: aioredis.Redis, tmp_path: Path) -> None:
@@ -195,3 +195,132 @@ async def test_only_one_runner_holds_the_lock(client: aioredis.Redis, tmp_path: 
     await owner.stop()  # releases the lock
     assert await client.get("log-tail-lock:pricing-log") is None
     await other.stop()
+
+
+async def test_file_created_after_start_is_read_from_beginning(
+    client: aioredis.Redis, tmp_path: Path
+) -> None:
+    path = tmp_path / "later.log"
+    tail = Tail(make_source(path, line_format="json", start_at="end"), client)
+    tail.start()
+    await asyncio.sleep(0.1)
+    path.write_text('{"n": 1}\n{"n": 2}\n')
+    await tail.wait_for(2)
+    await tail.stop()
+
+
+async def test_start_at_end_skips_existing_content_and_stores_offset(
+    client: aioredis.Redis, tmp_path: Path
+) -> None:
+    path = tmp_path / "app.log"
+    path.write_text('{"n": 0}\n')
+    tail = Tail(make_source(path, line_format="json", start_at="end"), client)
+    tail.start()
+    await asyncio.sleep(0.15)
+    stored = (await client.get("log-tail-offset:pricing-log")).decode()
+    await tail.stop()
+    assert stored == f"{path.stat().st_ino}:{path.stat().st_size}"
+    assert tail.envelopes == []
+
+
+async def test_run_survives_errors_and_retries(
+    client: aioredis.Redis, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(log_tail, "ERROR_RETRY_SECONDS", 0.05)
+    path = tmp_path / "app.log"
+    path.write_text('{"n": 1}\n')
+    tail = Tail(make_source(path, line_format="json", start_at="beginning"), client)
+    original = tail.runner._open
+    calls = 0
+
+    async def flaky_open() -> object:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("boom")
+        return await original()
+
+    monkeypatch.setattr(tail.runner, "_open", flaky_open)
+    tail.start()
+    await tail.wait_for(1)
+    await tail.stop()
+    assert calls >= 2
+
+
+async def test_corrupt_offset_is_treated_as_missing(client: aioredis.Redis, tmp_path: Path) -> None:
+    await client.set("log-tail-offset:pricing-log", "garbage")
+    path = tmp_path / "app.log"
+    path.write_text('{"n": 1}\n')
+    tail = Tail(make_source(path, line_format="json", start_at="beginning"), client)
+    tail.start()
+    await tail.wait_for(1)
+    await tail.stop()
+
+
+async def test_over_long_line_goes_to_dlq_and_is_skipped(
+    client: aioredis.Redis, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(log_tail, "MAX_LINE_BYTES", 50)
+    monkeypatch.setattr(log_tail, "READ_BYTES", 16)
+    path = tmp_path / "app.log"
+    path.write_text("x" * 200 + '\n{"n": 2}\n')
+    tail = Tail(make_source(path, line_format="json", start_at="beginning"), client)
+    tail.start()
+    await tail.wait_for(1)
+    await tail.stop()
+    ((_, fields),) = await client.xrange("events-dlq")
+    assert fields[b"error"] == b"line_too_long"
+    prefix = orjson.loads(fields[b"envelope"])["payload"]["raw_line"]
+    assert prefix == "x" * 50
+    assert [e.payload["n"] for e in tail.envelopes] == [2]
+
+
+async def test_truncation_is_detected_before_reading(
+    client: aioredis.Redis, tmp_path: Path
+) -> None:
+    path = tmp_path / "app.log"
+    path.write_text("")
+    tail = Tail(make_source(path, line_format="json"), client)
+    tail.start()
+    await asyncio.sleep(0.1)
+    with path.open("a") as handle:
+        handle.write('{"n": 1}\n' * 3)
+    await tail.wait_for(3)
+    # New content shorter than the old position, written in one go: found without waiting for EOF.
+    path.write_text('{"n": 9}\n')
+    await tail.wait_for(4)
+    await tail.stop()
+    assert tail.envelopes[-1].payload["n"] == 9
+
+
+async def test_rotation_flushes_unterminated_last_line(
+    client: aioredis.Redis, tmp_path: Path
+) -> None:
+    path = tmp_path / "app.log"
+    path.write_text("")
+    tail = Tail(make_source(path, line_format="json"), client)
+    tail.start()
+    await asyncio.sleep(0.1)
+    with path.open("a") as handle:
+        handle.write('{"n": 1}\n{"n": 2}')
+    await tail.wait_for(1)
+    os.rename(path, tmp_path / "app.log.1")
+    path.write_text('{"n": 3}\n')
+    await tail.wait_for(3)
+    await tail.stop()
+    assert [e.payload["n"] for e in tail.envelopes] == [1, 2, 3]
+
+
+async def test_envelopes_carry_deterministic_idempotency_keys(
+    client: aioredis.Redis, tmp_path: Path
+) -> None:
+    path = tmp_path / "app.log"
+    first_line = '{"n": 1}\n'
+    path.write_text(first_line + '{"n": 2}\n')
+    tail = Tail(make_source(path, line_format="json", start_at="beginning"), client)
+    tail.start()
+    await tail.wait_for(2)
+    await tail.stop()
+    inode = path.stat().st_ino
+    keys = [e.idempotency_key for e in tail.envelopes]
+    assert keys == [f"pricing-log:{inode}:0", f"pricing-log:{inode}:{len(first_line)}"]

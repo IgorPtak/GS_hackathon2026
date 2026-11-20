@@ -38,6 +38,7 @@ def test_idempotency_key_separates_firing_and_resolved() -> None:
     resolved = {**firing, "status": "resolved"}
     assert plugin.idempotency_key(firing, SOURCE) == plugin.idempotency_key(dict(firing), SOURCE)
     assert plugin.idempotency_key(firing, SOURCE) != plugin.idempotency_key(resolved, SOURCE)
+    assert plugin.idempotency_key(firing, SOURCE) == "alertmanager:ab:firing:t0"
     assert plugin.idempotency_key({"status": "firing"}, SOURCE) is None
 
 
