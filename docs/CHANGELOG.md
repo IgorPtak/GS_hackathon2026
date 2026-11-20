@@ -40,3 +40,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-12 approvals API and phone replies: atomic decision (FOR UPDATE, 409 already_decided, approve enqueues execute_action_run), APPROVE/REJECT/ACK replies checked against the recipient's teams, audited and published after commit.
 - B-13 UI: RunbookPanel (source next to steps, live action-run status, Run button), Runbooks tab, ApprovalQueue, PhoneSimulator with live phone.message and quick replies.
 - B-11 runbook runner: runbook-jobs consumer with per-alert advisory lock, automatic steps via action plugins (run_if, max_attempts, bounded timeouts), approvals with 4-digit codes and on-call deliveries, resume after approval, idempotent replays, missing runbooks retried, garbage to runbook-jobs-dlq.
+- A-16 group windows: group-buffer + group-deadlines, Lua claim with retry entry, one summary alert per window (alert_grouped, purpose group_summary), deterministic ids

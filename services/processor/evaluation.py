@@ -14,6 +14,7 @@ from alerting_contracts.config import Rule, SchemaProfile
 from alerting_contracts.events import EventEnvelope, NormalizedFields
 from alerting_core.config.registry import ConfigSnapshot
 from alerting_core.events import ProfileMatcher, compute_fingerprint
+from alerting_core.grouping import group_key
 from alerting_core.logging import get_logger
 from alerting_core.rules import build_context, compile_condition, index_rules_by_type
 from alerting_core.rules.conditions import CompiledCondition
@@ -38,6 +39,7 @@ class RuleMatch:
     title: str
     body: str
     fields: list[AlertField]
+    group_key: str | None = None  # set for rules with `group`: they go to a group window
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,4 +105,5 @@ def _render_match(
         title=title,
         body=body,
         fields=fields,
+        group_key=group_key(rule, context) if rule.group is not None else None,
     )

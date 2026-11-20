@@ -30,6 +30,7 @@ to `deliveries`.
 | `dedup-count:<rule_id>:<fingerprint>` | counter `INCR` | dedup window + 60 s | Events folded into the alert; flushed to `alerts.count` in batches | A |
 | `group-buffer:<rule_id>:<group_key>` | list `RPUSH` (event summary JSON) | group window + 60 s | Different events waiting for the group window | A |
 | `group-deadlines` | sorted set, member `<rule_id>:<group_key>`, score = flush time ms | — | Flusher claims due groups with `ZREM` (returns 1 = this worker owns it) | A |
+| `group-flushing:<rule_id>:<group_key>:<deadline_ms>` | list (the claimed `group-buffer`, renamed) | group window + 60 s | A flusher's claimed window until its summary alert commits; `group-deadlines` holds `retry:<this key>` (score = retry time) so another processor re-flushes it after a crash. The summary alert id is derived from this key, so a re-flush cannot duplicate | A |
 | `throttle:<rule_id>:<recipient_id>:<period_start>` | counter `INCR` | throttle period | Per-recipient delivery limit | A |
 | `delivery-done:<delivery_id>` | string `SET NX` | 7 d | Delivery idempotency by outbox id | A |
 | `delivery-retries` | sorted set (job JSON, score = due ms) | — | Delayed retries | A |

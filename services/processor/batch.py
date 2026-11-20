@@ -14,6 +14,7 @@ a second alert or delivery. Folds are counted again on redelivery (at-least-once
 """
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
@@ -30,6 +31,7 @@ from alerting_core.dedup import (
     record_folds,
 )
 from alerting_core.durations import parse_duration_ms
+from alerting_core.grouping import GroupEvent
 from alerting_core.ids import new_uuid7
 from alerting_core.logging import get_logger
 from alerting_core.outbox import OutboxRow, enqueue_outbox_rows
@@ -49,6 +51,7 @@ from redis.asyncio import Redis
 from .deliveries import build_side_effects, throttle_targets
 from .evaluation import EventOutcome, RuleSet, evaluate_event
 from .folds import FoldTracker
+from .groups import BufferedEvent, buffer_group_events
 from .metrics import ALERTS_CREATED, EVENT_TO_ALERT_SECONDS, EVENTS_PROCESSED
 from .plan import BatchPlan, Fold, MatchGroup, decide, group_matches
 from .unknown_shapes import collect_unknown_samples, publish_new_samples
@@ -114,6 +117,9 @@ class EventProcessor:
                 log.exception("event_evaluation_failed", extra={"entry_id": message.id})
                 failures[message.id] = f"{type(error).__name__}: {error}"
         await self._persist_with_retry(rule_set.snapshot, outcomes)
+        # A crash between buffering and the ack re-buffers the batch: group counts are
+        # at-least-once, like dedup fold counts.
+        await buffer_group_events(self._redis, _buffered_events(outcomes), int(time.time() * 1000))
         # Only after the batch is safely written, so a retried batch never dead-letters twice.
         if invalid:
             EVENTS_PROCESSED.labels("invalid").inc(len(invalid))
@@ -228,6 +234,30 @@ class EventProcessor:
         ]
         await asyncio.gather(*publishes)
         await publish_new_samples(self._redis, plan.new_samples, plan.now)
+
+
+def _buffered_events(outcomes: list[EventOutcome]) -> list[BufferedEvent]:
+    items = []
+    for outcome in outcomes:
+        envelope = outcome.envelope
+        for match in outcome.matches:
+            if match.group_key is None:
+                continue
+            event = GroupEvent(
+                fingerprint=match.fingerprint,
+                title=match.title,
+                body=match.body,
+                severity=match.severity,
+                fields=match.fields,
+                received_at=envelope.received_at,
+                sent_at=envelope.sent_at,
+                source_id=envelope.source_id,
+                schema_profile_id=outcome.profile.id,
+                source=outcome.normalized.source,
+                payload=envelope.payload,
+            )
+            items.append(BufferedEvent(match.rule, match.group_key, event))
+    return items
 
 
 def _claim_for(group: MatchGroup) -> DedupClaim:

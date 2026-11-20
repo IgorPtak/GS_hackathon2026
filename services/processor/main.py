@@ -20,6 +20,7 @@ from redis.exceptions import RedisError
 
 from .batch import EventProcessor
 from .folds import FoldTracker
+from .groups import GroupFlusher
 
 log = get_logger(__name__)
 
@@ -71,6 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tasks = [
             asyncio.create_task(consumer.run(stop)),
             asyncio.create_task(folds.run(stop)),
+            asyncio.create_task(GroupFlusher(pool, redis, registry, resolved).run(stop)),
             asyncio.create_task(trim_events(redis, stop)),
         ]
         app.state.tasks = tasks
