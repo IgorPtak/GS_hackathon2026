@@ -8,6 +8,11 @@ One batch = one Postgres transaction:
 If Redis fails at 3, the transaction rolls back and the rows are retried: nothing is lost. If the
 process dies after 3 but before the commit, the next batch relays the rows again; the duplicate
 job carries the same `delivery_id` and is absorbed by `delivery-done:<id>` in the delivery worker.
+
+Because XADD happens before the commit, a delivery worker can read a job whose `deliveries` row is
+not visible yet. The delivery worker (A-13) therefore upserts the row from the DeliveryJob instead
+of assuming it exists. A row whose payload breaks its contract is copied to the matching
+`<stream>-dlq` and marked relayed, so it is visible to ops but never blocks the rows behind it.
 """
 
 import asyncio
@@ -29,6 +34,9 @@ log = get_logger(__name__)
 DELIVERIES_STREAM = "deliveries"
 RUNBOOK_JOBS_STREAM = "runbook-jobs"
 _STREAM_MAXLEN = {DELIVERIES_STREAM: 1_000_000, RUNBOOK_JOBS_STREAM: 100_000}
+_DEAD_LETTER_MAXLEN = 100_000
+# Bounds one batch: a black-holed Redis must not hold row locks and a connection forever.
+BATCH_TIMEOUT_SECONDS = 10.0
 
 RELAYED = Counter("outbox_relayed_total", "Outbox rows relayed to a stream.", ["kind"])
 INVALID = Counter("outbox_invalid_total", "Outbox rows skipped because their payload is invalid.")
@@ -56,6 +64,11 @@ _INSERT_DELIVERIES = """
     ON CONFLICT (id) DO NOTHING
 """
 _MARK_RELAYED = "UPDATE outbox SET relayed_at = now() WHERE id = ANY($1::bigint[])"
+
+
+def _dead_letter_stream(kind: str) -> str:
+    stream = RUNBOOK_JOBS_STREAM if kind == OutboxKind.runbook_job else DELIVERIES_STREAM
+    return f"{stream}-dlq"
 
 
 class _Job:
@@ -107,36 +120,43 @@ async def relay_batch(pool: asyncpg.Pool, redis: Redis, batch_size: int = 500) -
     async with pool.acquire() as connection, connection.transaction():
         rows = await connection.fetch(_SELECT_BATCH, batch_size)
         if not rows:
+            LAG_SECONDS.set(0)
             return 0
         jobs: list[_Job] = []
+        invalid: list[tuple[asyncpg.Record, str]] = []
         for row in rows:
             try:
                 jobs.append(_parse_row(row))
             except (ValidationError, ValueError) as error:
-                # A row that can never be relayed must not block the ones behind it. It is a
-                # producer bug, so it is logged loudly and marked relayed below.
-                INVALID.inc()
-                log.error(
-                    "outbox_entry_invalid",
-                    extra={"outbox_id": row["id"], "alert_id": str(row["alert_id"])}
-                    | {"error": str(error)},
-                )
+                invalid.append((row, str(error)))
 
         if any(job.delivery is not None for job in jobs):
             await connection.execute(_INSERT_DELIVERIES, *_delivery_columns(jobs))
-        if jobs:
-            async with redis.pipeline(transaction=False) as pipeline:
-                for job in jobs:
-                    pipeline.xadd(
-                        job.stream,
-                        {"job": job.body},
-                        maxlen=_STREAM_MAXLEN[job.stream],
-                        approximate=True,
-                    )
-                # Raises on any failed XADD, which rolls the whole transaction back.
-                await pipeline.execute()
+        async with redis.pipeline(transaction=False) as pipeline:
+            for job in jobs:
+                pipeline.xadd(
+                    job.stream,
+                    {"job": job.body},
+                    maxlen=_STREAM_MAXLEN[job.stream],
+                    approximate=True,
+                )
+            for row, error in invalid:
+                pipeline.xadd(
+                    _dead_letter_stream(row["kind"]),
+                    {"job": orjson.dumps(row["payload"]), "error": error, "attempts": "0"},
+                    maxlen=_DEAD_LETTER_MAXLEN,
+                    approximate=True,
+                )
+            # Raises on any failed XADD, which rolls the whole transaction back.
+            await pipeline.execute()
         await connection.execute(_MARK_RELAYED, [row["id"] for row in rows])
 
+    for row, error in invalid:
+        INVALID.inc()
+        log.error(
+            "outbox_entry_dead_lettered",
+            extra={"outbox_id": row["id"], "alert_id": str(row["alert_id"]), "error": error},
+        )
     for job in jobs:
         RELAYED.labels("delivery" if job.delivery is not None else "runbook_job").inc()
     LAG_SECONDS.set((datetime.now(UTC) - rows[0]["created_at"]).total_seconds())
@@ -158,7 +178,10 @@ async def run_relay(
     log.info("outbox_relay_started", extra={"batch_size": batch_size})
     while not stop.is_set():
         try:
-            relayed = await relay_batch(pool, redis, batch_size)
+            # Cancelling the batch rolls its transaction back, so the timeout loses nothing.
+            relayed = await asyncio.wait_for(
+                relay_batch(pool, redis, batch_size), timeout=BATCH_TIMEOUT_SECONDS
+            )
             backoff = interval_seconds
             if relayed >= batch_size:
                 continue

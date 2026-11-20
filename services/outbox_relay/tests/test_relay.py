@@ -156,6 +156,23 @@ async def test_invalid_row_is_skipped_without_blocking_others(
 
     assert len(await stream_jobs(redis, DELIVERIES_STREAM)) == 1
     assert await unrelayed_count(pool) == 0
+    [(_, fields)] = await redis.xrange(f"{DELIVERIES_STREAM}-dlq")
+    assert orjson.loads(fields[b"job"]) == {"alert_id": alert_id, "nonsense": True}
+    assert fields[b"error"]
+
+
+async def test_mixed_batch_relays_each_kind_to_its_stream(pool: asyncpg.Pool, redis: Redis) -> None:
+    alert_id = str(uuid.uuid4())
+    await insert_outbox(pool, "delivery", delivery_payload(alert_id))
+    runbook = {"job_type": "start_runbook", "alert_id": alert_id, "runbook_id": "workflow-failed"}
+    await insert_outbox(pool, "runbook_job", runbook)
+    await insert_outbox(pool, "delivery", delivery_payload(alert_id, channel_id="ui"))
+
+    assert await relay_batch(pool, redis) == 3
+
+    assert len(await stream_jobs(redis, DELIVERIES_STREAM)) == 2
+    assert len(await stream_jobs(redis, RUNBOOK_JOBS_STREAM)) == 1
+    assert await pool.fetchval("SELECT count(*) FROM deliveries") == 2
 
 
 async def test_existing_delivery_row_from_a_crashed_relay_is_kept(

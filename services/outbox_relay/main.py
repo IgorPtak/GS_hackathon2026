@@ -9,6 +9,7 @@ from alerting_core.logging import configure_logging
 from alerting_core.metrics import render_metrics
 from alerting_core.settings import Settings, get_settings
 from fastapi import FastAPI, Response
+from fastapi.responses import JSONResponse
 
 from .relay import run_relay
 
@@ -24,6 +25,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redis = create_redis_client(resolved)
         stop = asyncio.Event()
         task = asyncio.create_task(run_relay(pool, redis, stop))
+        app.state.relay_task = task
         yield
         stop.set()
         with suppress(asyncio.CancelledError):
@@ -33,9 +35,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(lifespan=lifespan)
 
-    @app.get("/healthz")
-    async def healthz() -> dict[str, str]:
-        """Liveness probe used by compose healthchecks."""
+    @app.get("/healthz", response_model=None)
+    async def healthz() -> dict[str, str] | JSONResponse:
+        """Liveness probe: 503 once the relay loop has died, so `compose ps` shows it unhealthy."""
+        task: asyncio.Task[None] | None = getattr(app.state, "relay_task", None)
+        if task is not None and task.done():
+            return JSONResponse({"status": "relay_stopped"}, status_code=503)
         return {"status": "ok"}
 
     @app.get("/metrics")
