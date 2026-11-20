@@ -48,8 +48,16 @@ class Outcome:
 
 @dataclass(slots=True)
 class RecordedOutcome:
-    delivery: Delivery | None  # None when the row was already delivered (late duplicate)
+    delivery: Delivery | None  # None when nothing changed (already delivered/dead-lettered)
     audit: list[AuditEntry]
+
+
+async def delivery_age_seconds(pool: asyncpg.Pool, delivery_id: int) -> float:
+    """Seconds since the delivery row was created; 0 when the relay has not committed it yet."""
+    age = await pool.fetchval(
+        "SELECT extract(epoch FROM now() - created_at) FROM deliveries WHERE id = $1", delivery_id
+    )
+    return float(age or 0.0)
 
 
 async def record_outcome(
@@ -60,6 +68,12 @@ async def record_outcome(
 ) -> RecordedOutcome:
     """Upsert the delivery row, audit it and, for a dead letter, queue the fallback delivery."""
     async with pool.acquire() as connection, connection.transaction():
+        previous = await connection.fetchval(
+            "SELECT status FROM deliveries WHERE id = $1 FOR UPDATE", job.delivery_id
+        )
+        if previous == DeliveryStatus.dead_lettered and outcome.status == previous:
+            # A redelivered entry that was already dead-lettered: one fallback, one audit.
+            return RecordedOutcome(delivery=None, audit=[])
         row = await connection.fetchrow(
             _UPSERT,
             job.delivery_id,

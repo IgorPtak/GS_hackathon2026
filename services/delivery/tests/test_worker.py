@@ -5,7 +5,7 @@ import time
 from alerting_contracts.alerts import DeliveryJob
 
 from plugins.channels.base import ChannelRejectedError, ChannelUnavailableError
-from services.delivery.circuit import FAILURE_THRESHOLD, circuit_key
+from services.delivery.circuit import FAILURE_THRESHOLD, CircuitBreaker, circuit_key
 from services.delivery.retries import MOVE_DUE_SCRIPT, RETRIES_KEY, move_due_retries
 from services.delivery.worker import done_key
 
@@ -139,3 +139,56 @@ async def test_delivered_row_is_never_downgraded(pool, redis, plugin, worker) ->
     await worker.handle_batch([stream_message(job)])
 
     assert await status_of(pool, job.delivery_id) == "delivered"
+
+
+async def test_redelivered_dead_letter_queues_one_fallback(pool, redis, plugin, worker) -> None:
+    plugin.failures = [ChannelRejectedError("bad"), ChannelRejectedError("bad again")]
+    job = email_job()
+
+    await worker.handle_batch([stream_message(job)])
+    await worker.handle_batch([stream_message(job)])  # crash before ack: same entry again
+
+    assert await pool.fetchval("SELECT count(*) FROM outbox") == 1
+    assert await verbs(pool) == ["delivery_dead_lettered", "delivery_fallback"]
+
+
+async def test_sent_but_unrecorded_delivery_is_recorded_on_redelivery(
+    pool, redis, plugin, worker
+) -> None:
+    job = email_job()
+    await redis.set(done_key(job.delivery_id), "done")  # sender died after SET done
+
+    await worker.handle_batch([stream_message(job)])
+
+    assert plugin.sent == []
+    assert await status_of(pool, job.delivery_id) == "delivered"
+    assert await verbs(pool) == ["delivery_delivered"]
+
+
+async def test_circuit_open_too_long_dead_letters_to_fallback(pool, redis, plugin, worker) -> None:
+    job = email_job()
+    await pool.execute(
+        "INSERT INTO deliveries (id, alert_id, team, recipient_id, channel_id, channel_type,"
+        " purpose, created_at) VALUES ($1, $2::uuid, 'rates', 'anna', 'email', 'email', 'alert',"
+        " now() - interval '11 minutes')",
+        job.delivery_id,
+        job.alert_id,
+    )
+    await redis.hset(
+        circuit_key("email"), mapping={"state": "open", "opened_at": int(time.time() * 1000)}
+    )
+
+    await worker.handle_batch([stream_message(job)])
+
+    assert await status_of(pool, job.delivery_id) == "dead_lettered"
+    assert await pool.fetchval("SELECT count(*) FROM outbox") == 1
+    assert plugin.sent == []
+
+
+async def test_success_does_not_close_an_open_circuit(redis) -> None:
+    breaker = CircuitBreaker(redis)
+    await redis.hset(circuit_key("email"), mapping={"state": "open", "opened_at": 1})
+
+    await breaker.record_success("email")
+
+    assert await redis.hget(circuit_key("email"), "state") == b"open"

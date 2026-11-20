@@ -29,7 +29,7 @@ from plugins.channels.registry import get_channel_plugin
 from .circuit import CircuitBreaker
 from .dead_letters import dead_letter_job
 from .metrics import DELIVERY_ATTEMPTS, E2E_LATENCY_SECONDS, SEND_SECONDS
-from .records import Outcome, RecordedOutcome, record_outcome
+from .records import Outcome, RecordedOutcome, delivery_age_seconds, record_outcome
 from .retries import backoff_ms, schedule_retry
 
 log = get_logger(__name__)
@@ -39,6 +39,8 @@ DONE_TTL_SECONDS = 7 * 24 * 3600
 PENDING_TTL_SECONDS = 60
 SEND_TIMEOUT_SECONDS = 15.0
 MAX_CONCURRENT_SENDS = 50
+# A channel down longer than this dead-letters its jobs so the fallback channel takes over.
+MAX_CIRCUIT_WAIT_SECONDS = 600.0
 
 
 def done_key(delivery_id: int) -> str:
@@ -97,18 +99,19 @@ class DeliveryWorker:
         if channel is None or not channel.enabled:
             await self._give_up(job, channel, f"channel {job.channel_id} unavailable", job.attempt)
             return
+        key = done_key(job.delivery_id)
+        if await self._redis.get(key) == b"done":
+            # Sent before; record it in case that worker died before writing the row (no-op
+            # when the row already says delivered, so true duplicates stay quiet).
+            DELIVERY_ATTEMPTS.labels(job.channel_type.value, "duplicate").inc()
+            await self._delivered(job, observe_latency=False)
+            return
         now_ms = int(time.time() * 1000)
         decision = await self._circuit.acquire(channel.id, now_ms)
         if not decision.is_allowed:
-            # The channel is known to be down: wait for half-open without spending an attempt.
-            await schedule_retry(self._redis, job, now_ms + max(decision.retry_after_ms, 500))
-            DELIVERY_ATTEMPTS.labels(job.channel_type.value, "circuit_open").inc()
+            await self._wait_for_circuit(job, channel, now_ms + max(decision.retry_after_ms, 500))
             return
-        key = done_key(job.delivery_id)
         if not await self._redis.set(key, "pending", nx=True, ex=PENDING_TTL_SECONDS):
-            if await self._redis.get(key) == b"done":
-                DELIVERY_ATTEMPTS.labels(job.channel_type.value, "duplicate").inc()
-                return
             raise InFlightError(job.delivery_id)
         recipient = self._recipient(job)
         try:
@@ -126,6 +129,17 @@ class DeliveryWorker:
         await self._redis.set(key, "done", ex=DONE_TTL_SECONDS)
         await self._circuit.record_success(channel.id)
         await self._delivered(job)
+
+    async def _wait_for_circuit(
+        self, job: DeliveryJob, channel: ChannelConfig, due_ms: int
+    ) -> None:
+        """Park the job until half-open without spending an attempt, but not forever: after
+        MAX_CIRCUIT_WAIT_SECONDS the job gives up so its fallback channel still gets the alert."""
+        if await delivery_age_seconds(self._pool, job.delivery_id) > MAX_CIRCUIT_WAIT_SECONDS:
+            await self._give_up(job, channel, "circuit open too long", job.attempt)
+            return
+        await schedule_retry(self._redis, job, due_ms)
+        DELIVERY_ATTEMPTS.labels(job.channel_type.value, "circuit_open").inc()
 
     def _recipient(self, job: DeliveryJob) -> Recipient | None:
         if job.recipient_id is None:
@@ -149,14 +163,16 @@ class DeliveryWorker:
         finally:
             SEND_SECONDS.labels(channel.type.value).observe(time.perf_counter() - started)
 
-    async def _delivered(self, job: DeliveryJob) -> None:
+    async def _delivered(self, job: DeliveryJob, *, observe_latency: bool = True) -> None:
         now = datetime.now(UTC)
         outcome = Outcome(
             DeliveryStatus.delivered, AuditVerb.delivery_delivered, job.attempt + 1, None, now
         )
         recorded = await record_outcome(self._pool, job, outcome)
+        if recorded.delivery is None:
+            return  # already recorded as delivered
         DELIVERY_ATTEMPTS.labels(job.channel_type.value, "delivered").inc()
-        if job.event_sent_at is not None and not job.is_fallback:
+        if observe_latency and job.event_sent_at is not None and not job.is_fallback:
             latency = (now - job.event_sent_at).total_seconds()
             E2E_LATENCY_SECONDS.labels(job.channel_type.value).observe(max(latency, 0.0))
         await self._publish(job, recorded)

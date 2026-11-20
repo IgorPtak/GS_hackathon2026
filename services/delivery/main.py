@@ -18,7 +18,7 @@ import plugins.channels  # noqa: F401  (registers the built-in channel plugins)
 from plugins.channels.base import ChannelContext
 
 from .retries import DELIVERIES_STREAM, run_retry_poller
-from .worker import DeliveryWorker
+from .worker import MAX_CONCURRENT_SENDS, DeliveryWorker
 
 CONSUMER_GROUP = "delivery-workers"
 
@@ -44,6 +44,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             CONSUMER_GROUP,
             default_consumer_name("delivery"),
             worker.handle_batch,
+            # One batch never exceeds the semaphore, and an idle claim needs more than the
+            # slowest send; infrastructure outages get 20 redeliveries before the stream DLQ.
+            batch_size=MAX_CONCURRENT_SENDS,
+            min_idle_seconds=60,
+            max_deliveries=20,
         )
         stop = asyncio.Event()
         tasks = [

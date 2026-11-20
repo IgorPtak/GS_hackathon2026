@@ -35,6 +35,14 @@ end
 return 0
 """
 
+# A success closes a closed or half-open circuit; an open one stays open until its probe, so a
+# slow success racing the failures that opened it cannot mask the outage.
+_RECORD_SUCCESS = """
+if redis.call('HGET', KEYS[1], 'state') == 'open' then return 0 end
+redis.call('HSET', KEYS[1], 'state', 'closed', 'failures', 0)
+return 1
+"""
+
 
 def circuit_key(channel_id: str) -> str:
     return f"circuit:{channel_id}"
@@ -53,6 +61,7 @@ class CircuitBreaker:
         self._redis = redis
         self._acquire = redis.register_script(_ACQUIRE)
         self._record_failure = redis.register_script(_RECORD_FAILURE)
+        self._record_success = redis.register_script(_RECORD_SUCCESS)
 
     async def acquire(self, channel_id: str, now_ms: int) -> CircuitDecision:
         allowed, retry_after = await self._acquire(
@@ -61,7 +70,7 @@ class CircuitBreaker:
         return CircuitDecision(bool(allowed), int(retry_after))
 
     async def record_success(self, channel_id: str) -> None:
-        await self._redis.hset(circuit_key(channel_id), mapping={"state": "closed", "failures": 0})
+        await self._record_success(keys=[circuit_key(channel_id)], args=[])
 
     async def record_failure(self, channel_id: str, now_ms: int) -> bool:
         """Count a failure; returns True when this failure opened the circuit."""

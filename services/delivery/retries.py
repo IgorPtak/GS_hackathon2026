@@ -1,7 +1,9 @@
 """Delayed retries: failed jobs wait in the `delivery-retries` zset (score = due ms).
 
 The poller moves due jobs back to `deliveries` with one Lua script, so a job is either in the
-zset or in the stream, never in neither (contracts/storage.md).
+zset or in the stream, never in neither (contracts/storage.md). A crash between a zadd and the
+stream ack can leave a job both parked and reclaimable; the `delivery-done` key makes the
+second copy a no-op, so duplicates are tolerated rather than collapsed.
 """
 
 import asyncio
