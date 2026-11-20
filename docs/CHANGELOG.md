@@ -10,3 +10,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-08 hour-1 LLM check: Qwen3.8-27B @ llm.hpc.psnc.pl (OpenAI-compatible, json_schema), 4.7/4.5/4.7 s, median 4.7 s, 3/3 valid, restart-pricing-adapter approval=required.
 - S-00 contracts v1 frozen: hour-0 review applied (A1–A7, B2–B8, hybrid LLM endpoint); further changes only via feat(contracts) commits acked by both people
 - A-00 Python workspace, compose stack, Makefile: uv workspace (alerting_contracts, alerting_core), one Python image, compose services with /healthz stubs, Prometheus and Grafana config, Makefile targets.
+- A-01 smoke test: cumulative per-gate end-to-end checks (3h/7h/11h/14h) in scripts/smoke_test.py.
