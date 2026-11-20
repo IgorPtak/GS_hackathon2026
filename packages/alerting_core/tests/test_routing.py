@@ -3,12 +3,14 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from alerting_contracts.alerts import Alert
 from alerting_contracts.config import ChannelConfig, ChannelType, Recipient, Rule, Team
 from alerting_core.routing import DeliveryTarget, check_throttle, resolve_deliveries
 from redis.asyncio import Redis
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 DAY = datetime(2026, 7, 1, 8, 0, tzinfo=UTC)  # 10:00 Europe/Warsaw (CEST)
 NIGHT = datetime(2026, 7, 1, 21, 0, tzinfo=UTC)  # 23:00 Europe/Warsaw
@@ -197,6 +199,58 @@ def test_route_teams_override_rule_team() -> None:
     ]
 
 
+def with_window(window: str, timezone: str = "Europe/Warsaw") -> Recipient:
+    pref = ANNA.channel_preferences[0].model_copy(
+        update={"working_hours": window, "timezone": timezone}
+    )
+    return ANNA.model_copy(update={"channel_preferences": [pref]})
+
+
+def is_working_hours(now: datetime, window: str = "08:00-20:00", tz: str = "Europe/Warsaw") -> bool:
+    targets = resolve(make_rule(), now=now, recipients={"anna": with_window(window, tz)})
+    return ("anna", "sms") in pairs(targets)
+
+
+@pytest.mark.parametrize("timezone", ["", "../x", "Nope/Zone"])
+def test_invalid_timezone_falls_back_to_warsaw(timezone: str) -> None:
+    assert is_working_hours(DAY, tz=timezone)  # 10:00 Warsaw
+    assert not is_working_hours(NIGHT, tz=timezone)  # 23:00 Warsaw
+
+
+def test_dst_changes_the_local_hour() -> None:
+    # 07:00 UTC is 08:00 CET before 2026-03-29 and 09:00 CEST after; 06:00 UTC flips the other way.
+    assert is_working_hours(datetime(2026, 3, 28, 7, 0, tzinfo=UTC))
+    assert not is_working_hours(datetime(2026, 3, 28, 6, 59, tzinfo=UTC))
+    assert is_working_hours(datetime(2026, 3, 30, 6, 0, tzinfo=UTC))
+    assert not is_working_hours(datetime(2026, 3, 30, 5, 59, tzinfo=UTC))
+    # Autumn: 2026-10-25 clocks go back; 19:00 UTC is 20:00 CET (outside), 18:59 is inside.
+    assert is_working_hours(datetime(2026, 10, 24, 17, 59, tzinfo=UTC))
+    assert not is_working_hours(datetime(2026, 10, 24, 18, 0, tzinfo=UTC))
+    assert is_working_hours(datetime(2026, 10, 26, 18, 59, tzinfo=UTC))
+    assert not is_working_hours(datetime(2026, 10, 26, 19, 0, tzinfo=UTC))
+
+
+def test_midnight_wrap_boundaries() -> None:
+    assert not is_working_hours(datetime(2026, 1, 15, 5, 0, tzinfo=UTC), "22:00-06:00")  # 06:00
+    assert is_working_hours(datetime(2026, 1, 15, 4, 59, tzinfo=UTC), "22:00-06:00")
+    assert is_working_hours(datetime(2026, 1, 15, 21, 0, tzinfo=UTC), "22:00-06:00")  # 22:00
+    assert not is_working_hours(datetime(2026, 1, 15, 20, 59, tzinfo=UTC), "22:00-06:00")
+
+
+def test_other_timezone_changes_result_for_same_instant() -> None:
+    assert is_working_hours(DAY, tz="Europe/Warsaw")  # 10:00
+    assert not is_working_hours(DAY, tz="America/New_York")  # 04:00
+
+
+def test_equal_start_and_end_never_matches() -> None:
+    assert not is_working_hours(DAY, "10:00-10:00")
+
+
+def test_naive_now_is_treated_as_utc() -> None:
+    assert is_working_hours(datetime(2026, 7, 1, 8, 0))  # 10:00 Warsaw
+    assert not is_working_hours(datetime(2026, 7, 1, 21, 0))
+
+
 @pytest.fixture
 async def redis() -> AsyncIterator[Redis]:
     client = Redis.from_url("redis://localhost:6379/10")
@@ -239,3 +293,11 @@ async def test_throttle_key_has_ttl(redis: Redis) -> None:
     keys = [key async for key in redis.scan_iter("throttle:r1:anna:*")]
     assert len(keys) == 1
     assert 0 < await redis.ttl(keys[0]) <= 60
+
+
+async def test_throttle_fails_open_when_redis_is_down() -> None:
+    rule = make_rule(throttle={"max_deliveries": 1, "per": "1h"})
+    broken = MagicMock()
+    broken.pipeline.side_effect = RedisConnectionError("down")
+    targets = resolve(rule)
+    assert await check_throttle(broken, rule, targets, DAY, alert_id="a1") == (targets, [])
