@@ -156,6 +156,9 @@ services:
   delivery:
     <<: *python-service
     command: ["uvicorn", "services.delivery.main:app", "--host", "0.0.0.0", "--port", "9103"]
+    # One worker pins a core at ~450 msg/s (A-24); two keep p99 low up to 500 msg/s.
+    deploy:
+      replicas: 2
     expose:
       - "9103"
     healthcheck:

@@ -55,10 +55,10 @@ async def scale(service: str, replicas: int, settle_s: float = 5.0) -> None:
 
 
 async def restore_stack() -> None:
-    """Back to processor=1, delivery=1 and mock-gateway started; safe to call at any time."""
+    """Back to processor=1, delivery=2 (the compose default) and mock-gateway started."""
     await compose(
         "up", "-d", "--no-recreate", "--no-deps", "--no-build",
-        "--scale", "processor=1", "--scale", "delivery=1",
+        "--scale", "processor=1", "--scale", "delivery=2",
         "processor", "delivery", "mock-gateway",
     )  # fmt: skip
 

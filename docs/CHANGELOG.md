@@ -55,3 +55,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-20 SchemaOnboarding UI: inbox or pasted JSON, prefilled mapping form, fingerprint picker, live test, save and jump to Rules.
 - B-23 Propose a fix UI: dialog on every alert (rule YAML, runbook step, free text) and owner-team review with line diff on the Approvals tab.
 - B-13 phone call screen: ringing incoming call, speech-synthesis read-out, keypad for the approval code (* rejects, # repeats).
+- A-24 bottleneck: relay polls every 50 ms (was 500 ms), delivery runs 2 replicas; steady 350 msg/s p50 56 ms / p99 163 ms (was 469/719 ms), lost = 0; ingest is the next limit
