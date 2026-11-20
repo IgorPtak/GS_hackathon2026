@@ -15,7 +15,14 @@ function TeamAlerts({ team }: { team: string }) {
   const feed = useAlertFeed(team, filter);
   const detail = useAlertDetail(selectedAlertId);
   const { applyAlert: applyToFeed, reload: reloadFeed } = feed;
-  const { applyAlert: applyToDetail, applyAudit, applyDelivery, reload: reloadDetail } = detail;
+  const {
+    applyAlert: applyToDetail,
+    applyAudit,
+    applyDelivery,
+    applyActionRun,
+    applyApproval,
+    reload: reloadDetail,
+  } = detail;
 
   const applyEverywhere = useCallback(
     (alert: Alert, isForced = false) => {
@@ -38,6 +45,15 @@ function TeamAlerts({ team }: { team: string }) {
     },
     "delivery.updated": (event) => {
       applyDelivery(event.delivery);
+    },
+    "action_run.updated": (event) => {
+      applyActionRun(event.action_run);
+    },
+    "approval.requested": (event) => {
+      applyApproval(event.approval_request);
+    },
+    "approval.decided": (event) => {
+      applyApproval(event.approval_request);
     },
     onReconnect: () => {
       reloadFeed();

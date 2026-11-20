@@ -1,6 +1,6 @@
 """Exception handlers: every error leaves the api as an ErrorResponse."""
 
-from alerting_contracts.api import ErrorResponse
+from alerting_contracts.api import ConfigValidationError, ErrorResponse
 from alerting_core.logging import get_logger
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -31,9 +31,11 @@ class ApiError(Exception):
         self.message = message
 
 
-def error_response(status: int, error: str, message: str) -> JSONResponse:
+def error_response(
+    status: int, error: str, message: str, details: list[ConfigValidationError] | None = None
+) -> JSONResponse:
     """Build the contract `ErrorResponse` body."""
-    body = ErrorResponse(error=error, message=message)
+    body = ErrorResponse(error=error, message=message, details=details or [])
     return JSONResponse(body.model_dump(mode="json"), status_code=status)
 
 
@@ -50,8 +52,16 @@ async def _api_error(_: Request, exc: Exception) -> JSONResponse:
 
 async def _validation_error(_: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, RequestValidationError)
-    parts = [f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()]
-    return error_response(422, "validation_failed", "; ".join(parts))
+    # Union member names pydantic inserts into `loc` (capitalised) are not config keys; drop them.
+    details = [
+        ConfigValidationError(
+            path=".".join(str(p) for p in e["loc"] if not (isinstance(p, str) and p[:1].isupper())),
+            message=e["msg"],
+        )
+        for e in exc.errors()
+    ]
+    message = "; ".join(f"{d.path}: {d.message}" for d in details)
+    return error_response(422, "validation_failed", message, details)
 
 
 async def _unexpected_error(request: Request, exc: Exception) -> JSONResponse:
