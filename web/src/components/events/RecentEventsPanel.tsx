@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiClient } from "../../api/client";
 import type { EventEnvelope } from "../../api/types";
+import { StatusChip } from "../ui/StatusChip";
 import { EventJsonView } from "./EventJsonView";
 
 const POLL_INTERVAL_MS = 2000;
@@ -63,52 +64,49 @@ export function RecentEventsPanel() {
   }, [load, invalidate]);
 
   return (
-    <section className="rounded border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold">Recent events</h2>
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-slate-600">Source ID</span>
-          <input
-            type="text"
-            value={sourceId}
-            onChange={(e) => {
-              setSourceId(e.target.value);
-            }}
-            placeholder="All sources"
-            className="w-48 rounded border border-slate-300 px-2 py-1 text-sm"
-          />
-        </label>
-      </div>
+    <div>
+      <label className="flex flex-wrap items-center gap-2 text-meta">
+        <span className="text-ink-2">Source</span>
+        <input
+          type="text"
+          value={sourceId}
+          onChange={(e) => {
+            setSourceId(e.target.value);
+          }}
+          placeholder="All sources"
+          className="h-9 w-48 rounded-input border border-hairline bg-fill px-3 text-body text-ink placeholder:text-ink-3"
+        />
+      </label>
       {error ? (
-        <p role="alert" className="mt-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Cannot load events ({error}). Retrying every 2 s.
+        <p
+          role="alert"
+          className="mt-3 rounded-input bg-warning/20 px-3 py-2 text-meta text-warning-ink"
+        >
+          Cannot load events ({error}). Trying again every 2 s.
         </p>
       ) : null}
       {events === null ? (
         error ? null : (
-          <p className="mt-3 text-sm text-slate-500">Loading events...</p>
+          <p className="mt-3 text-meta text-ink-2">Loading events...</p>
         )
       ) : events.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-500">No events yet</p>
+        <p className="mt-3 text-meta text-ink-2">No events yet.</p>
       ) : (
-        <ul className="mt-3 divide-y divide-slate-100">
+        <ul className="mt-3 divide-y divide-hairline">
           {events.map((event) => (
-            <li key={event.event_id} className="py-2 text-sm">
-              <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <li key={event.event_id} className="py-2.5 text-body">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="font-medium">{event.source_id}</span>
-                <span className="rounded bg-slate-100 px-1.5 text-xs leading-5">
-                  {event.source_type}
+                <StatusChip>{event.source_type}</StatusChip>
+                <span className="num text-meta text-ink-2">
+                  {new Date(event.received_at).toLocaleTimeString()}
                 </span>
-                <span className="text-slate-600">
-                  {new Date(event.received_at).toLocaleString()}
-                </span>
-                <span className="break-all font-mono text-xs text-slate-500">{event.event_id}</span>
               </div>
               <EventJsonView payload={event.payload} />
             </li>
           ))}
         </ul>
       )}
-    </section>
+    </div>
   );
 }
