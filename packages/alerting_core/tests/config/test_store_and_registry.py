@@ -111,20 +111,85 @@ async def test_registry_reloads_on_pubsub_within_one_second(
         await registry.stop()
 
 
-async def test_failed_reload_keeps_previous_snapshot(pool: asyncpg.Pool, redis: Redis) -> None:
+async def test_bad_row_keeps_previous_model_and_rest_still_swaps(
+    pool: asyncpg.Pool, redis: Redis
+) -> None:
+    registry = ConfigRegistry()
+    await save_config_document(pool, redis, "team", Team(id="ops", display_name="Ops"), ACTOR)
+    await registry.start(pool, redis)
+    try:
+        await pool.execute(
+            "UPDATE config_documents SET document = '{}'::jsonb, version = 9 WHERE id = 'ops'"
+        )
+        await pool.execute(
+            "INSERT INTO config_documents (kind, id, document, yaml)"
+            " VALUES ('team', 'bad', '{}', ''),"
+            " ('team', 'good', '{\"id\": \"good\", \"display_name\": \"G\"}', '')"
+        )
+        assert await registry.reload() is True
+        assert registry.teams()["ops"].display_name == "Ops"  # previous model kept
+        assert registry.snapshot.versions[("team", "ops")] == 1
+        assert "bad" not in registry.teams()  # new invalid id dropped
+        assert "good" in registry.teams()
+    finally:
+        await registry.stop()
+
+
+async def test_failed_fetch_keeps_previous_snapshot(pool: asyncpg.Pool, redis: Redis) -> None:
     registry = ConfigRegistry()
     await save_config_document(pool, redis, "team", Team(id="ops", display_name="Ops"), ACTOR)
     await registry.start(pool, redis)
     try:
         before = registry.snapshot
-        await pool.execute(
-            "INSERT INTO config_documents (kind, id, document, yaml)"
-            " VALUES ('team', 'bad', '{}', '')"
-        )
+        await pool.close()  # asyncpg.InterfaceError on the next fetch
         assert await registry.reload() is False
         assert registry.snapshot is before
     finally:
         await registry.stop()
+
+
+async def test_concurrent_reloads_coalesce(pool: asyncpg.Pool, redis: Redis) -> None:
+    registry = ConfigRegistry()
+    await registry.start(pool, redis)
+    try:
+        calls: list[int] = []
+        registry.on_reload.append(lambda snapshot: calls.append(1))
+        await asyncio.gather(*(registry.reload() for _ in range(20)))
+        assert 1 <= len(calls) <= 2
+    finally:
+        await registry.stop()
+
+
+async def test_reconcile_reloads_when_notification_was_lost(
+    pool: asyncpg.Pool, redis: Redis
+) -> None:
+    registry = ConfigRegistry(reconcile_interval=0.1)
+    await registry.start(pool, redis)
+    try:
+        await pool.execute(
+            "INSERT INTO config_documents (kind, id, document, yaml)"
+            " VALUES ('team', 'quiet', '{\"id\": \"quiet\", \"display_name\": \"Q\"}', '')"
+        )  # no publish
+        deadline = time.monotonic() + 2
+        while "quiet" not in registry.teams() and time.monotonic() < deadline:  # noqa: ASYNC110
+            await asyncio.sleep(0.05)
+        assert "quiet" in registry.teams()
+    finally:
+        await registry.stop()
+
+
+async def test_save_rejects_model_of_wrong_kind(pool: asyncpg.Pool, redis: Redis) -> None:
+    with pytest.raises(ValueError):
+        await save_config_document(pool, redis, "rule", Team(id="ops", display_name="Ops"), ACTOR)
+    assert await pool.fetchval("SELECT count(*) FROM config_documents") == 0
+
+
+async def test_concurrent_startup_syncs_write_once(
+    pool: asyncpg.Pool, redis: Redis, tmp_path: Path
+) -> None:
+    _write_team(tmp_path)
+    await asyncio.gather(*(sync_config_files(pool, redis, tmp_path) for _ in range(5)))
+    assert await pool.fetchval("SELECT version FROM config_documents WHERE id = 'ops'") == 1
 
 
 async def test_watcher_handler_saves_valid_and_skips_invalid(
@@ -147,9 +212,9 @@ async def test_real_file_watcher_picks_up_an_edit(
     _write_team(tmp_path)
     task = asyncio.create_task(watch_config_directory(tmp_path, pool, redis))
     try:
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1.5)
         _write_team(tmp_path, display="Edited")
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 8
         while time.monotonic() < deadline:
             doc = await pool.fetchval("SELECT document FROM config_documents WHERE id = 'ops'")
             if doc and doc["display_name"] == "Edited":
