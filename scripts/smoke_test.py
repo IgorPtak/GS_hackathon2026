@@ -286,6 +286,7 @@ def check_delivery_delivered(ctx: Ctx) -> str:
 
 
 def check_dedup_count(ctx: Ctx) -> str:
+    resolve_open_rates_alerts(ctx)  # same fingerprint as earlier checks: start a fresh alert
     event, trade_id = rates_event(ctx, "dedup")
     post_event(ctx, RATES_SOURCE, event, times=5)
 
@@ -315,6 +316,7 @@ def check_rule_hot_reload(ctx: Ctx) -> str:
         response = ctx.client.put(url, json={"rule": changed, "actor": ACTOR})
         if response.status_code != 200:
             raise CheckFailed(f"PUT {url} returned {response.status_code}")
+        resolve_open_rates_alerts(ctx)  # otherwise the event folds into an older alert
         event, trade_id = rates_event(ctx, "reload")
         post_event(ctx, RATES_SOURCE, event)
         alert = poll(

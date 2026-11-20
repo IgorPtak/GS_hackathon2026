@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager, suppress
 
 from alerting_core.connections import create_database_pool, create_redis_client
 from alerting_core.logging import configure_logging
-from alerting_core.metrics import render_metrics
+from alerting_core.metrics import render_metrics, run_stream_lag_collector
 from alerting_core.settings import Settings, get_settings
 from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
@@ -26,10 +26,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         stop = asyncio.Event()
         task = asyncio.create_task(run_relay(pool, redis, stop))
         app.state.relay_task = task
+        # One relay replica is enough; extra replicas would only set the same gauge values.
+        lag_task = asyncio.create_task(run_stream_lag_collector(redis, stop))
         yield
         stop.set()
         with suppress(asyncio.CancelledError):
             await asyncio.wait_for(task, timeout=5)
+        lag_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await lag_task
         await redis.aclose()
         await pool.close()
 

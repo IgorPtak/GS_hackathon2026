@@ -25,7 +25,12 @@ _UPSERT = """
         status, attempt, last_error, delivered_at
     ) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     ON CONFLICT (id) DO UPDATE SET
-        status = EXCLUDED.status,
+        -- A replayed dead letter stays dead_lettered while it retries, so dead-lettering it
+        -- again is recognised as a repeat and queues no second fallback.
+        status = CASE
+            WHEN deliveries.status = 'dead_lettered' AND EXCLUDED.status = 'failed'
+            THEN deliveries.status ELSE EXCLUDED.status
+        END,
         attempt = greatest(deliveries.attempt, EXCLUDED.attempt),
         last_error = EXCLUDED.last_error,
         delivered_at = coalesce(deliveries.delivered_at, EXCLUDED.delivered_at),

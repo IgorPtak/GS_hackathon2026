@@ -47,6 +47,9 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-16 rule preview endpoint: POST /api/v1/rules/preview runs a draft rule over the recent events stream via A-17 preview_rule; read-only (spy-tested), 422 with dot-path details, 503 without registry.
 - B-09 free-text runbooks with the LLM: normalized at save time only (PUT), validate_llm_steps (unknown actions → text, approval forced for gated actions), normalized_by llm + llm_model, fallback on any LLM error.
 - B-15 RuleEditor and RulePreviewPanel: CodeMirror YAML editor with live validation by path, save as new version, preview with counts, deliveries per recipient × channel and sample alerts.
+- A-20 metrics: shared counters (events_ingested/processed, alerts_created, deliveries{channel,status}, retries, dead_lettered), stream_lag from XINFO GROUPS, e2e histogram 5 ms–30 s, Prometheus DNS discovery of every replica, provisioned Grafana dashboard "Alerting"; ingest aggregates metrics across its uvicorn workers
+- A-21 load tests: steady/saturation/dup-storm/gateway-down/kill-processor scenarios with lost/p50/p99 from Postgres; first results: 250 msg/s sustained (p99 0.6–1.3 s), lost = 0 in every run
+- A-13 outage retries: unreachable channels retry for up to 10 min without using up max_attempts, then fall back; scripts/replay_dead_letters.py replays deliveries-dlq
 - B-19 schema-profile API: list/save profiles, unknown-schema inbox, deterministic heuristic propose (seam for B-21), read-only test of a draft over recent events.
 - B-22 fix-proposals API: create from an alert (kind/payload validated, ownership cannot change), list, decide under FOR UPDATE; accept saves a rule version or inserts a runbook step, skipped when already applied (idempotent re-accept); 409 on a second decision.
 - B-20 SchemaOnboarding UI: inbox or pasted JSON, prefilled mapping form, fingerprint picker, live test, save and jump to Rules.

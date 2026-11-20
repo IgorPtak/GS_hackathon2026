@@ -18,12 +18,13 @@ from alerting_contracts.sse import AuditAppendedEvent, DeliveryUpdatedEvent
 from alerting_core.config.registry import ConfigRegistry
 from alerting_core.durations import parse_duration_ms
 from alerting_core.logging import get_logger
+from alerting_core.metrics import DEAD_LETTERED, DELIVERIES, DELIVERY_RETRIES
 from alerting_core.publishing import publish_team_event
 from alerting_core.streams import StreamMessage
 from pydantic import ValidationError
 from redis.asyncio import Redis
 
-from plugins.channels.base import ChannelContext, ChannelRejectedError
+from plugins.channels.base import ChannelContext, ChannelRejectedError, ChannelUnavailableError
 from plugins.channels.registry import get_channel_plugin
 
 from .circuit import CircuitBreaker
@@ -39,8 +40,9 @@ DONE_TTL_SECONDS = 7 * 24 * 3600
 PENDING_TTL_SECONDS = 60
 SEND_TIMEOUT_SECONDS = 15.0
 MAX_CONCURRENT_SENDS = 50
-# A channel down longer than this dead-letters its jobs so the fallback channel takes over.
-MAX_CIRCUIT_WAIT_SECONDS = 600.0
+# A channel outage (unreachable, 5xx, open circuit) does not use up max_attempts until the
+# delivery is this old; after that the job dead-letters so the fallback channel takes over.
+MAX_OUTAGE_SECONDS = 600.0
 
 
 def done_key(delivery_id: int) -> str:
@@ -124,18 +126,27 @@ class DeliveryWorker:
         except Exception as error:  # unavailable, timeout or a plugin bug: retry with backoff
             await self._redis.delete(key)
             await self._circuit.record_failure(channel.id, int(time.time() * 1000))
-            await self._retry_or_give_up(job, channel, f"{type(error).__name__}: {error}")
+            # TimeoutError: our own SEND_TIMEOUT_SECONDS fired, a hung channel is down too.
+            is_outage = isinstance(error, ChannelUnavailableError | TimeoutError)
+            await self._retry_or_give_up(
+                job, channel, f"{type(error).__name__}: {error}", is_outage=is_outage
+            )
             return
         await self._redis.set(key, "done", ex=DONE_TTL_SECONDS)
         await self._circuit.record_success(channel.id)
         await self._delivered(job)
 
+    async def _is_within_outage_budget(self, job: DeliveryJob) -> bool:
+        """An unreachable channel keeps retrying (at max_backoff) for MAX_OUTAGE_SECONDS, so a
+        restart or a short outage costs latency, not the delivery."""
+        return await delivery_age_seconds(self._pool, job.delivery_id) <= MAX_OUTAGE_SECONDS
+
     async def _wait_for_circuit(
         self, job: DeliveryJob, channel: ChannelConfig, due_ms: int
     ) -> None:
         """Park the job until half-open without spending an attempt, but not forever: after
-        MAX_CIRCUIT_WAIT_SECONDS the job gives up so its fallback channel still gets the alert."""
-        if await delivery_age_seconds(self._pool, job.delivery_id) > MAX_CIRCUIT_WAIT_SECONDS:
+        MAX_OUTAGE_SECONDS the job gives up so its fallback channel still gets the alert."""
+        if await delivery_age_seconds(self._pool, job.delivery_id) > MAX_OUTAGE_SECONDS:
             await self._give_up(job, channel, "circuit open too long", job.attempt)
             return
         await schedule_retry(self._redis, job, due_ms)
@@ -172,14 +183,23 @@ class DeliveryWorker:
         if recorded.delivery is None:
             return  # already recorded as delivered
         DELIVERY_ATTEMPTS.labels(job.channel_type.value, "delivered").inc()
+        DELIVERIES.labels(job.channel_type.value, "delivered").inc()
         if observe_latency and job.event_sent_at is not None and not job.is_fallback:
             latency = (now - job.event_sent_at).total_seconds()
             E2E_LATENCY_SECONDS.labels(job.channel_type.value).observe(max(latency, 0.0))
         await self._publish(job, recorded)
 
-    async def _retry_or_give_up(self, job: DeliveryJob, channel: ChannelConfig, error: str) -> None:
+    async def _retry_or_give_up(
+        self, job: DeliveryJob, channel: ChannelConfig, error: str, *, is_outage: bool = False
+    ) -> None:
+        """Schedule the next attempt with backoff, or dead-letter the job.
+
+        Outage failures do not dead-letter before MAX_OUTAGE_SECONDS, whatever the attempt.
+        """
         attempt = job.attempt + 1
-        if attempt >= channel.retry.max_attempts:
+        if attempt >= channel.retry.max_attempts and not (
+            is_outage and await self._is_within_outage_budget(job)
+        ):
             await self._give_up(job, channel, error, attempt)
             return
         delay = backoff_ms(
@@ -198,6 +218,8 @@ class DeliveryWorker:
             due_ms,
         )
         DELIVERY_ATTEMPTS.labels(job.channel_type.value, "retry").inc()
+        DELIVERIES.labels(job.channel_type.value, "failed").inc()
+        DELIVERY_RETRIES.inc()
         log.warning(
             "delivery_retry_scheduled",
             extra={"alert_id": job.alert_id, "delivery_id": job.delivery_id, "attempt": attempt},
@@ -215,6 +237,8 @@ class DeliveryWorker:
         recorded = await record_outcome(self._pool, job, outcome, fallback)
         await dead_letter_job(self._redis, job.model_dump_json().encode(), error, attempt)
         DELIVERY_ATTEMPTS.labels(job.channel_type.value, "dead_lettered").inc()
+        DELIVERIES.labels(job.channel_type.value, "dead_lettered").inc()
+        DEAD_LETTERED.inc()
         log.error(
             "delivery_dead_lettered",
             extra={"alert_id": job.alert_id, "delivery_id": job.delivery_id, "error": error},

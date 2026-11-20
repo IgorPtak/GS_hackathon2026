@@ -1,0 +1,13 @@
+id: loadtest-events
+team: platform
+description: Load-test events only. One alert per unique evt, delivered to ui and sms (fallback email).
+when:
+  all:
+    - { field: loadtest, op: eq, value: true }
+route: { channels: [ui, sms] }
+present:
+  title: "Load event {{evt}}"
+  body: "Load-test run {{run_id}}, sequence {{seq}}"
+  fields: [run_id, seq]
+  color: blue
+dedup: { window: 600s, fingerprint: [evt] }
