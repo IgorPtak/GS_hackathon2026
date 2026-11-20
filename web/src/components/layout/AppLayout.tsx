@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { MetricsPanel } from "../metrics/MetricsPanel";
 import { RecentEventsPanel } from "../events/RecentEventsPanel";
 import { AlertsPage } from "../../pages/AlertsPage";
 import { ApprovalsPage } from "../../pages/ApprovalsPage";
@@ -20,6 +21,7 @@ const WIRED_TABS: readonly TabId[] = [
   "approvals",
   "schemas",
   "phone",
+  "metrics",
 ];
 
 export function AppLayout() {
@@ -48,6 +50,7 @@ export function AppLayout() {
           <SchemasPage teamId={selectedTeamId} onNavigate={setActiveTabId} />
         ) : null}
         {activeTabId === "phone" ? <PhonePage teamId={selectedTeamId} /> : null}
+        {activeTabId === "metrics" ? <MetricsPanel /> : null}
         {activeTab && !WIRED_TABS.includes(activeTabId) ? (
           <PlaceholderPage title={activeTab.label} teamId={selectedTeamId} />
         ) : null}

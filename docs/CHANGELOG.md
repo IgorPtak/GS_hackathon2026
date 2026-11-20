@@ -55,3 +55,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-20 SchemaOnboarding UI: inbox or pasted JSON, prefilled mapping form, fingerprint picker, live test, save and jump to Rules.
 - B-23 Propose a fix UI: dialog on every alert (rule YAML, runbook step, free text) and owner-team review with line diff on the Approvals tab.
 - B-13 phone call screen: ringing incoming call, speech-synthesis read-out, keypad for the approval code (* rejects, # repeats).
+- B-25 metrics summary: /api/v1/metrics/summary from Prometheus (same PromQL as the Grafana dashboard, null when no data, never 5xx) + open alerts from Postgres; MetricsPanel tiles refresh every 5 s, paused while hidden, link to Grafana.
