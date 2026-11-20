@@ -79,8 +79,8 @@ function teamLabel(teams: readonly { id: string; display_name: string }[], teamI
 /** `/phone`: only the simulator, full screen, for a real phone. */
 function PhoneFullScreen({ teamId }: { teamId: string | null }) {
   return (
-    <main className="legacy-light min-h-dvh bg-panel p-4">
-      <PhonePage teamId={teamId} />
+    <main className="min-h-dvh bg-canvas max-sm:bg-[#0e1424]">
+      <PhonePage teamId={teamId} isFullScreen />
     </main>
   );
 }

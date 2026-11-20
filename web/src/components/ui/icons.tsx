@@ -127,6 +127,35 @@ const ICON_PATHS = {
     </>
   ),
   arrowRight: <path d="M5 12h14m-5-5 5 5-5 5" />,
+  phoneOff: (
+    <>
+      <path d="M3.5 14.5c2.2-2.2 5.2-3.5 8.5-3.5s6.3 1.3 8.5 3.5l-2 2.4a1.5 1.5 0 0 1-2 .2l-2.1-1.5a1.5 1.5 0 0 1-.6-1.2v-1a8.5 8.5 0 0 0-3.6 0v1c0 .5-.2.9-.6 1.2L7.5 17a1.5 1.5 0 0 1-2-.2z" />
+    </>
+  ),
+  volume: (
+    <>
+      <path d="M11 6 6.5 9.5H3.5v5h3L11 18z" />
+      <path d="M15.2 9.2a4.2 4.2 0 0 1 0 5.6M18 6.8a7.8 7.8 0 0 1 0 10.4" />
+    </>
+  ),
+  volumeOff: (
+    <>
+      <path d="M11 6 6.5 9.5H3.5v5h3L11 18z" />
+      <path d="m15.5 9.5 5 5M20.5 9.5l-5 5" />
+    </>
+  ),
+  backspace: (
+    <>
+      <path d="M9 6h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-5.5-6z" />
+      <path d="m12.5 9.5 4 5M16.5 9.5l-4 5" />
+    </>
+  ),
+  external: (
+    <>
+      <path d="M14 5h5v5M19 5l-8.5 8.5" />
+      <path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof ICON_PATHS;

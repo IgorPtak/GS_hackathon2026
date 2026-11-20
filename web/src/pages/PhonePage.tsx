@@ -1,5 +1,11 @@
 import { PhoneSimulator } from "../components/phone/PhoneSimulator";
 
-export function PhonePage({ teamId }: { teamId: string | null }) {
-  return <PhoneSimulator teamId={teamId} />;
+export function PhonePage({
+  teamId,
+  isFullScreen = false,
+}: {
+  readonly teamId: string | null;
+  readonly isFullScreen?: boolean;
+}) {
+  return <PhoneSimulator teamId={teamId} isFullScreen={isFullScreen} />;
 }
