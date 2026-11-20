@@ -245,3 +245,28 @@ def test_invalid_envelope_returns_422_not_500(client: TestClient) -> None:
     response = client.post("/api/v1/ingest/Bad Id", json={})
     assert response.status_code == 422
     assert response.json()["error"] == "validation_failed"
+
+
+def test_alertmanager_batch_is_split_and_resends_are_dropped(
+    sync_redis: redis.Redis, tmp_path: Path
+) -> None:
+    sources = tmp_path / "sources"
+    sources.mkdir()
+    (sources / "alertmanager.yaml").write_text(
+        yaml.safe_dump({"id": "alertmanager", "type": "alertmanager"})
+    )
+    alerts = [
+        {"fingerprint": "a", "startsAt": "t0", "labels": {}},
+        {"fingerprint": "b", "startsAt": "t0", "labels": {}},
+    ]
+    body = {"status": "firing", "receiver": "r", "alerts": alerts}
+    resolved = {"status": "resolved", "alerts": [{**alerts[0], "status": "resolved"}]}
+    app = create_app(Settings(redis_url=REDIS_URL, config_dir=str(tmp_path)))
+    with TestClient(app) as test_client:
+        first = test_client.post("/api/v1/ingest/alertmanager", json=body).json()
+        again = test_client.post("/api/v1/ingest/alertmanager", json=body).json()
+        test_client.post("/api/v1/ingest/alertmanager", json=resolved)
+    assert len(first["event_ids"]) == 2
+    assert again["duplicate_count"] == 2
+    assert sync_redis.xlen("events") == 3
+    assert entries(sync_redis)[0]["payload"]["status"] == "firing"
