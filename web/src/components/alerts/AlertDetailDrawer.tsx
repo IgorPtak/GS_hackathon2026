@@ -5,6 +5,7 @@ import type { AlertTransition } from "./useAlertTransition";
 import { AlertFields } from "./AlertFields";
 import { AuditTimeline } from "./AuditTimeline";
 import { DeliveryList } from "./DeliveryList";
+import { ProposeFixButton } from "../proposals/ProposeFixButton";
 import { RunbookPanel } from "../runbooks/RunbookPanel";
 import { SeverityBadge } from "./SeverityBadge";
 
@@ -107,6 +108,10 @@ export function AlertDetailDrawer({
               >
                 {pendingTransition === "resolve" ? "Resolving..." : "Resolve"}
               </button>
+              <ProposeFixButton
+                alert={alert}
+                className="rounded border border-slate-400 px-3 py-1.5 text-sm hover:bg-slate-50"
+              />
             </div>
             {transitionError ? (
               <p role="alert" className="mt-3 rounded bg-red-50 px-3 py-2 text-sm text-red-800">

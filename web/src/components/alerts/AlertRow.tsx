@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { Alert } from "../../api/types";
 import { formatRelativeTime } from "./alertFormat";
+import { ProposeFixButton } from "../proposals/ProposeFixButton";
 import { GroupMembers } from "./GroupMembers";
 import { SeverityBadge } from "./SeverityBadge";
 
@@ -67,6 +68,7 @@ export function AlertRow({ alert, isSelected, now, onSelect }: AlertRowProps) {
             <span>{alert.team}</span>
           </span>
         </button>
+        <ProposeFixButton alert={alert} />
       </div>
       {alert.is_group_summary && isExpanded ? <GroupMembers members={members} now={now} /> : null}
     </li>
