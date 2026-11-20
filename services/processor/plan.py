@@ -13,9 +13,12 @@ from alerting_contracts.api import UnknownSchemaSample
 from alerting_contracts.config import Rule
 from alerting_core.dedup import DedupClaim
 from alerting_core.ids import derived_uuid7, new_uuid7
+from alerting_core.logging import get_logger
 from alerting_core.storage.alerts_write import AlertState, fetch_alert_states, find_open_alerts
 
 from .evaluation import EventOutcome, RuleMatch
+
+_log = get_logger(__name__)
 
 # How many resolved generations of one (rule, fingerprint) are followed before giving up and
 # opening an alert with a fresh id; each hop is one query per batch, and hops > 1 only occur
@@ -135,6 +138,10 @@ async def decide(
         else:
             # Still resolved after MAX_SUCCESSOR_HOPS (re-arm lost repeatedly): fresh id, rare.
             fresh_id = new_uuid7()
+            _log.warning(
+                "alert_successor_chain_exhausted",
+                extra={"rule_id": group.rule.id, "alert_id": alert_id, "successor_id": fresh_id},
+            )
             plan.creates.append(Create(group, claim, build_alert(group, fresh_id, plan.now)))
             plan.rearms.append((claim, fresh_id))
 
