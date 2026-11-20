@@ -61,3 +61,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - D-01 README (quickstart, URLs, tabs, what is mocked, load-test results from A-21, AI usage, limitations) and docs/demo.md scene-by-scene script (written by Gemini, reviewed).
 - B-21 LLM schema-profile proposals: propose tries the LLM first (sample redacted), drops mappings to paths missing in the sample, requires the profile to match the sample, otherwise falls back to the heuristic; live: Qwen3.8-27B drafted payment-declined in 6.5 s.
 - B-24 LLM fix drafts: POST /alerts/{id}/fix-proposals/draft (redacted alert, rule, runbook, action ids; output must pass validate_create; nothing persisted; 503 llm_unavailable / llm_invalid_output) and "Draft with AI" in ProposeFixDialog.
+- D-02 plugin how-tos (actions, runbook formats) and config/README.md per kind with JSON Schema links (written by Gemini subagents, reviewed against base.py/registry.py).
