@@ -16,7 +16,7 @@ def silence_deadlines(alerts: Iterable[tuple[str, Rule]], now_ms: int) -> list[t
     """(alert_id, deadline_ms) for every alert whose rule resolves after silence."""
     items = []
     for alert_id, rule in alerts:
-        silence = rule.auto_resolve.after_silence if rule.auto_resolve else None
+        silence = rule.auto_resolve.after_silence
         if silence:
             items.append((alert_id, now_ms + parse_duration_ms(silence) + SILENCE_MARGIN_MS))
     return items
@@ -25,4 +25,5 @@ def silence_deadlines(alerts: Iterable[tuple[str, Rule]], now_ms: int) -> list[t
 async def push_alert_silences(
     redis: Redis, alerts: Iterable[tuple[str, Rule]], now_ms: int
 ) -> None:
+    """Schedule (or push forward) the silence deadline of each alert whose rule has one."""
     await push_silence_deadlines(redis, silence_deadlines(alerts, now_ms))

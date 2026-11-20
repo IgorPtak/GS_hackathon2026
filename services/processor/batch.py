@@ -48,6 +48,7 @@ from alerting_core.streams import StreamMessage
 from pydantic import ValidationError
 from redis.asyncio import Redis
 
+from .auto_resolution import current_resolutions
 from .deliveries import build_side_effects, throttle_targets
 from .evaluation import EventOutcome, RuleSet, evaluate_event
 from .folds import FoldTracker
@@ -131,7 +132,7 @@ class EventProcessor:
         return failures
 
     async def _run_resolution_hook(self, outcomes: list[EventOutcome]) -> None:
-        resolutions = [o for o in outcomes if o.normalized.is_resolution]
+        resolutions = current_resolutions(outcomes)
         if not resolutions:
             return
         try:
@@ -212,15 +213,6 @@ class EventProcessor:
             self._folds.add(
                 fold.alert_id, count_key, last.envelope.received_at, last.envelope.payload
             )
-        rules = {group.rule.id: group.rule for group in (c.group for c in plan.creates)} | {
-            f.group.rule.id: f.group.rule for f in plan.folds
-        }
-        await push_alert_silences(
-            self._redis,
-            [(a.id, rules[a.rule_id]) for a in plan.created]
-            + [(f.alert_id, f.group.rule) for f in plan.folds],
-            int(time.time() * 1000),
-        )
         ALERTS_CREATED.inc(len(plan.created))
         created_ids = {alert.id for alert in plan.created}
         for create in plan.creates:
@@ -244,6 +236,17 @@ class EventProcessor:
         ]
         await asyncio.gather(*publishes)
         await publish_new_samples(self._redis, plan.new_samples, plan.now)
+        await self._push_silences(plan)
+
+    async def _push_silences(self, plan: BatchPlan) -> None:
+        """Best-effort: a missed deadline is re-pushed by the alert's next event."""
+        rules = {c.group.rule.id: c.group.rule for c in plan.creates}
+        alerts = [(a.id, rules[a.rule_id]) for a in plan.created]
+        alerts += [(f.alert_id, f.group.rule) for f in plan.folds]
+        try:
+            await push_alert_silences(self._redis, alerts, int(time.time() * 1000))
+        except Exception:
+            log.exception("silence_deadline_push_failed", extra={"count": len(alerts)})
 
 
 def _buffered_events(outcomes: list[EventOutcome]) -> list[BufferedEvent]:

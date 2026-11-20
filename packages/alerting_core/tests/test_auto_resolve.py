@@ -11,13 +11,14 @@ import pytest
 from alerting_contracts.alerts import Alert
 from alerting_contracts.config import Rule
 from alerting_core.auto_resolve import (
+    CLAIM_LEASE_MS,
     ResolutionSignal,
     push_silence_deadlines,
     resolve_on_signals,
     resolve_silent_alerts,
 )
 from alerting_core.connections import create_database_pool
-from alerting_core.dedup import dedup_key
+from alerting_core.dedup import dedup_count_key, dedup_key
 from alerting_core.ids import new_uuid7
 from alerting_core.settings import Settings
 from alerting_core.storage.rows import ALERT_COLUMNS, alert_values
@@ -221,3 +222,85 @@ async def test_rule_without_after_silence_drops_deadline(pool: asyncpg.Pool, red
 
     assert await resolve_silent_alerts(pool, redis, {"r1": make_rule()}, to_ms(now)) == []
     assert await redis.zcard("silence-deadlines") == 0
+
+
+async def test_signal_older_than_the_last_firing_event_does_not_resolve(
+    pool: asyncpg.Pool, redis: Redis
+) -> None:
+    now = datetime.now(UTC)
+    await insert_alert(pool, now - timedelta(minutes=10), last_seen=now)  # fired again
+    late = signal(now - timedelta(minutes=1))
+    assert await resolve_on_signals(pool, redis, [late], {"r1": make_rule()}) == []
+
+
+async def test_publish_failure_does_not_stop_other_resolutions(
+    pool: asyncpg.Pool, redis: Redis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = datetime.now(UTC)
+    first = await insert_alert(pool, now - timedelta(minutes=2))
+    second = await insert_alert(pool, now - timedelta(minutes=1))
+
+    async def broken_publish(*_: object) -> None:
+        raise ConnectionError("redis down")
+
+    monkeypatch.setattr("alerting_core.auto_resolve.publish_alert_change", broken_publish)
+
+    resolved = await resolve_on_signals(pool, redis, [signal(now)], {"r1": make_rule()})
+
+    assert {a.id for a in resolved} == {first.id, second.id}
+
+
+async def test_silence_resolution_is_audited_and_published(
+    pool: asyncpg.Pool, redis: Redis
+) -> None:
+    now = datetime.now(UTC)
+    alert = await insert_alert(pool, now - timedelta(minutes=10))
+    await push_silence_deadlines(redis, [(alert.id, to_ms(now) - 1)])
+    pubsub = redis.pubsub()
+    await pubsub.subscribe("alerts.team.platform")
+    await pubsub.get_message(timeout=1)
+
+    await resolve_silent_alerts(pool, redis, {"r1": make_rule(after_silence="5m")}, to_ms(now))
+
+    audit = await pool.fetch("SELECT verb FROM audit_entries WHERE alert_id = $1::uuid", alert.id)
+    assert [r["verb"] for r in audit] == ["alert_resolved"]
+    message = await pubsub.get_message(timeout=1)
+    assert message is not None and b"alert.updated" in message["data"]
+    assert await redis.zcard("silence-deadlines") == 0
+    await pubsub.aclose()
+
+
+async def test_unflushed_folds_keep_a_silent_alert_open(pool: asyncpg.Pool, redis: Redis) -> None:
+    now = datetime.now(UTC)
+    alert = await insert_alert(pool, now - timedelta(minutes=10))  # Postgres says: quiet
+    await redis.set(dedup_count_key("r1", "fp1"), 3)  # but 3 folds are not flushed yet
+    await push_silence_deadlines(redis, [(alert.id, to_ms(now) - 1)])
+
+    assert (
+        await resolve_silent_alerts(pool, redis, {"r1": make_rule(after_silence="5m")}, to_ms(now))
+        == []
+    )
+
+    assert await pool.fetchval("SELECT status FROM alerts WHERE id = $1::uuid", alert.id) == "open"
+    assert await redis.zscore("silence-deadlines", alert.id) >= to_ms(now) + 300_000
+
+
+async def test_failed_silence_pass_leaves_the_id_leased(
+    pool: asyncpg.Pool, redis: Redis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = datetime.now(UTC)
+    alert = await insert_alert(pool, now - timedelta(minutes=10))
+    await push_silence_deadlines(redis, [(alert.id, to_ms(now) - 1)])
+
+    async def broken_resolve(*_: object) -> None:
+        raise ConnectionError("postgres down")
+
+    monkeypatch.setattr("alerting_core.auto_resolve._resolve_and_publish", broken_resolve)
+    rules = {"r1": make_rule(after_silence="5m")}
+
+    assert await resolve_silent_alerts(pool, redis, rules, to_ms(now)) == []
+    assert await redis.zscore("silence-deadlines", alert.id) == to_ms(now) + CLAIM_LEASE_MS
+
+    monkeypatch.undo()
+    later = to_ms(now) + CLAIM_LEASE_MS + 1
+    assert [a.id for a in await resolve_silent_alerts(pool, redis, rules, later)] == [alert.id]

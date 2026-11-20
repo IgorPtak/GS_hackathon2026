@@ -57,3 +57,40 @@ async def test_group_summary_with_after_silence_gets_a_deadline(
     alert_id = str(await pool.fetchval("SELECT id FROM alerts WHERE is_group_summary"))
     deadline = await redis.zscore(SILENCE_DEADLINES_KEY, alert_id)
     assert deadline is not None and deadline > later_ms(15 * 60)
+
+
+async def test_firing_after_resolution_in_one_batch_keeps_the_alert_open(
+    pool, redis, snapshot
+) -> None:
+    processor = processor_with_hook(pool, redis, snapshot)
+    firing = alertmanager("alertmanager_firing.json")
+    await processor.handle_batch([message(firing, "alertmanager")])
+
+    await processor.handle_batch(
+        [
+            message(alertmanager("alertmanager_resolved.json"), "alertmanager"),
+            message(firing, "alertmanager"),  # received later: the problem is back
+        ]
+    )
+
+    assert await pool.fetchval("SELECT status FROM alerts") == "open"
+
+
+async def test_failing_resolution_hook_does_not_fail_the_batch(pool, redis, snapshot) -> None:
+    async def broken_hook(_outcomes) -> None:  # noqa: ANN001
+        raise ConnectionError("postgres down")
+
+    processor = EventProcessor(
+        pool,
+        redis,
+        FakeRegistry(snapshot),
+        Settings(),
+        FoldTracker(pool, redis),
+        broken_hook,  # type: ignore[arg-type]
+    )
+
+    failures = await processor.handle_batch(
+        [message(alertmanager("alertmanager_resolved.json"), "alertmanager")]
+    )
+
+    assert failures == {}
