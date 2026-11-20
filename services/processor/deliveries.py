@@ -63,12 +63,19 @@ def build_side_effects(
     *,
     public_base_url: str,
     event_sent_at: datetime | None,
+    purpose: DeliveryPurpose = DeliveryPurpose.alert,
 ) -> AlertSideEffects:
-    """Audit `alert_created`, one delivery per allowed target, the runbook job (pure)."""
+    """Audit the creation, one delivery per allowed target, the runbook job (pure).
+
+    A group summary is audited as `alert_grouped` and delivered with purpose `group_summary`.
+    """
     effects = AlertSideEffects()
-    effects.audit_rows.append(
-        AuditRow(alert.id, PROCESSOR_ACTOR, AuditVerb.alert_created, {"rule_id": rule.id})
-    )
+    verb = AuditVerb.alert_created
+    detail: dict[str, object] = {"rule_id": rule.id}
+    if alert.is_group_summary:
+        verb = AuditVerb.alert_grouped
+        detail |= {"group_key": alert.group_key, "members": len(alert.group_members)}
+    effects.audit_rows.append(AuditRow(alert.id, PROCESSOR_ACTOR, verb, detail))
     content = NotificationContent(
         title=alert.title,
         body=alert.body,
@@ -84,7 +91,7 @@ def build_side_effects(
             recipient_id=target.recipient_id,
             channel_id=target.channel_id,
             channel_type=target.channel_type,
-            purpose=DeliveryPurpose.alert,
+            purpose=purpose,
             content=content,
             event_sent_at=event_sent_at,
         )
