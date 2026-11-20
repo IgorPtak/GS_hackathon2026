@@ -65,3 +65,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - D-02 plugin how-tos (actions, runbook formats) and config/README.md per kind with JSON Schema links (written by Gemini subagents, reviewed against base.py/registry.py).
 - B-17 RuleConditionForm: form for a single leaf or flat all of leaves (eq ne gt gte lt lte in glob regex exists) above the YAML editor; edits replace only the when: block; anything else shows "edit in YAML" (first draft by Gemini, rewritten).
 - D-03 automated demo rehearsal: scripts/demo_rehearsal.py walks every demo scene against the stack with fresh ids and bounded polls (alert+email or sms by Anna's hours, preview, 500→×500, sms outage with 0 lost, runbook approval by code + 409, metrics, Alertmanager resolve); written by Gemini, reviewed.
+- B-08-eval results: docs/llm-eval-results.md (10 PSNC models; Qwen3.8-27B most stable, DeepSeek-V4.1-Flash ~3x faster at near-equal accuracy).
