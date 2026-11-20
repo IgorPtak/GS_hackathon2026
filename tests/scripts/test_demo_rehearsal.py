@@ -184,3 +184,12 @@ def test_parse_only_scenes_validates_and_preserves_order() -> None:
     assert parse_only_scenes("dedup_500,health", valid) == ["health", "dedup_500"]
     with pytest.raises(ValueError, match="unknown scene"):
         parse_only_scenes("health,nope", valid)
+
+
+def test_anna_expects_email_only_outside_warsaw_working_hours() -> None:
+    from datetime import UTC, datetime
+
+    from demo_rehearsal import anna_expects_email
+
+    assert anna_expects_email(datetime(2026, 11, 20, 12, 0, tzinfo=UTC)) is False  # 13:00 Warsaw
+    assert anna_expects_email(datetime(2026, 11, 20, 21, 0, tzinfo=UTC)) is True  # 22:00 Warsaw

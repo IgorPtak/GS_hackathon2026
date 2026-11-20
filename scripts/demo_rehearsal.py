@@ -11,8 +11,10 @@ import json
 import sys
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 import yaml
@@ -80,17 +82,24 @@ def _find_open_rates_alert(ctx: RehearsalContext, reason: str) -> Any:
     return matches[0] if matches else None
 
 
-def _probe_email_delivered(ctx: RehearsalContext, alert_id: str) -> bool:
+def anna_expects_email(now: datetime | None = None) -> bool:
+    """Anna gets rates errors by sms/phone 08:00-20:00 Europe/Warsaw, email otherwise.
+
+    Mirrors config/recipients/anna.yaml so the scene passes at any time of day (we record by day).
+    """
+    local = (now or datetime.now(UTC)).astimezone(ZoneInfo("Europe/Warsaw"))
+    return not (8 <= local.hour < 20)
+
+
+def _probe_channel_delivered(ctx: RehearsalContext, alert_id: str, channel: str) -> bool:
     detail = get_alert_detail(ctx, alert_id)
     if any(
-        d.channel_type.value == "email" and d.status.value in DELIVERED_STATUSES
+        d.channel_type.value == channel and d.status.value in DELIVERED_STATUSES
         for d in detail.deliveries
     ):
         return True
     seen = [f"{d.channel_type.value}:{d.status.value}" for d in detail.deliveries]
-    raise RehearsalError(
-        f"seen deliveries={seen}; note Anna routes email outside 08:00-20:00 Europe/Warsaw"
-    )
+    raise RehearsalError(f"no delivered {channel}; seen deliveries={seen}")
 
 
 def _probe_mailpit_query(ctx: RehearsalContext, query: str) -> bool:
@@ -111,11 +120,14 @@ def scene_rates_alert_and_email(ctx: RehearsalContext) -> SceneResult:
             timeout=ctx.timeout,
             reason=f"open rates alert for {reason} not found",
         )
+        channel = "email" if anna_expects_email() else "sms"
         poll_until(
-            lambda: _probe_email_delivered(ctx, alert.id),
+            lambda: _probe_channel_delivered(ctx, alert.id, channel),
             timeout=ctx.timeout,
-            reason=f"no delivered email for rates alert {alert.id}",
+            reason=f"no delivered {channel} for rates alert {alert.id}",
         )
+        if channel == "sms":  # working hours: Anna's preference routes to sms/phone, no email
+            return f"alert {alert.id[:8]} open, sms delivered (Anna's working hours)"
         poll_until(
             lambda: _probe_mailpit_query(ctx, trade_id),
             timeout=ctx.timeout,
