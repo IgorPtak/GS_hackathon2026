@@ -104,9 +104,9 @@ def main(root: Path) -> int:
                 failures.append(f"{path}: {label} {ref_id!r} not found in {target}/")
     for failure in failures:
         print(f"FAIL {failure}")
-    print(
-        f"{'FAILED' if failures else 'OK'}: {sum(map(len, ids.values()))} documents, {len(failures)} failure(s)"
-    )
+    status = "FAILED" if failures else "OK"
+    document_count = sum(map(len, ids.values()))
+    print(f"{status}: {document_count} documents, {len(failures)} failure(s)")
     return 1 if failures else 0
 
 
