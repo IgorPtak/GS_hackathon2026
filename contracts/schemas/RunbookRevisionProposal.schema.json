@@ -1,0 +1,175 @@
+{
+  "$defs": {
+    "ApprovalPolicy": {
+      "enum": [
+        "none",
+        "required"
+      ],
+      "title": "ApprovalPolicy",
+      "type": "string"
+    },
+    "ProposalStatus": {
+      "enum": [
+        "pending",
+        "accepted",
+        "rejected"
+      ],
+      "title": "ProposalStatus",
+      "type": "string"
+    },
+    "RunIf": {
+      "enum": [
+        "always",
+        "previous_failed",
+        "previous_succeeded"
+      ],
+      "title": "RunIf",
+      "type": "string"
+    },
+    "RunbookStep": {
+      "additionalProperties": false,
+      "description": "One normalized step. `text` and `params` are templates filled from the alert.",
+      "properties": {
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/$defs/StepKind"
+        },
+        "text": {
+          "examples": [
+            "Rejected {{payload.currency}} {{payload.notional}}"
+          ],
+          "title": "Text",
+          "type": "string"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "examples": [
+                "rates-large-rejections"
+              ],
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Action id; required for check/action steps that execute.",
+          "title": "Action"
+        },
+        "params": {
+          "additionalProperties": {
+            "examples": [
+              "Rejected {{payload.currency}} {{payload.notional}}"
+            ],
+            "type": "string"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "approval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ApprovalPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None = inherit from the action config."
+        },
+        "is_automatic": {
+          "default": false,
+          "description": "Runs without a click when the alert opens.",
+          "title": "Is Automatic",
+          "type": "boolean"
+        },
+        "run_if": {
+          "$ref": "#/$defs/RunIf",
+          "default": "always"
+        },
+        "max_attempts": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "kind",
+        "text"
+      ],
+      "title": "RunbookStep",
+      "type": "object"
+    },
+    "StepKind": {
+      "enum": [
+        "text",
+        "check",
+        "action"
+      ],
+      "title": "StepKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Optional (cut-1): steps skipped and actions taken outside the runbook -> new version.",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "runbook_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Runbook Id",
+      "type": "string"
+    },
+    "based_on_alert_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Based On Alert Ids",
+      "type": "array"
+    },
+    "summary": {
+      "title": "Summary",
+      "type": "string"
+    },
+    "proposed_steps": {
+      "items": {
+        "$ref": "#/$defs/RunbookStep"
+      },
+      "title": "Proposed Steps",
+      "type": "array"
+    },
+    "status": {
+      "$ref": "#/$defs/ProposalStatus",
+      "default": "pending"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "runbook_id",
+    "based_on_alert_ids",
+    "summary",
+    "proposed_steps",
+    "created_at"
+  ],
+  "title": "RunbookRevisionProposal",
+  "type": "object"
+}
