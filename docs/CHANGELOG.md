@@ -16,3 +16,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-05 RecentEventsPanel: polls /api/v1/events/recent every 2 s (paused while hidden) with source filter, collapsible JSON payload and error banner; Schemas and Alerts tabs.
 - B-10 action plugins: registry + http_get, webhook (YAML-only), retry_workflow, restart_service, open_ticket, escalate; every config/actions/*.yaml resolves to a plugin.
 - B-08 LLM client: alerting_core.llm LlmClient (OpenAI-compatible, json_schema output, one validation retry, think-block strip, LLM_ALLOWED_HOSTS), Luhn-aware redact_secrets, in-memory/Redis cache, LlmConfig.from_settings, scripts/check_llm.py.
+- B-01 api service skeleton: app factory with lifespan (pool, lazy Redis, config source), one router per tag, /healthz, /api/v1/config, /api/v1/events/recent, ErrorResponse handlers, /metrics, route drift test; DirectoryConfigSource until A-03.

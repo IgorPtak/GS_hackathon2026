@@ -1,11 +1,83 @@
-"""HTTP API stub (track B, port 8000). Routes arrive in B-01; this only answers /healthz."""
+"""HTTP API for the UI (track B, port 8000)."""
 
-from fastapi import FastAPI
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
-app = FastAPI()
+import asyncpg
+from alerting_core.connections import create_database_pool, create_redis_client
+from alerting_core.logging import configure_logging, get_logger
+from alerting_core.metrics import render_metrics
+from alerting_core.settings import Settings, get_settings
+from fastapi import FastAPI, Response
+
+from .config_source import DirectoryConfigSource
+from .errors import install_error_handlers
+from .routers import (
+    alerts,
+    approvals,
+    config,
+    fix_proposals,
+    ops,
+    phone_simulator,
+    rules,
+    runbooks,
+    schema_profiles,
+    stream,
+)
+
+log = get_logger(__name__)
+
+ROUTERS = (
+    alerts,
+    runbooks,
+    fix_proposals,
+    config,
+    rules,
+    schema_profiles,
+    approvals,
+    phone_simulator,
+    stream,
+    ops,
+)
 
 
-@app.get("/healthz")
-async def healthz() -> dict[str, str]:
-    """Liveness probe used by compose healthchecks."""
-    return {"status": "ok"}
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """Build the app; pool, Redis and config source live in the lifespan (app.state).
+
+    A Postgres that is down at startup does not stop the api: `state.pool` stays None and
+    routes that need it answer 503 (the pool has no consumers yet).
+    """
+    resolved = settings or get_settings()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        configure_logging("api", resolved.log_level)
+        app.state.settings = resolved
+        app.state.config_source = DirectoryConfigSource(resolved.config_dir)
+        app.state.redis = create_redis_client(resolved)  # connects lazily
+        try:
+            app.state.pool = await create_database_pool(resolved)
+        except (OSError, asyncpg.PostgresError) as error:
+            log.error("database_unavailable", extra={"error": str(error)})
+            app.state.pool = None
+        log.info("api_started")
+        yield
+        await app.state.redis.aclose()
+        if app.state.pool is not None:
+            await app.state.pool.close()
+
+    app = FastAPI(title="Alerting API", lifespan=lifespan)
+    install_error_handlers(app)
+    for module in ROUTERS:
+        app.include_router(module.router)
+
+    @app.get("/metrics", include_in_schema=False)
+    async def metrics() -> Response:
+        """Prometheus exposition."""
+        body, content_type = render_metrics()
+        return Response(body, media_type=content_type)
+
+    return app
+
+
+app = create_app()
