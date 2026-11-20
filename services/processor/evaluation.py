@@ -53,7 +53,7 @@ class RuleSet:
     """Profiles and enabled rules of one config snapshot, compiled for the hot path."""
 
     def __init__(self, snapshot: ConfigSnapshot) -> None:
-        profiles: Mapping[str, SchemaProfile] = snapshot.of_kind("schema")
+        profiles: Mapping[str, SchemaProfile] = snapshot.of_kind("schema_profile")
         self.profiles = ProfileMatcher(list(profiles.values()))
         self.rules: list[CompiledRule] = []
         rules: Mapping[str, Rule] = snapshot.of_kind("rule")

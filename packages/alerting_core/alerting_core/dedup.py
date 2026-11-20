@@ -77,14 +77,14 @@ async def rearm_dedup_keys(redis: Redis, claims: Sequence[tuple[DedupClaim, str]
         await pipeline.execute()
 
 
-async def record_folds(redis: Redis, folds: Sequence[DedupClaim]) -> None:
-    """Count one folded event per claim."""
+async def record_folds(redis: Redis, folds: Sequence[tuple[DedupClaim, int]]) -> None:
+    """Add `count` folded events per (claim, count)."""
     if not folds:
         return
     async with redis.pipeline(transaction=False) as pipeline:
-        for fold in folds:
+        for fold, count in folds:
             key = dedup_count_key(fold.rule_id, fold.fingerprint)
-            pipeline.incr(key)
+            pipeline.incrby(key, count)
             pipeline.pexpire(key, fold.window_ms + _COUNT_GRACE_MS)
         await pipeline.execute()
 
