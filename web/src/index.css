@@ -1,1 +1,203 @@
 @import "tailwindcss";
+
+/*
+ * Design tokens (docs/ui-design.md). light-dark() follows `color-scheme`, which follows the
+ * system by default and the user's choice when <html data-theme="light|dark"> is set.
+ */
+:root {
+  color-scheme: light dark;
+
+  --canvas: light-dark(#e9e9ec, #0e0e10);
+  --window: light-dark(#ffffff, #1c1c1e);
+  --panel: light-dark(#f6f6f8, #151517);
+  --card: light-dark(#ffffff, #232326);
+  --ink: light-dark(#1d1d1f, #f5f5f7);
+  --ink-2: light-dark(#6e6e73, #a1a1a6);
+  --ink-3: light-dark(#a1a1a6, #6e6e73);
+  --hairline: light-dark(#e5e5ea, #2c2c2e);
+  --fill: light-dark(#f2f2f4, #2c2c2e);
+  --accent: #0a84ff;
+  --critical: light-dark(#ff3b30, #ff453a);
+  --error: light-dark(#ff9500, #ff9f0a);
+  --warning: light-dark(#ffcc00, #ffd60a);
+  --info: #8e8e93;
+  --success: light-dark(#34c759, #30d158);
+
+  /* Text-safe variants of the status colours (the bright ones fail AA as text on white). */
+  --critical-ink: light-dark(#d70015, #ff6961);
+  --error-ink: light-dark(#b35c00, #ff9f0a);
+  --warning-ink: light-dark(#a05a00, #ffd60a);
+  --success-ink: light-dark(#1a7f37, #30d158);
+  --accent-ink: light-dark(#0066cc, #4da3ff);
+
+  --team-rates: #0a84ff;
+  --team-settlements: #af52de;
+  --team-pricing: #ff9500;
+  --team-platform: #34c759;
+
+  --elev-window: 0 1px 0 rgb(0 0 0 / 0.04), 0 24px 60px -24px rgb(0 0 0 / 0.18);
+  --elev-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --elev-tile: 0 2px 6px rgb(0 0 0 / 0.06);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --elev-window: 0 1px 0 rgb(255 255 255 / 0.04), 0 24px 60px -24px rgb(0 0 0 / 0.6);
+  --elev-tile: 0 2px 6px rgb(0 0 0 / 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --elev-window: 0 1px 0 rgb(255 255 255 / 0.04), 0 24px 60px -24px rgb(0 0 0 / 0.6);
+    --elev-tile: 0 2px 6px rgb(0 0 0 / 0.3);
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-window: var(--window);
+  --color-panel: var(--panel);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-hairline: var(--hairline);
+  --color-fill: var(--fill);
+  --color-accent: var(--accent);
+  --color-critical: var(--critical);
+  --color-error: var(--error);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-success: var(--success);
+  --color-critical-ink: var(--critical-ink);
+  --color-error-ink: var(--error-ink);
+  --color-warning-ink: var(--warning-ink);
+  --color-success-ink: var(--success-ink);
+  --color-accent-ink: var(--accent-ink);
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-meta: 13px;
+  --text-meta--line-height: 18px;
+  --text-body: 15px;
+  --text-body--line-height: 22px;
+  --text-row: 17px;
+  --text-row--line-height: 22px;
+  --text-card-title: 22px;
+  --text-card-title--line-height: 28px;
+  --text-page: 28px;
+  --text-page--line-height: 34px;
+  --text-hero: 40px;
+  --text-hero--line-height: 44px;
+
+  --radius-window: 28px;
+  --radius-card: 20px;
+  --radius-tile: 14px;
+  --radius-input: 12px;
+
+  --shadow-window: var(--elev-window);
+  --shadow-card: var(--elev-card);
+  --shadow-tile: var(--elev-tile);
+
+  --animate-row-in: row-in 200ms ease-out;
+  --animate-pop: pop 160ms ease-out;
+
+  @keyframes row-in {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+@layer base {
+  html {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 22px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+  }
+
+  button,
+  [role="button"],
+  summary {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  dialog {
+    color: inherit;
+  }
+
+  dialog:modal {
+    overscroll-behavior: contain;
+  }
+
+  dialog::backdrop {
+    background: rgb(0 0 0 / 0.32);
+    overflow: hidden;
+    overscroll-behavior: contain;
+  }
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The popover and dialog reset: Tailwind preflight strips UA margins we rely on for centring. */
+dialog:not([open]) {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * Interim shim: pages not yet restyled use hard-coded light Tailwind palettes. Pin them to the
+ * light scheme so they stay readable in dark mode. Remove once every page uses the tokens.
+ */
+.legacy-light {
+  color-scheme: light;
+  color: #1d1d1f;
+}

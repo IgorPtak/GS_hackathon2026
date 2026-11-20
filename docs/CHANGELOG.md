@@ -70,3 +70,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-23 recovery integration tests: 200 sms through a gateway outage all delivered; docker kill of one of two delivery workers loses and duplicates nothing
 - D-01 README load-test section updated with A-24 numbers (≥350 msg/s, p50 56 ms, p99 163 ms, lost 0) and A-23 recovery tests.
 - D-03 judges_path rehearsal scene: unknown schema → LLM profile → rule with preview → free-text runbook (escalate needs approval) → live events dedup to count 2 → cleanup; full rehearsal 9/9 on the rebuilt stack (written by Gemini, reviewed).
+- UI-01 Beacon design foundation: tokens (light/dark), ui kit and SF-style icons, layered four-point star logo + favicon, window + icon rail shell, first-run team picker, /phone and /demo routes, ?team= and ?theme= overrides, one screen file per rail item.
