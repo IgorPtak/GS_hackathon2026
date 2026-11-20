@@ -32,7 +32,7 @@ from pydantic import BaseModel, ValidationError
 
 from ..dependencies import PoolDep, RedisDep
 from ..errors import ApiError
-from ..schema_proposal import propose_profile_heuristic
+from ..schema_proposal_llm import propose_profile
 from .rules import validation_errors, validation_failed
 
 router = APIRouter(tags=["schema-profiles"])
@@ -105,12 +105,16 @@ async def list_unknown_schemas(pool: PoolDep) -> list[UnknownSchemaSample]:
 
 @router.post("/api/v1/schema-profiles/propose", response_model=SchemaProfileProposal)
 async def propose_schema_profile(request: Request) -> Any:
-    """Draft a profile for a sample event (heuristic; B-21 adds the LLM variant here)."""
+    """Draft a profile for a sample event: LLM first, heuristic fallback (no 5xx from the LLM)."""
     body = await _body(request, SchemaProfileProposeRequest, "propose request")
     if not isinstance(body, SchemaProfileProposeRequest):
         return body
+    registry = getattr(request.app.state, "registry", None)
+    existing = list(registry.schema_profiles()) if registry is not None else []
     try:
-        return propose_profile_heuristic(body.sample_event, body.profile_id)
+        return await propose_profile(
+            body.sample_event, body.profile_id, getattr(request.app.state, "llm", None), existing
+        )
     except (ValidationError, ValueError, TypeError, re.error) as exc:
         return validation_failed(
             "no valid profile could be proposed for this sample",

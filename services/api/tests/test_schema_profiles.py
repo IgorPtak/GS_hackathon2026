@@ -229,3 +229,109 @@ def test_test_endpoint_invalid_is_422() -> None:
         )
     assert missing.status_code == 422 and missing.json()["details"][0]["path"] == "schema_profile"
     assert regex.status_code == 422 and regex.json()["details"][0]["path"] == "schema_profile.match"
+
+
+# ---------------------------------------------------------------- LLM proposal (B-21)
+
+LLM_PROFILE = {
+    "id": "payments-llm",
+    "description": "Payments declines",
+    "priority": 5,
+    "match": {"all": [{"field": "evt", "op": "exists", "value": True}]},
+    "fields": {
+        "type": "evt",
+        "source": "svc",
+        "severity": {"path": "lvl", "value_map": {"WARN": "warning"}},
+        "occurred_at": {"path": "at", "format": "iso8601"},
+        "entity": "data.paymentId",
+    },
+    "fingerprint": ["evt", "data.paymentId"],
+}
+
+
+class FakeLlm:
+    """Duck-typed LlmClient: records prompts, returns a canned answer or raises."""
+
+    model = "fake-model"
+
+    def __init__(self, profile: dict[str, Any] | None = None, error: Exception | None = None):
+        self.profile, self.error, self.prompts = profile, error, []
+
+    async def generate(self, prompt: str, response_model: Any, *, system: str | None = None):
+        self.prompts.append(prompt + (system or ""))
+        if self.error is not None:
+            raise self.error
+        return response_model.model_validate({"profile": self.profile, "notes": ["ok"]})
+
+
+def _propose(llm: Any, sample: dict[str, Any] | None = None) -> dict[str, Any]:
+    client, _, _ = make()
+    with client:
+        client.app.state.llm = llm  # type: ignore[attr-defined]
+        r = client.post(
+            "/api/v1/schema-profiles/propose", json={"sample_event": sample or PAYMENTS}
+        )
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_llm_proposal_is_used_and_validated() -> None:
+    fake = FakeLlm(LLM_PROFILE)
+    body = _propose(fake)
+    assert body["generated_by"] == "llm" and body["model"] == "fake-model"
+    assert body["profile"]["id"] == "payments-llm" and body["notes"] == ["ok"]
+    SchemaProfile.model_validate(body["profile"])
+    assert "Heuristic proposal" in fake.prompts[0] and "Existing profile ids" in fake.prompts[0]
+
+
+def test_llm_unavailable_falls_back_to_heuristic() -> None:
+    from alerting_core.llm import LlmUnavailableError
+
+    assert _propose(FakeLlm(error=LlmUnavailableError("down")))["generated_by"] == "heuristic"
+    assert _propose(None)["generated_by"] == "heuristic"
+
+
+def test_llm_invalid_output_falls_back_to_heuristic() -> None:
+    from alerting_core.llm import LlmOutputInvalidError
+
+    assert _propose(FakeLlm(error=LlmOutputInvalidError("bad")))["generated_by"] == "heuristic"
+    # schema-valid but the profile does not match the sample
+    nomatch = {**LLM_PROFILE, "match": {"field": "evt", "op": "eq", "value": "other"}}
+    assert _propose(FakeLlm(nomatch))["generated_by"] == "heuristic"
+
+
+def test_llm_nonexistent_mapping_path_is_dropped() -> None:
+    profile = {**LLM_PROFILE, "fields": {**LLM_PROFILE["fields"], "entity": "data.missing"}}
+    body = _propose(FakeLlm(profile))
+    assert body["generated_by"] == "llm" and body["profile"]["fields"].get("entity") is None
+    assert any("entity" in n for n in body["notes"])
+    # a match path that is absent cannot be repaired
+    bad = {**LLM_PROFILE, "match": {"field": "nope", "op": "exists", "value": True}}
+    assert _propose(FakeLlm(bad))["generated_by"] == "heuristic"
+
+
+def test_llm_prompt_redacts_secret_values() -> None:
+    sample = {**PAYMENTS, "api_token": "sk-live-9f8e7d6c5b4a3210", "password": "hunter2hunter2"}
+    fake = FakeLlm(LLM_PROFILE)
+    _propose(fake, sample)
+    assert fake.prompts
+    assert "sk-live-9f8e7d6c5b4a3210" not in fake.prompts[0]
+    assert "hunter2hunter2" not in fake.prompts[0]
+
+
+def test_llm_existing_profile_ids_reach_prompt_and_avoid_collision() -> None:
+    class Registry:
+        async def stop(self) -> None:
+            return None
+
+        def schema_profiles(self) -> dict[str, Any]:
+            return {"payments-llm": object(), "trade-rejected": object()}
+
+    fake = FakeLlm(LLM_PROFILE)
+    client, _, _ = make()
+    with client:
+        client.app.state.llm = fake  # type: ignore[attr-defined]
+        client.app.state.registry = Registry()  # type: ignore[attr-defined]
+        r = client.post("/api/v1/schema-profiles/propose", json={"sample_event": PAYMENTS})
+    assert r.json()["generated_by"] == "llm" and r.json()["profile"]["id"] == "payments-llm-2"
+    assert "payments-llm, trade-rejected" in fake.prompts[0]
