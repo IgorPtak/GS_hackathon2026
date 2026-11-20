@@ -4,6 +4,9 @@ import { apiClient } from "../../api/client";
 import type { FixProposalCreate } from "../../api/types";
 import { messageFromBody } from "../rules/ruleErrors";
 
+const UNAVAILABLE_MESSAGE =
+  "AI drafting is unavailable right now. You can still write the fix yourself below.";
+
 /** POST /alerts/{id}/fix-proposals/draft; the draft is never saved, only used to prefill a form. */
 export function useDraftFixProposal(alertId: string) {
   const [isDrafting, setIsDrafting] = useState(false);
@@ -19,15 +22,15 @@ export function useDraftFixProposal(alertId: string) {
       );
       if (data) return data;
       setMessage(
-        messageFromBody(
-          error,
-          response.status === 503
-            ? "LLM unavailable"
-            : `Could not draft a proposal (API error ${String(response.status)})`,
-        ),
+        response.status === 503
+          ? UNAVAILABLE_MESSAGE
+          : messageFromBody(
+              error,
+              `Could not draft a fix (API error ${String(response.status)}). Write one below instead.`,
+            ),
       );
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "API unreachable");
+      setMessage(e instanceof Error ? e.message : "Could not reach the server. Try again.");
     } finally {
       setIsDrafting(false);
     }

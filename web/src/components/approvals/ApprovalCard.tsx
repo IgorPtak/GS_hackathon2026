@@ -1,75 +1,130 @@
 import { useState } from "react";
 
 import type { ApprovalRequest } from "../../api/types";
-import { formatDateTime } from "../alerts/alertFormat";
+import { formatDateTime, formatRelativeTime } from "../alerts/alertFormat";
+import { Avatar } from "../ui/Avatar";
+import { Button } from "../ui/Button";
+import { Card } from "../ui/Card";
+import { TextInput } from "../ui/TextInput";
 import type { DecisionKind } from "./useApprovalDecision";
 
 interface ApprovalCardProps {
-  request: ApprovalRequest;
-  isBusy: boolean;
-  error: string | null;
-  onDecide: (decision: DecisionKind, comment: string) => void;
+  readonly request: ApprovalRequest;
+  readonly alertTitle: string;
+  readonly runbookTitle: string;
+  readonly busyKind: DecisionKind | null;
+  readonly error: string | null;
+  readonly onOpenAlert: (alertId: string) => void;
+  readonly onDecide: (decision: DecisionKind, comment: string) => void;
 }
 
-/** One pending approval: what will run, the code to reply with, and Approve / Reject. */
-export function ApprovalCard({ request, isBusy, error, onDecide }: ApprovalCardProps) {
+/** Reads the summary as a direct question when it is not already phrased as one. */
+function formatAsQuestion(summary: string): string {
+  const trimmed = summary.trim().replace(/\.+$/, "");
+  if (!trimmed) return "Approve this step?";
+  return trimmed.endsWith("?") ? trimmed : `${trimmed}?`;
+}
+
+/** One pending approval card framed as a question, with context, quiet phone code and actions. */
+export function ApprovalCard({
+  request,
+  alertTitle,
+  runbookTitle,
+  busyKind,
+  error,
+  onOpenAlert,
+  onDecide,
+}: ApprovalCardProps) {
   const [comment, setComment] = useState("");
-  const params = Object.entries(request.params ?? {});
+  const isBusy = busyKind !== null;
+
   return (
-    <li className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="min-w-0 font-medium break-words">{request.summary}</p>
-        <span className="rounded bg-amber-100 px-2 py-0.5 font-mono text-sm text-amber-900">
-          {request.approval_code}
+    <Card as="li" className="list-none space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 items-start gap-3.5">
+          <Avatar name={request.team} team={request.team} size="md" className="mt-0.5" />
+          <div className="min-w-0 space-y-1">
+            <h3 className="text-row font-semibold break-words text-ink">
+              {formatAsQuestion(request.summary)}
+            </h3>
+            <p className="text-meta text-ink-2">
+              {runbookTitle} · Step {request.step_index + 1} ·{" "}
+              <time dateTime={request.requested_at} title={formatDateTime(request.requested_at)}>
+                {formatRelativeTime(request.requested_at)}
+              </time>
+            </p>
+          </div>
+        </div>
+        <span
+          className="num shrink-0 rounded-full bg-fill px-2.5 py-1 text-caption font-medium text-ink-2"
+          title="4-digit code for SMS or phone reply"
+        >
+          Code <span className="font-mono text-ink">{request.approval_code}</span>
         </span>
       </div>
-      <p className="mt-1 font-mono text-xs break-words text-slate-600">
-        {request.action_id}
-        {params.length > 0 ? ` (${params.map(([k, v]) => `${k}=${v}`).join(", ")})` : ""}
-      </p>
-      <p className="mt-1 text-xs text-slate-500">
-        Requested {formatDateTime(request.requested_at)} · alert{" "}
-        <span className="font-mono">{request.alert_id}</span> · step #{request.step_index + 1}
-      </p>
-      <label className="mt-3 block text-sm">
-        <span className="sr-only">Comment</span>
-        <input
-          type="text"
-          value={comment}
-          placeholder="Comment (optional)"
-          onChange={(event) => {
-            setComment(event.target.value);
-          }}
-          className="w-full rounded border border-slate-300 px-2 py-1"
-        />
-      </label>
-      <div className="mt-2 flex gap-2">
+
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-tile bg-panel px-3.5 py-2.5 text-meta">
+        <span className="font-medium text-ink-2">Alert</span>
         <button
           type="button"
-          disabled={isBusy}
           onClick={() => {
-            onDecide("approve", comment);
+            onOpenAlert(request.alert_id);
           }}
-          className="rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-40"
+          className="min-w-0 text-left font-medium break-words text-accent-ink hover:underline"
         >
-          Approve
-        </button>
-        <button
-          type="button"
-          disabled={isBusy}
-          onClick={() => {
-            onDecide("reject", comment);
-          }}
-          className="rounded border border-red-600 px-3 py-1.5 text-sm text-red-700 disabled:opacity-40"
-        >
-          Reject
+          {alertTitle}
         </button>
       </div>
+
+      <div className="flex flex-wrap items-center gap-3 pt-1">
+        <div className="min-w-[12rem] flex-1">
+          <label className="sr-only" htmlFor={`note-${request.id}`}>
+            Optional note
+          </label>
+          <TextInput
+            id={`note-${request.id}`}
+            type="text"
+            value={comment}
+            placeholder="Add a note (optional)"
+            disabled={isBusy}
+            onChange={(event) => {
+              setComment(event.target.value);
+            }}
+            className="h-9 text-meta"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            disabled={isBusy}
+            isLoading={busyKind === "reject"}
+            onClick={() => {
+              onDecide("reject", comment);
+            }}
+          >
+            Reject
+          </Button>
+          <Button
+            variant="primary"
+            disabled={isBusy}
+            isLoading={busyKind === "approve"}
+            onClick={() => {
+              onDecide("approve", comment);
+            }}
+          >
+            Approve
+          </Button>
+        </div>
+      </div>
+
       {error ? (
-        <p role="alert" className="mt-2 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p
+          role="alert"
+          className="rounded-tile border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-meta text-warning-ink"
+        >
           {error}
         </p>
       ) : null}
-    </li>
+    </Card>
   );
 }

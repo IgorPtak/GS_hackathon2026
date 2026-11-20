@@ -1,57 +1,103 @@
-import { useEventStream } from "../../hooks/useEventStream";
-import { ConnectionIndicator } from "../alerts/ConnectionIndicator";
+import type { ApprovalRequest } from "../../api/types";
+import { Button } from "../ui/Button";
+import { Card } from "../ui/Card";
+import { Skeleton } from "../ui/Skeleton";
+import { useToast } from "../ui/toastContext";
 import { ApprovalCard } from "./ApprovalCard";
-import { useApprovalDecision } from "./useApprovalDecision";
-import { useApprovals } from "./useApprovals";
+import { RecentDecisionsList } from "./RecentDecisionsList";
+import { useApprovalDecision, type DecisionKind } from "./useApprovalDecision";
 
-/** Pending approvals of one team, live from approval.requested / approval.decided. */
-export function ApprovalQueue({ team }: { team: string }) {
-  const approvals = useApprovals(team);
-  const { apply, reload } = approvals;
-  const decision = useApprovalDecision(team, apply);
-  const streamStatus = useEventStream(team, {
-    "approval.requested": (event) => {
-      apply(event.approval_request);
-    },
-    "approval.decided": (event) => {
-      apply(event.approval_request);
-    },
-    onReconnect: reload,
-  });
+interface ApprovalQueueProps {
+  readonly team: string;
+  readonly items: readonly ApprovalRequest[];
+  readonly decided: readonly ApprovalRequest[];
+  readonly isLoading: boolean;
+  readonly error: string | null;
+  readonly getAlertTitle: (alertId: string) => string;
+  readonly getRunbookTitle: (runbookId: string) => string;
+  readonly onApply: (request: ApprovalRequest) => void;
+  readonly onReload: () => void;
+  readonly onOpenAlert: (alertId: string) => void;
+}
+
+/** Pending runbook approvals followed by the collapsible recent decisions history. */
+export function ApprovalQueue({
+  team,
+  items,
+  decided,
+  isLoading,
+  error,
+  getAlertTitle,
+  getRunbookTitle,
+  onApply,
+  onReload,
+  onOpenAlert,
+}: ApprovalQueueProps) {
+  const toast = useToast();
+  const decision = useApprovalDecision(team, onApply);
+
+  async function handleDecide(id: string, kind: DecisionKind, comment: string) {
+    const ok = await decision.decide(id, kind, comment);
+    if (ok) {
+      toast.show(
+        kind === "approve" ? "Approved" : "Rejected",
+        kind === "approve" ? "success" : "info",
+      );
+    }
+  }
 
   return (
-    <section aria-labelledby="approvals-title">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 id="approvals-title" className="text-xl font-semibold">
-          Approvals
-        </h2>
-        <ConnectionIndicator status={streamStatus} />
-      </div>
-      {approvals.isLoading ? <p className="text-sm text-slate-500">Loading approvals...</p> : null}
-      {approvals.error ? (
-        <p role="alert" className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-800">
-          Cannot load approvals ({approvals.error}).{" "}
-          <button type="button" className="underline" onClick={approvals.reload}>
+    <section aria-labelledby="runbook-approvals-heading" className="space-y-4">
+      {items.length > 0 || isLoading || error ? (
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="runbook-approvals-heading" className="text-card-title font-semibold text-ink">
+            Runbook requests
+          </h2>
+          {items.length > 0 ? (
+            <span className="num text-meta font-medium text-ink-2">{items.length} waiting</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {isLoading ? (
+        <Card className="space-y-3">
+          <Skeleton className="h-5 w-72" />
+          <Skeleton className="h-4 w-56" />
+          <Skeleton className="h-9 w-full" />
+        </Card>
+      ) : null}
+
+      {error ? (
+        <Card className="flex flex-wrap items-center justify-between gap-3 border-critical/30 bg-critical/8">
+          <p role="alert" className="text-body text-critical-ink">
+            Could not load approvals ({error}).
+          </p>
+          <Button variant="secondary" onClick={onReload}>
             Retry
-          </button>
-        </p>
+          </Button>
+        </Card>
       ) : null}
-      {!approvals.isLoading && !approvals.error && approvals.items.length === 0 ? (
-        <p className="text-sm text-slate-500">No pending approvals</p>
+
+      {items.length > 0 ? (
+        <ul className="space-y-4">
+          {items.map((request) => (
+            <ApprovalCard
+              key={request.id}
+              request={request}
+              alertTitle={getAlertTitle(request.alert_id)}
+              runbookTitle={getRunbookTitle(request.runbook_id)}
+              busyKind={decision.busyId === request.id ? decision.busyKind : null}
+              error={decision.errors[request.id] || null}
+              onOpenAlert={onOpenAlert}
+              onDecide={(kind, comment) => {
+                void handleDecide(request.id, kind, comment);
+              }}
+            />
+          ))}
+        </ul>
       ) : null}
-      <ul className="space-y-3">
-        {approvals.items.map((request) => (
-          <ApprovalCard
-            key={request.id}
-            request={request}
-            isBusy={decision.busyId === request.id}
-            error={decision.errors[request.id] || null}
-            onDecide={(kind, comment) => {
-              void decision.decide(request.id, kind, comment);
-            }}
-          />
-        ))}
-      </ul>
+
+      <RecentDecisionsList items={decided} />
     </section>
   );
 }

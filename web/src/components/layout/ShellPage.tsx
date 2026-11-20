@@ -8,7 +8,7 @@ import { RulesScreen } from "../../screens/RulesScreen";
 import { RunbooksScreen } from "../../screens/RunbooksScreen";
 import type { ScreenProps } from "../../screens/types";
 import type { TabId } from "../../lib/tabs";
-import { EmptyState } from "../ui/EmptyState";
+import { DemoScreen } from "../../screens/DemoScreen";
 
 /** Picks the screen for the active rail item. Each screen owns its header and body. */
 export function ShellPage({ tabId, ...props }: ScreenProps & { readonly tabId: TabId }) {
@@ -32,11 +32,7 @@ export function ShellPage({ tabId, ...props }: ScreenProps & { readonly tabId: T
   }
 }
 
-/** Placeholder for the reserved /demo route. */
+/** Renders the `/demo` route inside the shell window. */
 export function DemoPlaceholder() {
-  return (
-    <div className="flex flex-1 items-center justify-center bg-panel">
-      <EmptyState icon="send">The demo panel is not built yet.</EmptyState>
-    </div>
-  );
+  return <DemoScreen />;
 }

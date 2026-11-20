@@ -156,6 +156,27 @@ const ICON_PATHS = {
       <path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" />
     </>
   ),
+  sparkles: (
+    <>
+      <path d="M12 3l1.6 4.8L18.4 9.4l-4.8 1.6L12 15.8l-1.6-4.8-4.8-1.6 4.8-1.6z" />
+      <path d="M19 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />
+    </>
+  ),
+  layers: (
+    <>
+      <path d="m12 4 8 4.5-8 4.5-8-4.5z" />
+      <path d="m4 13 8 4.5 8-4.5" />
+      <path d="m4 17.5 8 4.5 8-4.5" />
+    </>
+  ),
+  signalOff: (
+    <>
+      <path d="M4 4l16 16" />
+      <path d="M9.5 14.5a3.5 3.5 0 0 1 4.6-.3" />
+      <path d="M6.3 11.3a8 8 0 0 1 5.7-2.3c2.1 0 4 .8 5.5 2.1" />
+      <circle cx="12" cy="18" r="1" fill="currentColor" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof ICON_PATHS;

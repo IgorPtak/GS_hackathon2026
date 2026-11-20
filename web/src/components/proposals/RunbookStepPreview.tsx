@@ -1,4 +1,7 @@
 import type { RunbookStep } from "../../api/types";
+import { cx } from "../../lib/cx";
+import { StatusChip } from "../ui/StatusChip";
+import { STEP_KIND_LABELS } from "./fixLabels";
 
 interface RunbookStepPreviewProps {
   readonly steps: readonly RunbookStep[];
@@ -13,20 +16,33 @@ export function RunbookStepPreview({ steps, step }: RunbookStepPreviewProps) {
     { s: step, isNew: true },
     ...steps.slice(position).map((s) => ({ s, isNew: false })),
   ];
+
   return (
-    <ol aria-label="Runbook preview" className="space-y-1 text-sm">
+    <ol
+      aria-label="Runbook preview"
+      className="space-y-1.5 rounded-tile border border-hairline bg-panel p-2.5 text-meta"
+    >
       {rows.map(({ s, isNew }, i) => (
         <li
           key={`${String(i)}-${isNew ? "new" : "old"}`}
-          className={`flex gap-2 rounded px-2 py-1 ${isNew ? "bg-green-50 text-green-900" : "bg-slate-50 text-slate-700"}`}
+          className={cx(
+            "flex items-baseline gap-2.5 rounded-input px-3 py-2",
+            isNew ? "bg-success/12 text-success-ink" : "bg-card text-ink",
+          )}
         >
-          <span className="w-6 shrink-0 text-right font-mono">{i + 1}.</span>
-          <span className="min-w-0 break-words">
-            <span className="mr-1 rounded bg-slate-200 px-1 text-xs">{s.kind}</span>
-            {s.text}
-            {s.action ? <span className="ml-1 font-mono text-xs">[{s.action}]</span> : null}
-            {isNew ? <span className="ml-2 text-xs font-semibold">new</span> : null}
+          <span className="num w-5 shrink-0 text-right font-mono text-caption text-ink-3">
+            {i + 1}.
           </span>
+          <span className="min-w-0 flex-1 break-words">
+            <span className="mr-2 text-caption font-medium text-ink-2">
+              {STEP_KIND_LABELS[s.kind]}
+            </span>
+            <span>{s.text}</span>
+            {s.action ? (
+              <span className="ml-1.5 font-mono text-caption text-ink-2">{s.action}</span>
+            ) : null}
+          </span>
+          {isNew ? <StatusChip tone="success">Added</StatusChip> : null}
         </li>
       ))}
     </ol>
