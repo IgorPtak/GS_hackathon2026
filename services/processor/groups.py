@@ -39,6 +39,7 @@ from redis.asyncio import Redis
 
 from .deliveries import build_side_effects, throttle_targets
 from .metrics import ALERTS_CREATED
+from .silences import push_alert_silences
 
 log = get_logger(__name__)
 
@@ -184,6 +185,7 @@ class GroupFlusher:
         if alert.id not in inserted:
             return 0  # an earlier flush of this window committed it
         ALERTS_CREATED.inc()
+        await push_alert_silences(self._redis, [(alert.id, rule)], int(time.time() * 1000))
         log.info(
             "group_summary_created",
             extra={"alert_id": alert.id, "rule_id": rule.id, "count": alert.count},
