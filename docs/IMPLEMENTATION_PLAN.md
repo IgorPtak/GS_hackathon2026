@@ -123,7 +123,7 @@ to the repo root. Python tests live next to their code in `tests/` subdirectorie
 - AC: both people reviewed `contracts/`; `feat(contracts): freeze v1` committed at 1:00; every example in `contracts/examples/` validates.
 - Verify: `uv run python scripts/generate_contracts.py --check` (after S-01); before S-01: `uv run --with pydantic --with pyyaml python -c "import alerting_contracts"` from `contracts/`.
 
-**S-01 Generate JSON Schema, OpenAPI components and TS types** — sonnet, backend-engineer. Files: `scripts/generate_contracts.py`, `contracts/schemas/`, `contracts/openapi.yaml` (components only), `web/src/api/schema.gen.ts`, `web/package.json` (devDependency `openapi-typescript`).
+**S-01 Generate JSON Schema, OpenAPI components and TS types** — sonnet, backend-engineer. Files: `scripts/generate_contracts.py`, `contracts/schemas/`, `contracts/openapi.yaml` (components only), `web/src/api/schema.gen.ts` (does **not** touch `web/package.json`; runs `npx -y openapi-typescript@7`, so it can run in parallel with B-00).
 - AC: the script rewrites `contracts/schemas/*.schema.json` and `components.schemas` from the Pydantic models, keeping `paths` byte-identical; fails when any `$ref` is unresolved; runs `npx openapi-typescript`; `--check` exits 1 when generated files differ; every config example validates against its JSON Schema.
 - Verify: `uv run python scripts/generate_contracts.py && git diff --exit-code contracts/openapi.yaml` (no path changes) · `uv run python scripts/generate_contracts.py --check` · `cd web && npx tsc --noEmit`.
 
@@ -244,7 +244,7 @@ to the repo root. Python tests live next to their code in `tests/` subdirectorie
 ### Track B
 
 **B-00 Scaffold the web app** — haiku, scaffolder. Files: `web/**` (except `web/src/api/schema.gen.ts`).
-- AC: Vite + React + TS `strict` + Tailwind + ESLint + Prettier; `src/api/client.ts` typed by `openapi-fetch` over the generated `paths`; `TeamPicker` stored in `localStorage` (try/catch); layout with tabs Alerts, Rules, Runbooks, Approvals, Schemas, Phone, Metrics; Vite dev proxy `/api/v1/ingest` → 8001, `/api` → 8000; Dockerfile serves the build with nginx using the same proxy; `npm run lint`, `npm run typecheck`, `npm run build`.
+- AC: Vite + React + TS `strict` + Tailwind + ESLint + Prettier; devDependency `openapi-typescript` and script `npm run gen:api`; `src/api/client.ts` typed by `openapi-fetch` over the generated `paths` (until S-01 lands, `schema.gen.ts` may be a placeholder exporting `paths = {}`, which S-01 overwrites); `TeamPicker` stored in `localStorage` (try/catch); layout with tabs Alerts, Rules, Runbooks, Approvals, Schemas, Phone, Metrics; Vite dev proxy `/api/v1/ingest` → 8001, `/api` → 8000; Dockerfile serves the build with nginx using the same proxy; `npm run lint`, `npm run typecheck`, `npm run build`.
 - Verify: `cd web && npm ci && npm run lint && npm run typecheck && npm run build`.
 
 **B-01 Build the api service skeleton** — sonnet, backend-engineer. Files: `services/api/` (app, routers package, dependencies) and tests.
