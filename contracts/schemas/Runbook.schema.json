@@ -175,6 +175,19 @@
       "title": "Normalized By",
       "type": "string"
     },
+    "llm_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Model that normalized it, when normalized_by = llm.",
+      "title": "Llm Model"
+    },
     "version": {
       "default": 1,
       "title": "Version",

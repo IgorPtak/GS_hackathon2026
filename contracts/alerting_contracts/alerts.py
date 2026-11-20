@@ -64,6 +64,7 @@ class Alert(ContractModel):
     resolved_by: Actor | None = None
     resolved_at: datetime | None = None
     resolution_reason: ResolutionReason | None = None
+    updated_at: datetime = Field(description="Any change, incl. count flushes; monotonic per alert.")
 
 
 class DeliveryStatus(StrEnum):
@@ -101,8 +102,11 @@ class DeliveryJob(ContractModel):
     team: ConfigId
     recipient_id: ConfigId | None = Field(default=None, description="None for the team-wide ui channel.")
     channel_id: ConfigId
+    channel_type: ChannelType = Field(description="Selects the channel plugin; no config lookup needed.")
     purpose: DeliveryPurpose
     content: NotificationContent
+    attempt: int = Field(default=0, ge=0, description="Failed attempts so far; travels with retries.")
+    not_before: datetime | None = Field(default=None, description="Earliest time of the next attempt.")
     approval_request_id: str | None = None
     event_sent_at: datetime | None = Field(default=None, description="For end-to-end latency.")
     is_fallback: bool = False

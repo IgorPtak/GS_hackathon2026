@@ -37,7 +37,7 @@ JSON on the wire is `snake_case` (no aliasing between Python and TypeScript).
 | **route** | routing | Which recipients and channels a rule's alerts go to. | `Rule.route`, `Route` |
 | **presentation** | prezentacja | Title/body templates, listed fields and color for a rule's alerts. | `Rule.present`, `Presentation` |
 | **template** | szablon | `{{path}}` placeholders filled from the event/alert. | `alerting_core.templating.render_template` |
-| **dedup window** | okno dedup | Time during which events with the same rule + fingerprint increment one alert's `count`. | `Rule.dedup.window`, Redis `dedup:<rule_id>:<fingerprint>` |
+| **dedup window** | okno dedup | Time during which events with the same rule + fingerprint increment one alert's `count`. Fixed from the first event; when it expires while that alert is still open, the next event re-arms the window and keeps folding into the same alert. | `Rule.dedup.window`, Redis `dedup:<rule_id>:<fingerprint>` |
 | **group window** | okno grupowania (`group.every`) | Time during which *different* events with the same rule + group key are buffered and then flushed as one group summary alert. | `Rule.group.window`, Redis `group-buffer:<rule_id>:<group_key>` |
 | **group key** | klucz grupy | Values of `Rule.group.by` paths joined, e.g. the instrument. | `Alert.group_key` |
 | **throttle** | throttling / limit na odbiorcę | Max deliveries per recipient per rule per period; excess is suppressed and audited. | `Rule.throttle`, Redis `throttle:<rule_id>:<recipient_id>` |
@@ -75,7 +75,7 @@ JSON on the wire is `snake_case` (no aliasing between Python and TypeScript).
 | **phone simulator** | zakładka „Telefon” | UI panel showing mock SMS/phone deliveries per recipient and sending replies. | UI `PhoneSimulator`, `services/mock_gateway` |
 | **mock gateway** | fałszywa bramka | Local service standing in for SMS/phone providers, action targets and webhook receivers. | `services/mock_gateway` |
 | **end-to-end latency** | opóźnienie end-to-end | `delivered_at − sent_at` of a generated event. | Prometheus `alert_e2e_latency_seconds` |
-| **LLM client** | LLM | Single interface to the local model (Ollama) returning schema-validated JSON. | `alerting_core.llm.LlmClient` |
+| **LLM client** | LLM | Single interface to an OpenAI-compatible model endpoint (local Ollama by default, allowlisted cloud host opt-in via `LLM_ALLOWED_HOSTS`) returning schema-validated JSON. | `alerting_core.llm.LlmClient` |
 | **redaction** | redagowanie | Removing secret-like patterns before any LLM call. | `alerting_core.llm.redact_secrets` |
 
 ## Banned synonyms

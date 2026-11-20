@@ -365,6 +365,12 @@
             }
           ],
           "default": null
+        },
+        "updated_at": {
+          "description": "Any change, incl. count flushes; monotonic per alert.",
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
         }
       },
       "required": [
@@ -378,7 +384,8 @@
         "title",
         "first_seen",
         "last_seen",
-        "last_event"
+        "last_event",
+        "updated_at"
       ],
       "title": "Alert",
       "type": "object"
@@ -526,6 +533,35 @@
           "title": "Team",
           "type": "string"
         },
+        "runbook_id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Runbook Id",
+          "type": "string"
+        },
+        "step_index": {
+          "minimum": 0,
+          "title": "Step Index",
+          "type": "integer"
+        },
+        "action_id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Rendered params that will run.",
+          "title": "Params",
+          "type": "object"
+        },
         "summary": {
           "description": "Rendered step text shown to the approver.",
           "title": "Summary",
@@ -606,6 +642,9 @@
         "action_run_id",
         "alert_id",
         "team",
+        "runbook_id",
+        "step_index",
+        "action_id",
         "summary",
         "approval_code",
         "requested_at"
@@ -645,6 +684,105 @@
         "phone"
       ],
       "title": "ApprovalVia",
+      "type": "string"
+    },
+    "AuditAppendedEvent": {
+      "additionalProperties": false,
+      "description": "Published by every writer of audit_entries so the alert's audit trail updates live.",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "type": {
+          "const": "audit.appended",
+          "default": "audit.appended",
+          "title": "Type",
+          "type": "string"
+        },
+        "entry": {
+          "$ref": "#/$defs/AuditEntry"
+        }
+      },
+      "required": [
+        "at",
+        "entry"
+      ],
+      "title": "AuditAppendedEvent",
+      "type": "object"
+    },
+    "AuditEntry": {
+      "additionalProperties": false,
+      "description": "Table audit_entries. Append-only.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "alert_id": {
+          "title": "Alert Id",
+          "type": "string"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        },
+        "verb": {
+          "$ref": "#/$defs/AuditVerb"
+        },
+        "outcome": {
+          "default": "ok",
+          "enum": [
+            "ok",
+            "error",
+            "pending"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "detail": {
+          "additionalProperties": true,
+          "title": "Detail",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "alert_id",
+        "at",
+        "actor",
+        "verb"
+      ],
+      "title": "AuditEntry",
+      "type": "object"
+    },
+    "AuditVerb": {
+      "enum": [
+        "alert_created",
+        "alert_grouped",
+        "alert_acknowledged",
+        "alert_resolved",
+        "delivery_delivered",
+        "delivery_failed",
+        "delivery_dead_lettered",
+        "delivery_fallback",
+        "delivery_suppressed",
+        "runbook_started",
+        "action_run_started",
+        "action_run_succeeded",
+        "action_run_failed",
+        "action_run_skipped",
+        "approval_requested",
+        "approval_decided",
+        "fix_proposed",
+        "fix_decided"
+      ],
+      "title": "AuditVerb",
       "type": "string"
     },
     "AutoResolvePolicy": {
@@ -1419,6 +1557,7 @@
     },
     "PhoneMessageEvent": {
       "additionalProperties": false,
+      "description": "Published on `broadcast`: the phone simulator shows every recipient's phone, whatever team is picked.",
       "properties": {
         "at": {
           "format": "date-time",
@@ -1900,6 +2039,7 @@
       "alert.updated": "#/$defs/AlertUpdatedEvent",
       "approval.decided": "#/$defs/ApprovalDecidedEvent",
       "approval.requested": "#/$defs/ApprovalRequestedEvent",
+      "audit.appended": "#/$defs/AuditAppendedEvent",
       "config.changed": "#/$defs/ConfigChangedEvent",
       "delivery.updated": "#/$defs/DeliveryUpdatedEvent",
       "fix_proposal.updated": "#/$defs/FixProposalEvent",
@@ -1939,6 +2079,9 @@
     },
     {
       "$ref": "#/$defs/UnknownSchemaDetectedEvent"
+    },
+    {
+      "$ref": "#/$defs/AuditAppendedEvent"
     },
     {
       "$ref": "#/$defs/ConfigChangedEvent"

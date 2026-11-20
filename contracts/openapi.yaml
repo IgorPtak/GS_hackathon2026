@@ -548,7 +548,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RunbookWrite'
+              $ref: '#/components/schemas/RunbookNormalizeRequest'
       responses:
         '200':
           description: OK
@@ -1118,6 +1118,11 @@ components:
           - $ref: '#/components/schemas/ResolutionReason'
           - type: 'null'
           default: null
+        updated_at:
+          description: Any change, incl. count flushes; monotonic per alert.
+          format: date-time
+          title: Updated At
+          type: string
       required:
       - id
       - rule_id
@@ -1130,6 +1135,7 @@ components:
       - first_seen
       - last_seen
       - last_event
+      - updated_at
       title: Alert
       type: object
     AlertAcknowledgeRequest:
@@ -1375,6 +1381,28 @@ components:
           pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
           title: Team
           type: string
+        runbook_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Runbook Id
+          type: string
+        step_index:
+          minimum: 0
+          title: Step Index
+          type: integer
+        action_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Action Id
+          type: string
+        params:
+          additionalProperties:
+            type: string
+          description: Rendered params that will run.
+          title: Params
+          type: object
         summary:
           description: Rendered step text shown to the approver.
           title: Summary
@@ -1421,6 +1449,9 @@ components:
       - action_run_id
       - alert_id
       - team
+      - runbook_id
+      - step_index
+      - action_id
       - summary
       - approval_code
       - requested_at
@@ -1452,6 +1483,26 @@ components:
       - phone
       title: ApprovalVia
       type: string
+    AuditAppendedEvent:
+      additionalProperties: false
+      description: Published by every writer of audit_entries so the alert's audit trail updates live.
+      properties:
+        at:
+          format: date-time
+          title: At
+          type: string
+        type:
+          const: audit.appended
+          default: audit.appended
+          title: Type
+          type: string
+        entry:
+          $ref: '#/components/schemas/AuditEntry'
+      required:
+      - at
+      - entry
+      title: AuditAppendedEvent
+      type: object
     AuditEntry:
       additionalProperties: false
       description: Table audit_entries. Append-only.
@@ -2065,10 +2116,27 @@ components:
           pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
           title: Channel Id
           type: string
+        channel_type:
+          $ref: '#/components/schemas/ChannelType'
+          description: Selects the channel plugin; no config lookup needed.
         purpose:
           $ref: '#/components/schemas/DeliveryPurpose'
         content:
           $ref: '#/components/schemas/NotificationContent'
+        attempt:
+          default: 0
+          description: Failed attempts so far; travels with retries.
+          minimum: 0
+          title: Attempt
+          type: integer
+        not_before:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: Earliest time of the next attempt.
+          title: Not Before
         approval_request_id:
           anyOf:
           - type: string
@@ -2092,6 +2160,7 @@ components:
       - alert_id
       - team
       - channel_id
+      - channel_type
       - purpose
       - content
       title: DeliveryJob
@@ -2170,9 +2239,13 @@ components:
           title: Event Id
           type: string
         idempotency_key:
-          description: Idempotency-Key header, else sha256 of source_id + canonical payload JSON.
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: 'Idempotency-Key header, else the value at the source''s idempotency_key_path, else None. Never a payload
+            hash: identical events must reach dedup to be counted.'
           title: Idempotency Key
-          type: string
         source_id:
           examples:
           - rates-large-rejections
@@ -2199,7 +2272,6 @@ components:
           type: object
       required:
       - event_id
-      - idempotency_key
       - source_id
       - source_type
       - received_at
@@ -2825,6 +2897,7 @@ components:
       type: object
     PhoneMessageEvent:
       additionalProperties: false
+      description: 'Published on `broadcast`: the phone simulator shows every recipient''s phone, whatever team is picked.'
       properties:
         at:
           format: date-time
@@ -2954,6 +3027,16 @@ components:
           - type: 'null'
           default: null
           title: Group Key
+        is_group_summary:
+          default: false
+          title: Is Group Summary
+          type: boolean
+        member_count:
+          default: 0
+          description: Distinct fingerprints in a group summary.
+          minimum: 0
+          title: Member Count
+          type: integer
         count:
           title: Count
           type: integer
@@ -3102,6 +3185,14 @@ components:
           default: false
           title: Is Automatic
           type: boolean
+        run_if:
+          $ref: '#/components/schemas/RunIf'
+          default: always
+        max_attempts:
+          default: 1
+          minimum: 1
+          title: Max Attempts
+          type: integer
         missing_fields:
           description: Placeholders that had no value.
           items:
@@ -3434,6 +3525,13 @@ components:
           - fallback
           title: Normalized By
           type: string
+        llm_model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Model that normalized it, when normalized_by = llm.
+          title: Llm Model
         version:
           default: 1
           title: Version
@@ -3491,6 +3589,21 @@ components:
       - alert_id
       - runbook_id
       title: RunbookJob
+      type: object
+    RunbookNormalizeRequest:
+      additionalProperties: false
+      description: 'Body of POST /runbooks/normalize: preview before the runbook has an id or is saved.'
+      properties:
+        format:
+          $ref: '#/components/schemas/RunbookFormat'
+        source:
+          minLength: 1
+          title: Source
+          type: string
+      required:
+      - format
+      - source
+      title: RunbookNormalizeRequest
       type: object
     RunbookRevisionProposal:
       additionalProperties: false
@@ -3623,6 +3736,12 @@ components:
           - fallback
           title: Normalized By
           type: string
+        llm_model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Llm Model
         version:
           title: Version
           type: integer
@@ -3998,6 +4117,7 @@ components:
           alert.updated: '#/components/schemas/AlertUpdatedEvent'
           approval.decided: '#/components/schemas/ApprovalDecidedEvent'
           approval.requested: '#/components/schemas/ApprovalRequestedEvent'
+          audit.appended: '#/components/schemas/AuditAppendedEvent'
           config.changed: '#/components/schemas/ConfigChangedEvent'
           delivery.updated: '#/components/schemas/DeliveryUpdatedEvent'
           fix_proposal.updated: '#/components/schemas/FixProposalEvent'
@@ -4016,6 +4136,7 @@ components:
       - $ref: '#/components/schemas/ApprovalDecidedEvent'
       - $ref: '#/components/schemas/FixProposalEvent'
       - $ref: '#/components/schemas/UnknownSchemaDetectedEvent'
+      - $ref: '#/components/schemas/AuditAppendedEvent'
       - $ref: '#/components/schemas/ConfigChangedEvent'
     StepKind:
       enum:

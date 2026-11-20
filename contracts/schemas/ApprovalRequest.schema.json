@@ -73,6 +73,35 @@
       "title": "Team",
       "type": "string"
     },
+    "runbook_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Runbook Id",
+      "type": "string"
+    },
+    "step_index": {
+      "minimum": 0,
+      "title": "Step Index",
+      "type": "integer"
+    },
+    "action_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Action Id",
+      "type": "string"
+    },
+    "params": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Rendered params that will run.",
+      "title": "Params",
+      "type": "object"
+    },
     "summary": {
       "description": "Rendered step text shown to the approver.",
       "title": "Summary",
@@ -153,6 +182,9 @@
     "action_run_id",
     "alert_id",
     "team",
+    "runbook_id",
+    "step_index",
+    "action_id",
     "summary",
     "approval_code",
     "requested_at"

@@ -9,7 +9,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
-from .alerts import Alert, Delivery
+from .alerts import Alert, AuditEntry, Delivery
 from .api import PhoneMessage, UnknownSchemaSample
 from .common import ConfigId, ContractModel, Severity
 from .proposals import FixProposal
@@ -49,6 +49,8 @@ class DeliveryUpdatedEvent(_SseBase):
 
 
 class PhoneMessageEvent(_SseBase):
+    """Published on `broadcast`: the phone simulator shows every recipient's phone, whatever team is picked."""
+
     type: Literal["phone.message"] = "phone.message"
     message: PhoneMessage
 
@@ -78,6 +80,13 @@ class UnknownSchemaDetectedEvent(_SseBase):
     sample: UnknownSchemaSample
 
 
+class AuditAppendedEvent(_SseBase):
+    """Published by every writer of audit_entries so the alert's audit trail updates live."""
+
+    type: Literal["audit.appended"] = "audit.appended"
+    entry: AuditEntry
+
+
 class ConfigChangedEvent(_SseBase):
     """Also the payload of pub/sub channel `config.changed` that makes workers reload."""
 
@@ -98,6 +107,7 @@ SseEvent = Annotated[
     | ApprovalDecidedEvent
     | FixProposalEvent
     | UnknownSchemaDetectedEvent
+    | AuditAppendedEvent
     | ConfigChangedEvent,
     Field(discriminator="type"),
 ]
