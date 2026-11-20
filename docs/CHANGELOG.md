@@ -68,3 +68,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-08-eval results: docs/llm-eval-results.md (10 PSNC models; Qwen3.8-27B most stable, DeepSeek-V4.1-Flash ~3x faster at near-equal accuracy).
 - A-22 Prometheus + Alertmanager source: MockGatewayDown (up == 0 for 15s) posts to ingest with send_resolved; stopping mock-gateway opens a platform alert, starting it auto-resolves it
 - A-23 recovery integration tests: 200 sms through a gateway outage all delivered; docker kill of one of two delivery workers loses and duplicates nothing
+- D-01 README load-test section updated with A-24 numbers (≥350 msg/s, p50 56 ms, p99 163 ms, lost 0) and A-23 recovery tests.
