@@ -4,6 +4,7 @@ import { RecentEventsPanel } from "../events/RecentEventsPanel";
 import { AlertsPage } from "../../pages/AlertsPage";
 import { ApprovalsPage } from "../../pages/ApprovalsPage";
 import { PhonePage } from "../../pages/PhonePage";
+import { RulesPage } from "../../pages/RulesPage";
 import { RunbooksPage } from "../../pages/RunbooksPage";
 import { PlaceholderPage } from "../../pages/PlaceholderPage";
 import { readStoredTeamId, writeStoredTeamId } from "../../lib/teamStorage";
@@ -11,7 +12,7 @@ import { TABS, type TabId } from "../../lib/tabs";
 import { TeamPicker } from "../team/TeamPicker";
 import { TabNav } from "./TabNav";
 
-const WIRED_TABS: readonly TabId[] = ["alerts", "runbooks", "approvals", "phone"];
+const WIRED_TABS: readonly TabId[] = ["alerts", "rules", "runbooks", "approvals", "phone"];
 
 export function AppLayout() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(() => readStoredTeamId());
@@ -32,6 +33,7 @@ export function AppLayout() {
       <TabNav tabs={TABS} activeTabId={activeTabId} onSelect={setActiveTabId} />
       <main className="flex-1 p-6">
         {activeTabId === "alerts" ? <AlertsPage teamId={selectedTeamId} /> : null}
+        {activeTabId === "rules" ? <RulesPage teamId={selectedTeamId} /> : null}
         {activeTabId === "runbooks" ? <RunbooksPage /> : null}
         {activeTabId === "approvals" ? <ApprovalsPage teamId={selectedTeamId} /> : null}
         {activeTabId === "phone" ? <PhonePage teamId={selectedTeamId} /> : null}

@@ -2,26 +2,32 @@
 
 Source of truth is the `config_documents` table (kind = 'rule'): it holds the canonical YAML,
 version, updated_at and updated_by that `RuleRecord` needs, and it is what `save_config_document`
-writes. `/rules/preview` belongs to B-16.
+writes. `POST /rules/preview` (B-16) is read-only: Redis reads and pure simulation.
 """
 
 import json
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import asyncpg
 from alerting_contracts.api import (
     ConfigValidationError,
     ErrorResponse,
+    RulePreview,
+    RulePreviewRequest,
     RuleRecord,
     RuleWrite,
 )
 from alerting_core.config import publish_config_changed, save_config_document
+from alerting_core.durations import parse_duration
+from alerting_core.event_log import read_event_log
 from alerting_core.logging import get_logger
+from alerting_core.rules.preview import preview_rule
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from ..dependencies import PoolDep, RedisDep
+from ..dependencies import PoolDep, RedisDep, RegistryDep
 from ..errors import ApiError
 
 router = APIRouter(tags=["rules"])
@@ -89,6 +95,42 @@ async def _fetch(pool: asyncpg.Pool, rule_id: str) -> RuleRecord:
     if row is None:
         raise ApiError(404, "not_found", f"rule {rule_id!r} not found")
     return _record(row)
+
+
+@router.post("/api/v1/rules/preview", response_model=RulePreview)
+async def preview_rule_route(request: Request, redis: RedisDep, registry: RegistryDep) -> Any:
+    """Simulate a draft rule over the last `window` of the events stream; no side effects."""
+    try:
+        payload = await request.json()
+    except ValueError:
+        return validation_failed(
+            "body is not valid JSON", [ConfigValidationError(path="", message="invalid JSON")]
+        )
+    try:
+        body = RulePreviewRequest.model_validate(payload)
+    except ValidationError as exc:
+        return validation_failed("invalid rule preview request", validation_errors(exc))
+    if registry is None:
+        raise ApiError(503, "unavailable", "configuration registry unavailable")
+    window_end = datetime.now(UTC)
+    window_start = window_end - timedelta(seconds=parse_duration(body.window))
+    event_read = await read_event_log(redis, window_start, body.max_events)
+    try:
+        return preview_rule(
+            body.rule,
+            event_read.envelopes,
+            registry.snapshot,
+            window_start=window_start,
+            window_end=window_end,
+            now=window_end,
+            skipped_events=event_read.skipped_invalid,
+            max_events=body.max_events,
+        )
+    except ValueError as exc:
+        return validation_failed(
+            "rule condition cannot be compiled",
+            [ConfigValidationError(path="rule.when", message=str(exc))],
+        )
 
 
 @router.get("/api/v1/rules/{rule_id}")
