@@ -95,3 +95,67 @@ uv run python loadtest/scenarios.py gateway-down
 uv run python loadtest/scenarios.py kill-processor
 uv run python loadtest/scenarios.py saturation          # about 8 minutes
 ```
+
+## A-24 bottleneck measurement
+
+Measured 2026-11-20 against the shared `alerting` stack (`processor=1`, `delivery=1`, `ingest` 2 uvicorn workers) using `uv run python loadtest/scenarios.py saturation --replicas 1 --rates 350,400,500`, plus a 500 msg/s repeat with `outbox-relay=2`. Raw data: `loadtest/results/a24-samples-20261120T212353.csv` (parallel sampling of unrelayed `outbox` rows, Redis `XINFO GROUPS` lag, and `docker stats --no-stream` CPU%, ~2 s effective cadence due to `docker stats` 1 s measurement window), `loadtest/results/saturation-20261120T212402.json` (`outbox-relay=1`), and `loadtest/results/saturation-20261120T212527.json` (`outbox-relay=2`).
+
+### Relay configuration (`services/outbox_relay/`)
+
+`services/outbox_relay/main.py` starts `run_relay(pool, redis, stop)` with defaults from `services/outbox_relay/relay.py`:
+
+- `batch_size = 500` (`relay_batch` / `run_relay` default)
+- `interval_seconds = 0.5` (500 ms poll sleep whenever `relayed < batch_size`; loops immediately only after a full batch of `>= 500` rows)
+- `BATCH_TIMEOUT_SECONDS = 10.0`, `max_backoff_seconds = 5.0`
+
+### Per-rate metrics
+
+CPU% values below are active-window `avg / max` from `docker stats --no-stream` (100% = one core; `outbox-relay=2` sums both replicas). `Max deliveries lag` shows the 250 ms JSON sampler max (1-step CSV max in parentheses). All runs had `lost = 0` and `events_drained_after_s <= 0.20 s`.
+
+| Target msg/s (relay replicas) | Achieved ingest msg/s | p50 | p99 | Max unrelayed outbox | Max deliveries lag | outbox-relay CPU% | processor CPU% | delivery CPU% | postgres CPU% | ingest CPU% |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 350 (`relay=1`) | 350.0 | 469 ms | 719 ms | 358 | 367 (367) | 3.5 / 8.4 | 29.7 / 46.4 | 63.8 / 96.3 | 35.5 / 58.1 | 13.4 / 21.2 |
+| 400 (`relay=1`) | 400.0 | 514 ms | 685 ms | 336 | 397 (361) | 3.3 / 10.8 | 38.6 / 47.5 | 74.6 / 88.5 | 61.4 / 126.3 | 18.4 / 29.4 |
+| 500 (`relay=1`) | 485.7 | 1823 ms | 3495 ms | 494 | 2605 (2531) | 4.4 / 9.8 | 40.8 / 52.2 | **94.7 / 104.8** | 62.4 / 73.1 | 25.0 / 36.8 |
+| 500 (`relay=2`) | 464.9 | 2146 ms | 3442 ms | 342 | 1593 (943) | 5.8 / 10.4 | 44.5 / 57.3 | **96.6 / 102.1** | 70.6 / 103.9 | 26.3 / 38.6 |
+
+### Per-stage latency decomposition (Postgres timestamps)
+
+Joining `deliveries`, `outbox`, and `alerts` (`NOT is_fallback`) breaks down `delivered_at - sent_ms` into three stages, including the earlier A-21 `processor=2, delivery=4` run (`sat-p2-r500-c0e9cb47`):
+
+| Run | Config | `sent_ms` -> `alerts.first_seen` (p50 / p99) | `outbox.relayed_at - created_at` (p50 / p99 / max) | `delivered_at - relayed_at` (p50 / p99) | Total e2e p99 |
+|---|---|---|---|---|---|
+| `sat-p1-r350-54f84f1a` | `p=1 d=1 r=1` @ 350 | 0.3 / 3.7 ms | 255.5 / 512.8 / 563.7 ms | 208.7 / 621.7 ms | 718.6 ms |
+| `sat-p1-r400-d3aa5c58` | `p=1 d=1 r=1` @ 400 | 0.3 / 11.2 ms | 256.5 / 512.5 / 558.2 ms | 247.5 / 580.7 ms | 684.8 ms |
+| `sat-p1-r500-917ce83c` | `p=1 d=1 r=1` @ 500 | 356.9 / 1054.9 ms | 255.3 / 512.0 / 568.3 ms | 847.8 / 3178.7 ms | 3495.4 ms |
+| `sat-p1-r500-0797e540` | `p=1 d=1 r=2` @ 500 | 1430.0 / 2014.7 ms | 201.8 / 491.2 / 510.0 ms | 544.0 / 1587.2 ms | 3442.1 ms |
+| `sat-p2-r500-c0e9cb47` (A-21) | `p=2 d=4 r=1` @ 500 | **2890.9 / 6635.7 ms** | 200.2 / 522.1 / 588.3 ms | 140.8 / 424.3 ms | 7052.2 ms |
+
+### Conclusion
+
+1. **The single `delivery` worker saturates first** (at ~430–460 msg/s = ~860–920 deliveries/s), **not `outbox-relay`**.
+   - At 500 msg/s (`relay=1`), `delivery` CPU is pinned at **94.7% avg / 104.8% max** (100% of one asyncio core), `deliveries` stream lag climbs monotonically to **2605**, and `delivered_at - relayed_at` reaches **3179 ms p99**.
+   - Meanwhile `outbox-relay` CPU stays at **3.3–5.8% avg (<= 10.8% max)**, unrelayed `outbox` rows never build an unbounded queue (max **494**, strictly bounded by `rate * 2 deliveries * 0.5 s < batch_size`), and `outbox.relayed_at - created_at` stays flat at **~255 ms p50 / ~512 ms p99** across every rate from 350 to 500 msg/s.
+   - Scaling `outbox-relay` to 2 replicas at 500 msg/s does **not** relieve saturation: `delivery` stays pinned at **96.6% avg / 102.1% max** and e2e p99 remains **3442 ms** (vs 3495 ms with `relay=1`).
+2. **Why `delivery=4` still saw ~7 s p99 in A-21:** Postgres timestamps show `delivery=4` *did* eliminate delivery backlog (`delivered_at - relayed_at` p99 dropped to **424 ms**) and outbox wait stayed flat (**522 ms p99**). Instead, **6636 ms of the 7052 ms p99** was spent *before* `alerts.first_seen`: `loadtest/scenario_send.py` stamps `sent_ms` in the open-loop producer before 16 unbatched HTTP connections send to `ingest` (2 workers). When achieved ingest throughput fell to 375.2 msg/s (vs 500 target over 20 s = 26.65 s actual send time), events waited up to ~6.6 s in the client/HTTP queue before reaching `ingest` (`ingest_http_ms` p99 267 ms). The same effect explains the `1055 ms` (`relay=1`, achieved 485.7/s) and `2015 ms` (`relay=2`, achieved 464.9/s) pre-alert latency at 500 msg/s.
+3. **Actionable takeaways:**
+   - **To raise throughput above ~400–450 msg/s:** scale `delivery` (and avoid single-connection/unbatched HTTP ingest saturation with batching or more `ingest` workers/concurrency).
+   - **To reduce baseline latency (~500 ms floor at all rates):** lower `interval_seconds` in `services/outbox_relay/relay.py` (currently `0.5 s`, adding ~255 ms p50 / ~512 ms p99 even when idle/moderate); scaling relay replicas is unnecessary at these rates.
+   - `processor` (41–45% avg CPU, `events` lag <= 20, drain <= 0.20 s) and `postgres` (61–71% avg across 10 VM vCPUs) still have headroom at 500 msg/s.
+
+### A-24 fixes and re-measurement
+
+Changes: `outbox-relay` polls every 50 ms instead of 500 ms; `delivery` runs 2 replicas by default (`deploy.replicas` in compose; the load tests restore delivery=2).
+
+| Run | Target / achieved msg/s | p50 | p95 | p99 | Lost |
+|---|---|---|---|---|---|
+| steady 30 s, before (A-21, 200 msg/s) | 200 / 200 | 373 ms | — | 572 ms | 0 |
+| steady 30 s, after (`steady-c51a8d37`) | 350 / 350 | **56 ms** | 111 ms | **163 ms** | 0 |
+| steady 30 s, after (`steady-f20ae006`) | 500 / 463 | 1516 ms | — | 2575 ms | 0 |
+
+- Relay wait (`outbox.relayed_at - created_at`) fell from ~255 ms to ~29 ms p50.
+- With 2 delivery replicas at 350 msg/s each uses 33–41% CPU and the `deliveries` lag stays 0.
+- At 500 msg/s the generator only reaches ~463 msg/s: the latency is spent before ingest (open-loop client queue on 16 connections and 2 ingest workers), not in the pipeline. Next lever: more ingest workers or batched ingest.
+- Saturation runs right after the rebuild were noisy (p99 ~2.9 s at 350 msg/s) while another agent's compose stack (`agent-a8f146d5f18928360-*`) was running on the same machine; the steady runs above are the clean numbers.
+
+Max sustainable rate (p99 < 2 s, lag drained): **≥ 350 msg/s, below ~460 msg/s** on this laptop; the limit is now ingest, not the pipeline.
