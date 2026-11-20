@@ -1,4 +1,7 @@
-"""Watch `config/` and push edited files through the same save path as the API."""
+"""Watch `config/` and push edited files through the same save path as the API.
+
+Run the watcher in exactly one process (the api, B-01); several watchers would race to save.
+"""
 
 from pathlib import Path
 
@@ -55,10 +58,17 @@ async def watch_config_directory(
     pool: asyncpg.Pool,
     redis: Redis,
     actor: Actor = DEFAULT_ACTOR,
+    force_polling: bool = True,
 ) -> None:
-    """Run until cancelled, saving every added or modified file under `path`."""
-    async for changes in awatch(Path(path)):
+    """Run until cancelled, saving every added or modified file under `path`.
+
+    Polling is the default because Docker Desktop bind mounts drop inotify events.
+    """
+    async for changes in awatch(Path(path), force_polling=force_polling):
         for change, changed_path in changes:
             if change is Change.deleted:
                 continue  # deleting a file never deletes a document; use the API for that
-            await handle_config_file_change(Path(changed_path), pool, redis, actor)
+            try:
+                await handle_config_file_change(Path(changed_path), pool, redis, actor)
+            except Exception:  # noqa: BLE001 - one bad file must not stop the watcher
+                log.exception("config_watch_failed", extra={"file": str(changed_path)})
