@@ -1,0 +1,3 @@
+Empty rates snapshot
+
+Honestly the rates snapshot being empty is usually the gateway. I always begin by hitting http://rates-gateway:8080/health, and if that looks ok then the problem is on the consumer side so I ring Bob, and whatever happens I file a ticket for the rates team, because last time nobody did and we had the same thing three times in one week.

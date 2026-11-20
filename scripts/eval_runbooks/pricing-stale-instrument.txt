@@ -1,0 +1,6 @@
+Stale price on an instrument
+
+1) check if feed is up: http://pricing-adapter:7000/health
+2) if the whole feed is dead -> call the vendor (number is on the wiki)
+3) if its only one instrument, kick the adapter for that feed. BUT only restart after the pricing lead says ok!! it drops all subscriptions for a few secs.
+4) tell the traders on the desk chat when prices are fresh.

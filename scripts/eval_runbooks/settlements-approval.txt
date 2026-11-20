@@ -1,0 +1,3 @@
+Retry of the failed settlement
+
+We retry the workflow, but only after the manager says ok (ask Piotr, he is on call). Without his ok do nothing! After the retry, create a ticket if it failed again.

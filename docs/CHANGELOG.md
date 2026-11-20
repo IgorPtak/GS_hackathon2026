@@ -57,3 +57,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-13 phone call screen: ringing incoming call, speech-synthesis read-out, keypad for the approval code (* rejects, # repeats).
 - B-25 metrics summary: /api/v1/metrics/summary from Prometheus (same PromQL as the Grafana dashboard, null when no data, never 5xx) + open alerts from Postgres; MetricsPanel tiles refresh every 5 s, paused while hidden, link to Grafana.
 - B-18 channel preferences: PUT /recipients/{id}/channel-preferences validates channel ids and timezones (422 dot paths), compares with the stored document so a repeated PUT saves nothing; ChannelPreferencesEditor in a Recipients section on the Rules page.
+- B-08-eval LLM runbook eval: 12 runbooks written like non-technical users (typos, PL/EN, prose steps) with expected steps, scoring (step count, action precision/recall, approval accuracy, latency) and a model-comparison script.

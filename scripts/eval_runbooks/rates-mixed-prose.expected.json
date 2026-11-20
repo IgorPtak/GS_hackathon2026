@@ -1,0 +1,5 @@
+{"steps": [
+  {"kind": "check", "action": "http-health-check", "requires_approval": false},
+  {"kind": "text", "action": null, "requires_approval": false},
+  {"kind": "action", "action": "open-ticket", "requires_approval": false}
+]}
