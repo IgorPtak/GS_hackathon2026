@@ -46,7 +46,7 @@ export function AppRail({
       logo={
         <span
           title={PRODUCT_NAME}
-          className="flex size-11 items-center justify-center rounded-tile bg-ink text-window"
+          className="flex size-11 shrink-0 items-center justify-center rounded-tile bg-ink text-window"
         >
           <BeaconLogo size={24} />
         </span>
