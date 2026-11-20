@@ -69,3 +69,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-22 Prometheus + Alertmanager source: MockGatewayDown (up == 0 for 15s) posts to ingest with send_resolved; stopping mock-gateway opens a platform alert, starting it auto-resolves it
 - A-23 recovery integration tests: 200 sms through a gateway outage all delivered; docker kill of one of two delivery workers loses and duplicates nothing
 - A-01 smoke 14h: settlements alerts from earlier runs are resolved first (runbook starts again); the phone APPROVE reply comes from settlements on-call piotr
+- Redis persistence: AOF (fsync every second) on a named volume; a hard Redis kill under 200 msg/s lost 378 deliveries before, 0 after
