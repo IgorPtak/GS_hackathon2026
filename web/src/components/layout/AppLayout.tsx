@@ -5,6 +5,7 @@ import { AlertsPage } from "../../pages/AlertsPage";
 import { ApprovalsPage } from "../../pages/ApprovalsPage";
 import { PhonePage } from "../../pages/PhonePage";
 import { RulesPage } from "../../pages/RulesPage";
+import { SchemasPage } from "../../pages/SchemasPage";
 import { RunbooksPage } from "../../pages/RunbooksPage";
 import { PlaceholderPage } from "../../pages/PlaceholderPage";
 import { readStoredTeamId, writeStoredTeamId } from "../../lib/teamStorage";
@@ -12,7 +13,14 @@ import { TABS, type TabId } from "../../lib/tabs";
 import { TeamPicker } from "../team/TeamPicker";
 import { TabNav } from "./TabNav";
 
-const WIRED_TABS: readonly TabId[] = ["alerts", "rules", "runbooks", "approvals", "phone"];
+const WIRED_TABS: readonly TabId[] = [
+  "alerts",
+  "rules",
+  "runbooks",
+  "approvals",
+  "schemas",
+  "phone",
+];
 
 export function AppLayout() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(() => readStoredTeamId());
@@ -36,11 +44,14 @@ export function AppLayout() {
         {activeTabId === "rules" ? <RulesPage teamId={selectedTeamId} /> : null}
         {activeTabId === "runbooks" ? <RunbooksPage /> : null}
         {activeTabId === "approvals" ? <ApprovalsPage teamId={selectedTeamId} /> : null}
+        {activeTabId === "schemas" ? (
+          <SchemasPage teamId={selectedTeamId} onNavigate={setActiveTabId} />
+        ) : null}
         {activeTabId === "phone" ? <PhonePage teamId={selectedTeamId} /> : null}
         {activeTab && !WIRED_TABS.includes(activeTabId) ? (
           <PlaceholderPage title={activeTab.label} teamId={selectedTeamId} />
         ) : null}
-        {activeTabId === "alerts" || activeTabId === "schemas" ? (
+        {activeTabId === "alerts" ? (
           <details className="mt-6 rounded border border-slate-200 bg-white p-3">
             <summary className="cursor-pointer text-sm font-semibold">Recent events</summary>
             <div className="mt-3">

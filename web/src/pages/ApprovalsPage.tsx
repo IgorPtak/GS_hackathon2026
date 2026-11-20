@@ -1,4 +1,5 @@
 import { ApprovalQueue } from "../components/approvals/ApprovalQueue";
+import { FixProposalReview } from "../components/proposals/FixProposalReview";
 
 export function ApprovalsPage({ teamId }: { teamId: string | null }) {
   if (teamId === null) {
@@ -9,5 +10,10 @@ export function ApprovalsPage({ teamId }: { teamId: string | null }) {
       </section>
     );
   }
-  return <ApprovalQueue key={teamId} team={teamId} />;
+  return (
+    <>
+      <ApprovalQueue key={teamId} team={teamId} />
+      <FixProposalReview key={`fix-${teamId}`} team={teamId} />
+    </>
+  );
 }

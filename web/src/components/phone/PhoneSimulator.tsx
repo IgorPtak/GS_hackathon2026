@@ -2,6 +2,8 @@ import { useState } from "react";
 
 import { useEventStream } from "../../hooks/useEventStream";
 import { ConnectionIndicator } from "../alerts/ConnectionIndicator";
+import type { PhoneMessage } from "../../api/types";
+import { IncomingCallScreen } from "./IncomingCallScreen";
 import { PhoneMessageBubble } from "./PhoneMessageBubble";
 import { PhoneReplyBox } from "./PhoneReplyBox";
 import { usePhoneMessages } from "./usePhoneMessages";
@@ -13,11 +15,16 @@ export function PhoneSimulator({ teamId }: { teamId: string | null }) {
   const [picked, setPicked] = useState<string | null>(null);
   const recipientId = picked ?? recipients[0]?.id ?? null;
   const phone = usePhoneMessages(recipientId);
+  const [ringing, setRinging] = useState<PhoneMessage | null>(null);
+  const [answeredIds, setAnsweredIds] = useState<readonly string[]>([]);
   const { apply, reload } = phone;
   // The stream needs a team; phone.message is broadcast so any team receives every phone.
   const streamStatus = useEventStream(teamId, {
     "phone.message": (event) => {
       apply(event.message);
+      if (event.message.channel_type === "phone" && event.message.recipient_id === recipientId) {
+        setRinging(event.message);
+      }
     },
     onReconnect: reload,
   });
@@ -48,6 +55,7 @@ export function PhoneSimulator({ teamId }: { teamId: string | null }) {
               value={recipientId}
               onChange={(event) => {
                 setPicked(event.target.value);
+                setRinging(null);
               }}
               className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1"
             >
@@ -58,7 +66,18 @@ export function PhoneSimulator({ teamId }: { teamId: string | null }) {
               ))}
             </select>
           </label>
-          <div className="overflow-hidden rounded-3xl border-4 border-slate-800 bg-slate-100">
+          <div className="relative overflow-hidden rounded-3xl border-4 border-slate-800 bg-slate-100">
+            {ringing ? (
+              <IncomingCallScreen
+                key={ringing.id}
+                message={ringing}
+                callerLabel={teamId ?? ringing.alert_id}
+                onClose={(answered) => {
+                  if (answered) setAnsweredIds((ids) => [...ids, ringing.id]);
+                  setRinging(null);
+                }}
+              />
+            ) : null}
             <div className="h-96 overflow-y-auto p-3">
               {phone.isLoading ? (
                 <p className="text-sm text-slate-500">Loading messages...</p>
@@ -76,7 +95,15 @@ export function PhoneSimulator({ teamId }: { teamId: string | null }) {
               ) : null}
               <ul className="space-y-2">
                 {phone.messages.map((message) => (
-                  <PhoneMessageBubble key={message.id} message={message} />
+                  <PhoneMessageBubble
+                    key={message.id}
+                    message={message}
+                    isMissed={
+                      message.channel_type === "phone" &&
+                      message.id !== ringing?.id &&
+                      !answeredIds.includes(message.id)
+                    }
+                  />
                 ))}
               </ul>
             </div>
