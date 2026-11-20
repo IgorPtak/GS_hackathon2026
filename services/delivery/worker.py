@@ -125,7 +125,8 @@ class DeliveryWorker:
         except Exception as error:  # unavailable, timeout or a plugin bug: retry with backoff
             await self._redis.delete(key)
             await self._circuit.record_failure(channel.id, int(time.time() * 1000))
-            is_outage = isinstance(error, ChannelUnavailableError)
+            # TimeoutError: our own SEND_TIMEOUT_SECONDS fired, a hung channel is down too.
+            is_outage = isinstance(error, ChannelUnavailableError | TimeoutError)
             await self._retry_or_give_up(
                 job, channel, f"{type(error).__name__}: {error}", is_outage=is_outage
             )
@@ -189,6 +190,10 @@ class DeliveryWorker:
     async def _retry_or_give_up(
         self, job: DeliveryJob, channel: ChannelConfig, error: str, *, is_outage: bool = False
     ) -> None:
+        """Schedule the next attempt with backoff, or dead-letter the job.
+
+        Outage failures do not dead-letter before MAX_OUTAGE_SECONDS, whatever the attempt.
+        """
         attempt = job.attempt + 1
         if attempt >= channel.retry.max_attempts and not (
             is_outage and await self._is_within_outage_budget(job)
