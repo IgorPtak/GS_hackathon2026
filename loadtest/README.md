@@ -30,3 +30,25 @@ uv run python loadtest/generator.py --dry-run --seed 1     # print sample payloa
 Pricing lines go to the file tailed by the `pricing-log` source, so they only reach `events` if
 ingest runs with that file mounted. Output includes sent, accepted, errors by status, achieved msg/s
 and p50/p99 HTTP latency; the exit code is non-zero when more than 1% of requests fail.
+
+## Scenarios (`scenarios.py`, task A-21)
+
+Measures end-to-end behaviour against the running compose stack (ingest on `localhost:8001`,
+Postgres on `localhost:5432`, Redis on `localhost:6379`; override with `INGEST_URL`,
+`LOADTEST_DATABASE_URL`, `LOADTEST_REDIS_URL`). Every event is unique (`run_id` + sequence), matched
+only by `config/rules/loadtest-events.yaml` (team `platform`, channels `ui` + `sms`), so each event
+gives exactly 1 alert and 2 deliveries. The script saves that rule itself, so it works from any checkout.
+
+```bash
+uv run python loadtest/scenarios.py steady [--rate 200] [--duration 60]
+uv run python loadtest/scenarios.py saturation [--replicas 1,2,4] [--rates 250,500,1000,2000] [--duration 20]
+uv run python loadtest/scenarios.py dup-storm [--total 5000]
+uv run python loadtest/scenarios.py gateway-down [--down-after 10] [--down-for 60]
+uv run python loadtest/scenarios.py kill-processor [--kill-after 20]
+```
+
+Each run writes `loadtest/results/<name>-<timestamp>.json` and exits non-zero if `lost != 0`. Every
+scenario restores the stack in a `finally` block (processor=1, delivery=1, mock-gateway started).
+Method and results: `docs/load-test-results.md`.
+Modules: `scenario_send.py` (events, sender, lag sampler), `scenario_measure.py` (Postgres
+measurement), `scenario_stack.py` (docker scale/kill/restore, hardware).

@@ -21,7 +21,7 @@ from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
 from .logging import get_logger
-from .metrics import STREAM_BATCH_SECONDS, STREAM_MESSAGES
+from .metrics import DEAD_LETTERED, STREAM_BATCH_SECONDS, STREAM_MESSAGES
 
 log = get_logger(__name__)
 
@@ -278,6 +278,8 @@ class StreamConsumer:
         # Without fields the entry was already trimmed from the stream: nothing could be copied.
         outcome = "dead_lettered" if fields else "dropped_trimmed"
         STREAM_MESSAGES.labels(self.stream, self.group, outcome).inc()
+        if fields:
+            DEAD_LETTERED.inc()
         log.warning(
             "stream_entry_dead_lettered" if fields else "stream_entry_dropped_trimmed",
             extra={**self._log_fields(), "entry_id": entry_id, "attempts": attempts}

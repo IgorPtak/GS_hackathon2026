@@ -1,6 +1,6 @@
 """Delivery metrics; `alert_e2e_latency_seconds` is the glossary's end-to-end latency."""
 
-from alerting_core.metrics import LATENCY_BUCKETS
+from alerting_core.metrics import E2E_LATENCY_BUCKETS, LATENCY_BUCKETS
 from prometheus_client import Counter, Histogram
 
 DELIVERY_ATTEMPTS = Counter(
@@ -16,5 +16,5 @@ E2E_LATENCY_SECONDS = Histogram(
     "alert_e2e_latency_seconds",
     "Producer send time (or ingest time) to delivered.",
     ["channel_type"],
-    buckets=LATENCY_BUCKETS,
+    buckets=E2E_LATENCY_BUCKETS,
 )

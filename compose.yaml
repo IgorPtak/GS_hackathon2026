@@ -83,6 +83,7 @@ services:
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
     volumes:
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "3000:3000"
     depends_on:
@@ -94,6 +95,10 @@ services:
       - ./config:/app/config:ro
       - ./data/logs:/var/log/pricing:ro
     command: ["uvicorn", "services.ingest.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "${INGEST_WORKERS:-2}", "--loop", "uvloop"]
+    # Several uvicorn workers: metrics are aggregated across them (a fresh tmpfs per start).
+    environment:
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
+    tmpfs: [/tmp/prometheus]
     ports:
       - "8001:8001"
     healthcheck:
