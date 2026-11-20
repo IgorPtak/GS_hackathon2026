@@ -12,3 +12,4 @@ loadtest/results/*.tmp
 .DS_Store
 .idea/
 .vscode/
+.claude/worktrees/

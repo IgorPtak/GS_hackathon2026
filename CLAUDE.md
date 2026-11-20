@@ -4,7 +4,7 @@ Flexible Alerting & Notification Service (18-hour hackathon, 2 people). Events f
 Alertmanager and log files go through Redis Streams (`events` → processor → Postgres outbox → relay →
 `deliveries` → channel plugins). Rules, schema profiles, recipients, channels, runbooks and actions are
 YAML config, hot-reloaded. A React UI shows the live feed, rule editor with preview, runbooks with
-approvals and a phone simulator. A local LLM (Ollama) only proposes; humans approve.
+approvals and a phone simulator. An LLM (local Ollama by default, an allowlisted cloud endpoint opt-in) only proposes; humans approve.
 
 Read before working: `docs/IMPLEMENTATION_PLAN.md` (your task) · `docs/glossary.md` (names) ·
 `contracts/` (interfaces) · `OWNERSHIP.md` (what you may edit) · `docs/plan.md` (architecture, Polish).
@@ -56,9 +56,12 @@ from the task's `Files` list changed · one line in `docs/CHANGELOG.md` (`- A-09
 
 ## Security and privacy
 
-No secrets in the repo (`.env.example` only). Synthetic data only. The LLM runs locally through
-Ollama; `redact_secrets` runs before every LLM call. No code path sends events, alerts, code or config
-to an external service; outbound URLs point at compose services or localhost.
+No secrets in the repo (`.env.example` only). Synthetic data only. The LLM client speaks the
+OpenAI-compatible API; `LLM_BASE_URL` defaults to the local Ollama (`http://ollama:11434/v1`). A cloud
+endpoint is opt-in via `LLM_BASE_URL` + `LLM_API_KEY` and only if its host is in `LLM_ALLOWED_HOSTS`;
+the client refuses any other host. `redact_secrets` runs before every LLM call, and the hot path never
+calls the LLM. Apart from that allowlisted LLM call, no code path sends events, alerts, code or config
+to an external service; all other outbound URLs point at compose services or localhost.
 
 ## Model routing policy
 
