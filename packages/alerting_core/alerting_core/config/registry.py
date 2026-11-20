@@ -89,7 +89,7 @@ class ConfigRegistry:
         return self._snapshot.of_kind("rule")
 
     def schema_profiles(self) -> Mapping[str, SchemaProfile]:
-        return self._snapshot.of_kind("schema")
+        return self._snapshot.of_kind("schema_profile")
 
     def sources(self) -> Mapping[str, SourceConfig]:
         return self._snapshot.of_kind("source")
@@ -179,19 +179,23 @@ class ConfigRegistry:
         """Subscribe (await confirmation), then load with retries; raise if it never loads."""
         self._pool = pool
         self._subscribed.clear()
+        deadline = time.monotonic() + self._initial_load_timeout
         self._tasks = [
             asyncio.create_task(self._listen(redis), name="config-registry-listener"),
             asyncio.create_task(self._reconcile(), name="config-registry-reconcile"),
         ]
-        await asyncio.wait_for(self._subscribed.wait(), timeout=self._initial_load_timeout)
-        deadline = time.monotonic() + self._initial_load_timeout
-        delay = 0.25
-        while not await self.reload():
-            if time.monotonic() + delay > deadline:
-                await self.stop()
-                raise RuntimeError("configuration could not be loaded from the database")
-            await asyncio.sleep(delay)
-            delay = min(delay * 2, _MAX_BACKOFF_SECONDS)
+        try:
+            await asyncio.wait_for(self._subscribed.wait(), timeout=self._initial_load_timeout)
+            delay = 0.25
+            while not await self.reload():
+                if time.monotonic() + delay > deadline:
+                    raise RuntimeError("configuration could not be loaded from the database")
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, _MAX_BACKOFF_SECONDS)
+        except BaseException:
+            # Never leave the listener or reconcile task running after a failed start.
+            await self.stop()
+            raise
 
     async def stop(self) -> None:
         """Cancel the listener, the reconcile loop and pending reloads."""
