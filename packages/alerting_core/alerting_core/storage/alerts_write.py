@@ -22,7 +22,7 @@ _INSERT_ALERTS = f"""
     ON CONFLICT (id) DO NOTHING
     RETURNING id
 """
-_SELECT_STATUSES = "SELECT id, status FROM alerts WHERE id = ANY($1::uuid[])"
+_SELECT_STATES = "SELECT id, status, resolved_at FROM alerts WHERE id = ANY($1::uuid[])"
 _SELECT_OPEN_BY_KEY = """
     SELECT DISTINCT ON (a.rule_id, a.fingerprint) a.rule_id, a.fingerprint, a.id
     FROM alerts a
@@ -91,17 +91,26 @@ async def insert_alerts(connection: asyncpg.Connection, alerts: Sequence[Alert])
     """
     if not alerts:
         return set()
-    rows = await connection.fetch(_INSERT_ALERTS, [a.model_dump(mode="json") for a in alerts])
+    ordered = sorted(alerts, key=lambda alert: alert.id)  # one lock order on every replica
+    rows = await connection.fetch(_INSERT_ALERTS, [a.model_dump(mode="json") for a in ordered])
     return {str(row["id"]) for row in rows}
 
 
-async def fetch_alert_statuses(
+@dataclass(frozen=True, slots=True)
+class AlertState:
+    status: AlertStatus
+    resolved_at: datetime | None
+
+
+async def fetch_alert_states(
     connection: asyncpg.Connection, alert_ids: Sequence[str]
-) -> dict[str, AlertStatus]:
+) -> dict[str, AlertState]:
     if not alert_ids:
         return {}
-    rows = await connection.fetch(_SELECT_STATUSES, list(alert_ids))
-    return {str(row["id"]): AlertStatus(row["status"]) for row in rows}
+    rows = await connection.fetch(_SELECT_STATES, list(alert_ids))
+    return {
+        str(row["id"]): AlertState(AlertStatus(row["status"]), row["resolved_at"]) for row in rows
+    }
 
 
 async def find_open_alerts(
@@ -139,6 +148,7 @@ async def apply_folds(connection: asyncpg.Connection, updates: Sequence[FoldUpda
     """Add fold deltas to `alerts.count`; returns the updated alerts (missing ids are absent)."""
     if not updates:
         return []
+    ordered = sorted(updates, key=lambda update: update.alert_id)
     payload = [
         {
             "id": update.alert_id,
@@ -146,7 +156,7 @@ async def apply_folds(connection: asyncpg.Connection, updates: Sequence[FoldUpda
             "last_seen": update.last_seen.isoformat(),
             "last_event": update.last_event,
         }
-        for update in updates
+        for update in ordered
     ]
     rows = await connection.fetch(_APPLY_FOLDS, payload)
     return [alert_from_row(row) for row in rows]
@@ -167,7 +177,7 @@ async def upsert_unknown_samples(
             "event_count": sample.event_count,
             "seen": sample.last_seen.isoformat(),
         }
-        for sample in samples
+        for sample in sorted(samples, key=lambda sample: sample.shape_hash)
     ]
     rows = await connection.fetch(_UPSERT_SAMPLES, payload)
     return [

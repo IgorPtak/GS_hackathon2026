@@ -14,10 +14,14 @@ from .conftest import fixture_payload, message
 RULE_ID = "rates-large-rejections"
 
 
-def rates_event(notional: int = 25_000_000, trade_id: str = "T-1") -> dict:
+def rates_event(
+    notional: int = 25_000_000, trade_id: str = "T-1", reason: str = "LIMIT_BREACH"
+) -> dict:
+    """The rates fixture; `reason` is part of the fingerprint, `trade_id` is not."""
     payload = copy.deepcopy(fixture_payload("rates_trade_rejected.json"))
     payload["payload"]["notional"] = notional
     payload["payload"]["tradeId"] = trade_id
+    payload["payload"]["reason"] = reason
     return payload
 
 
@@ -139,11 +143,13 @@ async def test_concurrent_processors_create_one_alert(pool, redis, make_processo
 
 
 async def test_distinct_fingerprints_create_distinct_alerts(pool, redis, make_processor) -> None:
-    events = [message(rates_event(trade_id=f"T-{i}")) for i in range(3)]
+    events = [message(rates_event(reason=f"REASON_{i}")) for i in range(3)]
+    events.append(message(rates_event(trade_id="T-other")))  # LIMIT_BREACH: a 4th key
     await make_processor().handle_batch(events)
 
     rows = await alert_rows(pool)
-    assert len({row["fingerprint"] for row in rows}) == len(rows) >= 1
+    assert len(rows) == 4
+    assert len({row["fingerprint"] for row in rows}) == 4
 
 
 async def test_non_matching_event_creates_nothing(pool, redis, make_processor) -> None:

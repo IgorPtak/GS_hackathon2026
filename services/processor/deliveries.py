@@ -16,7 +16,7 @@ from alerting_contracts.common import Actor
 from alerting_contracts.config import Rule
 from alerting_core.config.registry import ConfigSnapshot
 from alerting_core.outbox import OutboxRow
-from alerting_core.routing import check_throttle, resolve_deliveries
+from alerting_core.routing import DeliveryTarget, check_throttle, resolve_deliveries
 from alerting_core.storage.alerts_write import AuditRow
 from redis.asyncio import Redis
 
@@ -29,22 +29,20 @@ class AlertSideEffects:
     audit_rows: list[AuditRow] = field(default_factory=list)
 
 
-async def plan_alert_side_effects(
+async def throttle_targets(
     redis: Redis,
     snapshot: ConfigSnapshot,
     rule: Rule,
     alert: Alert,
-    *,
     source: str | None,
-    public_base_url: str,
-    event_sent_at: datetime | None,
     now: datetime,
-) -> AlertSideEffects:
-    """Audit `alert_created`, route and throttle deliveries, and queue the rule's runbook."""
-    effects = AlertSideEffects()
-    effects.audit_rows.append(
-        AuditRow(alert.id, PROCESSOR_ACTOR, AuditVerb.alert_created, {"rule_id": rule.id})
-    )
+) -> tuple[list[DeliveryTarget], list[DeliveryTarget]]:
+    """Route the alert and split its targets into (allowed, suppressed) by the rule's throttle.
+
+    Runs before the batch transaction so no row lock is held across Redis round trips. If the
+    insert later loses to a concurrent replica, its throttle counters were bumped for nothing;
+    that only makes a throttle slightly stricter, never loses an alert.
+    """
     targets = resolve_deliveries(
         rule,
         alert,
@@ -54,7 +52,23 @@ async def plan_alert_side_effects(
         now=now,
         source=source,
     )
-    allowed, suppressed = await check_throttle(redis, rule, targets, now, alert_id=alert.id)
+    return await check_throttle(redis, rule, targets, now, alert_id=alert.id)
+
+
+def build_side_effects(
+    rule: Rule,
+    alert: Alert,
+    allowed: list[DeliveryTarget],
+    suppressed: list[DeliveryTarget],
+    *,
+    public_base_url: str,
+    event_sent_at: datetime | None,
+) -> AlertSideEffects:
+    """Audit `alert_created`, one delivery per allowed target, the runbook job (pure)."""
+    effects = AlertSideEffects()
+    effects.audit_rows.append(
+        AuditRow(alert.id, PROCESSOR_ACTOR, AuditVerb.alert_created, {"rule_id": rule.id})
+    )
     content = NotificationContent(
         title=alert.title,
         body=alert.body,

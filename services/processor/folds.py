@@ -44,27 +44,32 @@ class FoldTracker:
             self._pending[alert_id] = _PendingFold(count_key, last_seen, last_event)
 
     async def flush(self) -> int:
-        """Apply pending deltas; returns how many alerts were updated."""
+        """Apply pending deltas; returns how many alerts were updated.
+
+        On any failure the pending entries go back into the tracker and taken deltas go back to
+        Redis, so the next flush retries them; nothing is dropped while this process lives.
+        """
         if not self._pending:
             return 0
         pending, self._pending = self._pending, {}
-        alert_ids = list(pending)
-        deltas = await take_fold_counts(self._redis, [pending[a].count_key for a in alert_ids])
-        updates = [
-            FoldUpdate(alert_id, delta, pending[alert_id].last_seen, pending[alert_id].last_event)
-            for alert_id, delta in zip(alert_ids, deltas, strict=True)
-            if delta > 0
-        ]
+        taken: list[tuple[str, int]] = []
         try:
+            alert_ids = list(pending)
+            deltas = await take_fold_counts(self._redis, [pending[a].count_key for a in alert_ids])
+            taken = [
+                (pending[a].count_key, d) for a, d in zip(alert_ids, deltas, strict=True) if d > 0
+            ]
+            updates = [
+                FoldUpdate(a, d, pending[a].last_seen, pending[a].last_event)
+                for a, d in zip(alert_ids, deltas, strict=True)
+                if d > 0
+            ]
             async with self._pool.acquire() as connection:
                 alerts = await apply_folds(connection, updates)
-        except Exception:
-            # Put the taken deltas back so the next flush (here or on a replica) applies them.
-            await return_fold_counts(
-                self._redis, [(pending[u.alert_id].count_key, u.delta) for u in updates]
-            )
-            for alert_id, fold in pending.items():
-                self.add(alert_id, fold.count_key, fold.last_seen, fold.last_event)
+        except BaseException:
+            self._restore(pending)
+            if taken:
+                await self._give_back(taken)
             raise
         updated = {alert.id for alert in alerts}
         lost = [
@@ -72,13 +77,26 @@ class FoldTracker:
         ]
         if lost:
             # Alert row gone (deleted by hand): keep the counts for a later alert of the same key.
-            await return_fold_counts(self._redis, lost)
+            await self._give_back(lost)
         now = datetime.now(UTC)
-        for alert in alerts:
-            await publish_team_event(
-                self._redis, alert.team, AlertUpdatedEvent(at=now, alert=alert)
+        await asyncio.gather(
+            *(
+                publish_team_event(self._redis, alert.team, AlertUpdatedEvent(at=now, alert=alert))
+                for alert in alerts
             )
+        )
         return len(alerts)
+
+    def _restore(self, pending: dict[str, _PendingFold]) -> None:
+        for alert_id, fold in pending.items():
+            self.add(alert_id, fold.count_key, fold.last_seen, fold.last_event)
+
+    async def _give_back(self, deltas: list[tuple[str, int]]) -> None:
+        try:
+            await return_fold_counts(self._redis, deltas)
+        except Exception:
+            # Redis is down: these counts are lost (bounded by one flush interval of folds).
+            log.exception("fold_counts_return_failed", extra={"keys": len(deltas)})
 
     async def run(self, stop: asyncio.Event, interval_seconds: float = 1.0) -> None:
         """Flush every interval until stopped, then once more so no count is left behind."""

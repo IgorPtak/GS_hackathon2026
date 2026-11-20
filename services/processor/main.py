@@ -75,6 +75,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         stop.set()
         with suppress(asyncio.CancelledError, TimeoutError):
             await asyncio.wait_for(asyncio.gather(*tasks), timeout=10)
+        # The consumer may fold after the flusher's last pass; flush once more after it stopped.
+        # A SIGKILL still leaves up to one second of folds in Redis until the key folds again.
+        with suppress(Exception):
+            await folds.flush()
         await registry.stop()
         await redis.aclose()
         await pool.close()
