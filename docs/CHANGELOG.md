@@ -25,3 +25,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-08 rules and templating: compiled conditions (numeric coercion, ReDoS guard, rule index by normalized.type), EventContext layering, {{path}} templates.
 - A-07 schema profiles: ProfileMatcher (precompiled, priority order, unknown-shape flag), normalization with value maps, stable canonical fingerprints.
 - A-06 sources: Alertmanager webhook split with source-scoped idempotency keys; log_tail runner with Redis lock, generation-scoped offsets, rotation/truncation handling and DLQ for bad lines.
+- B-01 api service skeleton: app factory with lifespan (pool, lazy Redis, config source), one router per tag, /healthz, /api/v1/config, /api/v1/events/recent, ErrorResponse handlers, /metrics, route drift test; DirectoryConfigSource until A-03.
