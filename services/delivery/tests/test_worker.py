@@ -69,7 +69,7 @@ async def test_retry_poller_moves_only_due_jobs(redis) -> None:
 
 
 async def test_last_attempt_dead_letters_and_falls_back_to_ui(pool, redis, plugin, worker) -> None:
-    plugin.failures = [ChannelUnavailableError("503")]
+    plugin.failures = [RuntimeError("plugin bug")]  # not an outage: attempts count
     job = email_job(attempt=4)  # email allows 5 attempts
 
     await worker.handle_batch([stream_message(job)])
@@ -192,3 +192,40 @@ async def test_success_does_not_close_an_open_circuit(redis) -> None:
     await breaker.record_success("email")
 
     assert await redis.hget(circuit_key("email"), "state") == b"open"
+
+
+async def insert_delivery_row(pool, job, age: str) -> None:  # noqa: ANN001
+    await pool.execute(
+        "INSERT INTO deliveries (id, alert_id, team, recipient_id, channel_id, channel_type,"
+        f" purpose, created_at) VALUES ($1, $2::uuid, 'rates', 'anna', 'email', 'email', 'alert',"
+        f" now() - interval '{age}')",
+        job.delivery_id,
+        job.alert_id,
+    )
+
+
+async def test_outage_does_not_use_up_attempts_within_the_budget(
+    pool, redis, plugin, worker
+) -> None:
+    plugin.failures = [ChannelUnavailableError("smtp unavailable: Name or service not known")]
+    job = email_job(attempt=4)  # would be the last of 5 attempts
+    await insert_delivery_row(pool, job, "1 minute")
+
+    await worker.handle_batch([stream_message(job)])
+
+    assert await status_of(pool, job.delivery_id) == "failed"
+    assert await redis.zcard(RETRIES_KEY) == 1
+    assert await pool.fetchval("SELECT count(*) FROM outbox") == 0  # no fallback yet
+
+
+async def test_outage_longer_than_the_budget_dead_letters_to_fallback(
+    pool, redis, plugin, worker
+) -> None:
+    plugin.failures = [ChannelUnavailableError("503")]
+    job = email_job(attempt=4)
+    await insert_delivery_row(pool, job, "11 minutes")
+
+    await worker.handle_batch([stream_message(job)])
+
+    assert await status_of(pool, job.delivery_id) == "dead_lettered"
+    assert await pool.fetchval("SELECT count(*) FROM outbox") == 1

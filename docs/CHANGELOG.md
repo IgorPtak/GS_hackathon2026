@@ -47,3 +47,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-16 rule preview endpoint: POST /api/v1/rules/preview runs a draft rule over the recent events stream via A-17 preview_rule; read-only (spy-tested), 422 with dot-path details, 503 without registry.
 - B-09 free-text runbooks with the LLM: normalized at save time only (PUT), validate_llm_steps (unknown actions → text, approval forced for gated actions), normalized_by llm + llm_model, fallback on any LLM error.
 - B-15 RuleEditor and RulePreviewPanel: CodeMirror YAML editor with live validation by path, save as new version, preview with counts, deliveries per recipient × channel and sample alerts.
+- A-13 outage retries: unreachable channels retry for up to 10 min without using up max_attempts, then fall back; scripts/replay_dead_letters.py replays deliveries-dlq
