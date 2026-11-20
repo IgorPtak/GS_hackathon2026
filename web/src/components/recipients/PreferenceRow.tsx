@@ -1,7 +1,8 @@
 import type { ConfigValidationError } from "../../api/types";
+import { Button } from "../ui/Button";
 import { ChipSelect } from "./ChipSelect";
 import { WorkingHoursInput } from "./WorkingHoursInput";
-import { SEVERITIES, errorsAt, type PreferenceDraft } from "./preferenceDraft";
+import { SEVERITIES, errorsAt, humanizeError, type PreferenceDraft } from "./preferenceDraft";
 
 interface PreferenceRowProps {
   readonly index: number;
@@ -23,38 +24,41 @@ export function PreferenceRow({
   onChange,
   onRemove,
 }: PreferenceRowProps) {
-  const messages = (field: string) => errorsAt(errors, index, field).map((e) => e.message);
+  const messages = (field: string) =>
+    errorsAt(errors, index, field).map((e) => humanizeError(field, e.message));
+  const hours = [...messages("working_hours")];
   return (
-    <li className="space-y-3 rounded border border-slate-200 bg-white p-3">
+    <li className="space-y-5 rounded-tile border border-hairline bg-panel p-5">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-500">Preference {index + 1}</span>
-        <button type="button" onClick={onRemove} className="text-xs text-red-700 hover:underline">
+        <h4 className="text-body font-semibold">Preference {index + 1}</h4>
+        <Button variant="ghost" onClick={onRemove}>
           Remove
-        </button>
+        </Button>
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         <ChipSelect
-          label="Severities"
+          label="Alert severities"
           options={SEVERITIES}
           selected={draft.severities}
-          hint="None selected = any severity"
+          hint="Nothing selected means any severity."
           errors={messages("when.severities")}
           onChange={(next) => {
             onChange({ ...draft, severities: next as PreferenceDraft["severities"] });
           }}
         />
         <ChipSelect
-          label="Sources"
+          label="Systems"
           options={sourceIds}
           selected={draft.sources}
-          hint="None selected = any source"
+          hint="Nothing selected means any system."
           errors={messages("when.sources")}
           onChange={(next) => {
             onChange({ ...draft, sources: next });
           }}
         />
         <ChipSelect
-          label="Channels"
+          label="Send by"
+          isChannel
           options={channelIds}
           selected={draft.channels}
           errors={messages("channels")}
@@ -63,7 +67,8 @@ export function PreferenceRow({
           }}
         />
         <ChipSelect
-          label="Otherwise (outside working hours)"
+          label="Outside working hours, send by"
+          isChannel
           options={channelIds}
           selected={draft.otherwise}
           errors={messages("otherwise")}
@@ -76,7 +81,7 @@ export function PreferenceRow({
         startTime={draft.startTime}
         endTime={draft.endTime}
         timezone={draft.timezone}
-        hoursErrors={messages("working_hours")}
+        hoursErrors={hours}
         timezoneErrors={messages("timezone")}
         onChange={(next) => {
           onChange({ ...draft, ...next });

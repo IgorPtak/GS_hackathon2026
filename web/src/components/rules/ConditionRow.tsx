@@ -1,14 +1,28 @@
 import type { ConditionLeaf } from "../../api/types";
+import { Button } from "../ui/Button";
+import { Field } from "../ui/Field";
+import { Select } from "../ui/Select";
+import { TextInput } from "../ui/TextInput";
 import { ConditionValueInput } from "./ConditionValueInput";
 import { CONDITION_OPS } from "./conditionYaml";
+import { opLabel } from "./ruleLabels";
+
+export interface ConditionRowErrors {
+  readonly field?: string;
+  readonly op?: string;
+  readonly value?: string;
+}
 
 interface ConditionRowProps {
   readonly leaf: ConditionLeaf;
   readonly index: number;
   readonly canRemove: boolean;
+  readonly errors: ConditionRowErrors;
   readonly onChange: (leaf: ConditionLeaf) => void;
   readonly onRemove: () => void;
 }
+
+const OP_OPTIONS = CONDITION_OPS.map((op) => ({ value: op, label: opLabel(op) }));
 
 /** Keeps the value's shape valid for the new operator (list for `in`, boolean for `exists`). */
 function valueForOp(op: ConditionLeaf["op"], value: unknown): unknown {
@@ -21,53 +35,69 @@ function valueForOp(op: ConditionLeaf["op"], value: unknown): unknown {
   return value ?? "";
 }
 
-/** One editable condition: field, operator, value. */
-export function ConditionRow({ leaf, index, canRemove, onChange, onRemove }: ConditionRowProps) {
-  const label = `Condition ${String(index + 1)}`;
+/** One friendly row: Field, "is greater than", Value. */
+export function ConditionRow({
+  leaf,
+  index,
+  canRemove,
+  errors,
+  onChange,
+  onRemove,
+}: ConditionRowProps) {
+  const number = String(index + 1);
   return (
-    <li className="flex flex-wrap items-center gap-2">
-      <input
-        aria-label={`${label} field`}
-        className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1 font-mono text-sm"
-        placeholder="payload.field"
-        value={leaf.field}
-        onChange={(event) => {
-          onChange({ ...leaf, field: event.target.value });
-        }}
-      />
-      <select
-        aria-label={`${label} operator`}
-        className="rounded border border-slate-300 px-2 py-1 text-sm"
-        value={leaf.op}
-        onChange={(event) => {
-          const op = event.target.value as ConditionLeaf["op"];
-          onChange({ ...leaf, op, value: valueForOp(op, leaf.value) });
-        }}
-      >
-        {CONDITION_OPS.map((op) => (
-          <option key={op} value={op}>
-            {op}
-          </option>
-        ))}
-      </select>
-      <ConditionValueInput
-        key={leaf.op === "in" || leaf.op === "exists" ? leaf.op : "scalar"}
-        op={leaf.op}
-        value={leaf.value}
-        label={label}
-        onChange={(value) => {
-          onChange({ ...leaf, value });
-        }}
-      />
-      <button
-        type="button"
-        aria-label={`Remove ${label.toLowerCase()}`}
-        disabled={!canRemove}
-        onClick={onRemove}
-        className="rounded border border-slate-300 px-2 py-1 text-sm disabled:opacity-40"
-      >
-        Remove
-      </button>
+    <li className="rounded-tile border border-hairline bg-panel p-4">
+      <div className="grid items-start gap-4 lg:grid-cols-[1fr_14rem_1.4fr_auto]">
+        <Field label="Field" error={errors.field}>
+          {(control) => (
+            <TextInput
+              {...control}
+              className="font-mono text-meta"
+              placeholder="payload.notional"
+              value={leaf.field}
+              onChange={(event) => {
+                onChange({ ...leaf, field: event.target.value });
+              }}
+            />
+          )}
+        </Field>
+        <Field label="Is it…" error={errors.op}>
+          {(control) => (
+            <Select
+              {...control}
+              options={OP_OPTIONS}
+              value={leaf.op}
+              onChange={(value) => {
+                const op = value as ConditionLeaf["op"];
+                onChange({ ...leaf, op, value: valueForOp(op, leaf.value) });
+              }}
+            />
+          )}
+        </Field>
+        <Field label="Value" error={errors.value}>
+          {(control) => (
+            <ConditionValueInput
+              key={leaf.op === "in" || leaf.op === "exists" ? leaf.op : "scalar"}
+              control={control}
+              op={leaf.op}
+              value={leaf.value}
+              label={`Condition ${number}`}
+              onChange={(value) => {
+                onChange({ ...leaf, value });
+              }}
+            />
+          )}
+        </Field>
+        <Button
+          variant="ghost"
+          className="lg:mt-6"
+          aria-label={`Remove condition ${number}`}
+          disabled={!canRemove}
+          onClick={onRemove}
+        >
+          Remove
+        </Button>
+      </div>
     </li>
   );
 }

@@ -1,6 +1,14 @@
 import { useState } from "react";
 
 import type { ConditionLeaf } from "../../api/types";
+import { Select } from "../ui/Select";
+import { TextInput } from "../ui/TextInput";
+
+interface FieldControl {
+  readonly id: string;
+  readonly "aria-describedby": string | undefined;
+  readonly "aria-invalid": boolean;
+}
 
 export type ValueKind = "string" | "number" | "boolean";
 
@@ -8,10 +16,10 @@ interface ConditionValueInputProps {
   readonly op: ConditionLeaf["op"];
   readonly value: unknown;
   readonly label: string;
+  /** id and aria attributes from the surrounding Field; they go on the main control. */
+  readonly control: FieldControl;
   readonly onChange: (value: unknown) => void;
 }
-
-const INPUT = "min-w-0 rounded border border-slate-300 px-2 py-1 text-sm";
 
 function kindOf(value: unknown): ValueKind {
   if (typeof value === "number") return "number";
@@ -41,7 +49,13 @@ function fromText(op: ConditionLeaf["op"], text: string, kind: ValueKind): unkno
 }
 
 /** Value editor whose widget follows the operator: list, true/false, or typed scalar. */
-export function ConditionValueInput({ op, value, label, onChange }: ConditionValueInputProps) {
+export function ConditionValueInput({
+  op,
+  value,
+  label,
+  control,
+  onChange,
+}: ConditionValueInputProps) {
   const [kind, setKind] = useState<ValueKind>(kindOf(value));
   const [text, setText] = useState(toText(value));
   const [committed, setCommitted] = useState(value);
@@ -54,17 +68,17 @@ export function ConditionValueInput({ op, value, label, onChange }: ConditionVal
 
   if (op === "exists") {
     return (
-      <select
-        aria-label={`${label} value`}
-        className={INPUT}
+      <Select
+        {...control}
+        options={[
+          { value: "true", label: "present in the event" },
+          { value: "false", label: "missing from the event" },
+        ]}
         value={value === false ? "false" : "true"}
-        onChange={(event) => {
-          onChange(event.target.value === "true");
+        onChange={(next) => {
+          onChange(next === "true");
         }}
-      >
-        <option value="true">present</option>
-        <option value="false">missing</option>
-      </select>
+      />
     );
   }
 
@@ -77,46 +91,48 @@ export function ConditionValueInput({ op, value, label, onChange }: ConditionVal
     onChange(next);
   }
 
+  const isList = op === "in";
   return (
-    <>
-      {op === "in" ? null : (
-        <select
-          aria-label={`${label} value type`}
-          className={INPUT}
-          value={kind}
-          onChange={(event) => {
-            const nextKind = event.target.value as ValueKind;
-            commit(nextKind === "boolean" ? "true" : text, nextKind);
-          }}
-        >
-          <option value="string">text</option>
-          <option value="number">number</option>
-          <option value="boolean">boolean</option>
-        </select>
+    <div className="flex flex-col gap-2 sm:flex-row">
+      {isList ? null : (
+        <div className="shrink-0 sm:w-32">
+          <Select
+            aria-label={`${label} value type`}
+            options={[
+              { value: "string", label: "Text" },
+              { value: "number", label: "Number" },
+              { value: "boolean", label: "Yes / no" },
+            ]}
+            value={kind}
+            onChange={(next) => {
+              const nextKind = next as ValueKind;
+              commit(nextKind === "boolean" ? "true" : text, nextKind);
+            }}
+          />
+        </div>
       )}
-      {kind === "boolean" && op !== "in" ? (
-        <select
-          aria-label={`${label} value`}
-          className={INPUT}
+      {kind === "boolean" && !isList ? (
+        <Select
+          {...control}
+          options={[
+            { value: "true", label: "Yes" },
+            { value: "false", label: "No" },
+          ]}
           value={text === "false" ? "false" : "true"}
-          onChange={(event) => {
-            commit(event.target.value, "boolean");
+          onChange={(next) => {
+            commit(next, "boolean");
           }}
-        >
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </select>
+        />
       ) : (
-        <input
-          aria-label={`${label} value`}
-          className={`${INPUT} flex-1`}
-          placeholder={op === "in" ? "a, b, c" : "value"}
+        <TextInput
+          {...control}
+          placeholder={isList ? "a, b, c" : "10000000"}
           value={text}
           onChange={(event) => {
             commit(event.target.value, kind);
           }}
         />
       )}
-    </>
+    </div>
   );
 }

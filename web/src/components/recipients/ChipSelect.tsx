@@ -1,4 +1,5 @@
-import { toggled } from "./preferenceDraft";
+import { MultiSelect } from "../ui/MultiSelect";
+import { channelWord } from "./preferenceSentence";
 
 interface ChipSelectProps {
   readonly label: string;
@@ -7,41 +8,42 @@ interface ChipSelectProps {
   readonly onChange: (next: string[]) => void;
   readonly errors: readonly string[];
   readonly hint?: string;
+  /** Shows channel ids as plain words ("sms" becomes "SMS"). */
+  readonly isChannel?: boolean;
 }
 
-/** Multi-select as toggle chips; shows the API error for this field underneath. */
-export function ChipSelect({ label, options, selected, onChange, errors, hint }: ChipSelectProps) {
+/** Multi-select as toggle chips with a visible label, hint and the API error for this field. */
+export function ChipSelect({
+  label,
+  options,
+  selected,
+  onChange,
+  errors,
+  hint,
+  isChannel = false,
+}: ChipSelectProps) {
   return (
-    <fieldset className="min-w-0">
-      <legend className="text-xs font-medium text-slate-600">{label}</legend>
-      <div className="mt-1 flex flex-wrap gap-1">
-        {options.map((option) => (
-          <button
-            key={option}
-            type="button"
-            aria-pressed={selected.includes(option)}
-            onClick={() => {
-              onChange(toggled(selected, option));
-            }}
-            className={`rounded-full border px-2 py-0.5 text-xs ${
-              selected.includes(option)
-                ? "border-slate-800 bg-slate-800 text-white"
-                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            {option}
-          </button>
-        ))}
-        {options.length === 0 ? (
-          <span className="text-xs text-slate-400">none configured</span>
-        ) : null}
-      </div>
-      {hint ? <p className="mt-1 text-xs text-slate-400">{hint}</p> : null}
+    <div className="min-w-0 space-y-2">
+      <p className="text-meta font-medium text-ink">{label}</p>
+      {options.length === 0 ? (
+        <p className="text-meta text-ink-2">None configured.</p>
+      ) : (
+        <MultiSelect
+          label={label}
+          options={options.map((option) => ({
+            value: option,
+            label: isChannel ? channelWord(option) : option,
+          }))}
+          values={selected}
+          onChange={onChange}
+        />
+      )}
+      {hint ? <p className="text-meta text-ink-2">{hint}</p> : null}
       {errors.map((message) => (
-        <p key={message} role="alert" className="mt-1 text-xs text-red-700">
+        <p key={message} role="alert" className="text-meta text-critical-ink">
           {message}
         </p>
       ))}
-    </fieldset>
+    </div>
   );
 }

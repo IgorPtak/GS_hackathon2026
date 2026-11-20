@@ -1,4 +1,6 @@
 import type { ConfigValidationError } from "../../api/types";
+import { StatusChip } from "../ui/StatusChip";
+import { friendlyMessage, humanPath } from "./ruleErrors";
 
 interface ValidationErrorListProps {
   readonly errors: readonly ConfigValidationError[];
@@ -7,7 +9,7 @@ interface ValidationErrorListProps {
   readonly requestError: string | null;
 }
 
-/** Validation status under the editor; errors are listed by dot path. */
+/** Validation status: problems named by where they are ("Condition 2, value"), or "Rule is valid". */
 export function ValidationErrorList({
   errors,
   isChecking,
@@ -16,25 +18,27 @@ export function ValidationErrorList({
 }: ValidationErrorListProps) {
   if (requestError) {
     return (
-      <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800">
+      <p role="alert" className="rounded-tile bg-critical/12 px-4 py-3 text-body text-critical-ink">
         {requestError}
       </p>
     );
   }
   if (errors.length > 0) {
     return (
-      <ul role="alert" className="space-y-1 rounded bg-red-50 px-3 py-2 text-sm text-red-800">
+      <ul role="alert" className="space-y-1 rounded-tile bg-critical/12 px-4 py-3 text-body">
         {errors.map((error, index) => (
-          <li key={`${error.path}-${String(index)}`} className="break-words">
-            <code className="font-mono font-semibold">
-              {error.path === "" ? "(root)" : error.path}
-            </code>
-            : {error.message}
+          <li key={`${error.path}-${String(index)}`} className="break-words text-critical-ink">
+            <span className="font-medium">{humanPath(error.path)}:</span>{" "}
+            {friendlyMessage(error.path, error.message)}
           </li>
         ))}
       </ul>
     );
   }
-  if (isChecking) return <p className="text-sm text-slate-500">Validating...</p>;
-  return isValid ? <p className="text-sm text-green-700">Rule is valid</p> : null;
+  if (isChecking) return <p className="text-meta text-ink-2">Checking the rule…</p>;
+  return isValid ? (
+    <StatusChip tone="success" icon="check">
+      Rule is valid
+    </StatusChip>
+  ) : null;
 }

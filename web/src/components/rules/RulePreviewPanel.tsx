@@ -1,11 +1,26 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { apiClient } from "../../api/client";
 import type { Rule, RulePreview } from "../../api/types";
+import { Button } from "../ui/Button";
+import { Segmented } from "../ui/Segmented";
+import { Skeleton } from "../ui/Skeleton";
+import { StatusChip } from "../ui/StatusChip";
 import { RulePreviewResult } from "./RulePreviewResult";
 import { messageFromBody } from "./ruleErrors";
 
-const WINDOWS = ["15m", "1h", "6h", "24h"] as const;
+const WINDOWS = [
+  { value: "15m", label: "15 min" },
+  { value: "1h", label: "1 hour" },
+  { value: "6h", label: "6 hours" },
+  { value: "24h", label: "24 hours" },
+];
+
+interface Outcome {
+  readonly key: string;
+  readonly error: string | null;
+  readonly run: Run | null;
+}
 
 interface Run {
   readonly yaml: string;
@@ -15,97 +30,92 @@ interface Run {
 
 function failureText(status: number, body: unknown): string {
   if (status === 404 || status === 503) return "Preview is not available yet on this server.";
-  return messageFromBody(body, `Preview failed (API error ${String(status)})`);
+  return messageFromBody(body, `Preview failed (API error ${String(status)}). Try again.`);
 }
 
 /** Runs the draft rule over the last window of events and shows what it would have produced. */
 export function RulePreviewPanel({
   draftYaml,
   rule,
+  names,
 }: {
   readonly draftYaml: string;
   readonly rule: Rule | null;
+  readonly names: Readonly<Record<string, string>>;
 }) {
   const [window, setWindow] = useState<string>("1h");
-  const [isRunning, setIsRunning] = useState(false);
-  const [run, setRun] = useState<Run | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [nonce, setNonce] = useState(0);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const key = `${draftYaml}\n${window}\n${String(nonce)}`;
+  const isRunning = rule !== null && outcome?.key !== key;
+  const run = outcome?.run ?? null;
+  const error = outcome?.key === key ? outcome.error : null;
 
-  async function handleRun() {
+  // Runs on entering the step and whenever the window changes or "Run again" is pressed.
+  useEffect(() => {
     if (!rule) return;
-    setIsRunning(true);
-    setError(null);
-    try {
-      const {
-        data,
-        response,
-        error: body,
-      } = await apiClient.POST("/api/v1/rules/preview", {
-        body: { rule, window, max_events: 50000 },
+    let isCancelled = false;
+    apiClient
+      .POST("/api/v1/rules/preview", { body: { rule, window, max_events: 50000 } })
+      .then(({ data, response, error: body }) => {
+        if (isCancelled) return;
+        if (data) setOutcome({ key, error: null, run: { yaml: draftYaml, window, preview: data } });
+        else
+          setOutcome((prev) => ({
+            key,
+            error: failureText(response.status, body),
+            run: prev?.run ?? null,
+          }));
+      })
+      .catch((e: unknown) => {
+        if (isCancelled) return;
+        const text = e instanceof Error ? e.message : "API unreachable";
+        setOutcome((prev) => ({ key, error: text, run: prev?.run ?? null }));
       });
-      if (data) setRun({ yaml: draftYaml, window, preview: data });
-      else setError(failureText(response.status, body));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "API unreachable");
-    } finally {
-      setIsRunning(false);
-    }
-  }
+    return () => {
+      isCancelled = true;
+    };
+    // `rule` identity changes with every validation; the draft text is what matters here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   return (
-    <section
-      aria-labelledby="rule-preview-title"
-      className="space-y-3 rounded border border-slate-200 bg-white p-3"
-    >
-      <h4 id="rule-preview-title" className="font-semibold">
-        Preview
-      </h4>
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="text-sm" htmlFor="preview-window">
-          Window
-        </label>
-        <select
-          id="preview-window"
-          value={window}
-          onChange={(e) => {
-            setWindow(e.target.value);
+    <section aria-label="Rule preview" className="space-y-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <Segmented label="Preview window" options={WINDOWS} value={window} onChange={setWindow} />
+        <Button
+          icon="retry"
+          isLoading={isRunning}
+          disabled={rule === null}
+          onClick={() => {
+            setNonce((n) => n + 1);
           }}
-          className="rounded border border-slate-300 bg-white px-2 py-1 text-sm"
         >
-          {WINDOWS.map((w) => (
-            <option key={w} value={w}>
-              Last {w}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          disabled={rule === null || isRunning}
-          onClick={() => void handleRun()}
-          className="rounded bg-slate-800 px-3 py-1.5 text-sm text-white disabled:opacity-40"
-        >
-          {isRunning ? "Running..." : "Run preview"}
-        </button>
-        {rule === null ? (
-          <span className="text-xs text-slate-500">
-            Fix the validation errors to run a preview.
-          </span>
-        ) : null}
+          Run again
+        </Button>
         {run && run.yaml !== draftYaml ? (
-          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
-            Stale: the draft changed since this run
-          </span>
+          <StatusChip tone="warning">Out of date: the rule changed since this run</StatusChip>
         ) : null}
       </div>
+      {rule === null ? (
+        <p className="rounded-tile bg-fill px-4 py-3 text-body text-ink-2">
+          Fix the problems listed below to see what this rule would do.
+        </p>
+      ) : null}
       {error ? (
-        <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p
+          role="alert"
+          className="rounded-tile bg-critical/12 px-4 py-3 text-body text-critical-ink"
+        >
           {error}
         </p>
       ) : null}
-      {!run && !error && !isRunning ? (
-        <p className="text-sm text-slate-500">No preview run yet.</p>
+      {isRunning && !run ? <Skeleton className="h-28 w-full" /> : null}
+      {run ? (
+        <div aria-busy={isRunning} className={isRunning ? "opacity-60" : undefined}>
+          <RulePreviewResult preview={run.preview} window={run.window} names={names} />
+        </div>
       ) : null}
-      {run ? <RulePreviewResult preview={run.preview} /> : null}
     </section>
   );
 }

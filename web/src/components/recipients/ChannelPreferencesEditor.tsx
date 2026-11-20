@@ -3,6 +3,8 @@ import { useState } from "react";
 import { apiClient } from "../../api/client";
 import type { ConfigValidationError, Recipient } from "../../api/types";
 import { detailsFromBody, messageFromBody } from "../rules/ruleErrors";
+import { Button } from "../ui/Button";
+import { StatusChip } from "../ui/StatusChip";
 import { PreferenceRow } from "./PreferenceRow";
 import {
   emptyDraft,
@@ -18,6 +20,7 @@ interface ChannelPreferencesEditorProps {
   readonly channelIds: readonly string[];
   readonly sourceIds: readonly string[];
   readonly onSaved: () => void;
+  readonly onClose: () => void;
 }
 
 type Outcome = "saved" | "unchanged" | null;
@@ -33,6 +36,7 @@ export function ChannelPreferencesEditor({
   channelIds,
   sourceIds,
   onSaved,
+  onClose,
 }: ChannelPreferencesEditorProps) {
   const original = recipient.channel_preferences ?? [];
   const [drafts, setDrafts] = useState<PreferenceDraft[]>(original.map(toDraft));
@@ -71,8 +75,13 @@ export function ChannelPreferencesEditor({
         setOutcome(isChanged ? "saved" : "unchanged");
         onSaved();
       } else {
-        setErrors(detailsFromBody(error));
-        setMessage(messageFromBody(error, "Save failed"));
+        const details = detailsFromBody(error);
+        setErrors(details);
+        setMessage(
+          details.length > 0
+            ? "Some fields need attention. Fix them above, then save again."
+            : messageFromBody(error, "Your changes could not be saved. Try again."),
+        );
       }
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "API unreachable");
@@ -82,15 +91,13 @@ export function ChannelPreferencesEditor({
   }
 
   return (
-    <div className="space-y-3 rounded border border-slate-200 bg-slate-50 p-3">
-      <h4 className="font-semibold">
-        {recipient.display_name}{" "}
-        <span className="text-xs font-normal text-slate-500">{recipient.id}</span>
-      </h4>
+    <div className="space-y-5">
       {drafts.length === 0 ? (
-        <p className="text-sm text-slate-500">No preferences: the default channels are used.</p>
+        <p className="text-body text-ink-2">
+          No preferences yet. This person is reached by each rule's default channels.
+        </p>
       ) : null}
-      <ul className="space-y-2">
+      <ul className="space-y-4">
         {drafts.map((draft, index) => (
           <PreferenceRow
             key={index}
@@ -109,37 +116,45 @@ export function ChannelPreferencesEditor({
         ))}
       </ul>
       {message ? (
-        <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p
+          role="alert"
+          className="rounded-tile bg-critical/12 px-4 py-3 text-body text-critical-ink"
+        >
           {message}
         </p>
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            edit([...drafts, emptyDraft(channelIds[0])]);
-          }}
-          className="rounded border border-slate-300 bg-white px-3 py-1 text-sm hover:bg-slate-50"
-        >
-          Add preference
-        </button>
-        <button
-          type="button"
-          disabled={isSaving}
+        <Button
+          variant="primary"
+          isLoading={isSaving}
           onClick={() => {
             void handleSave();
           }}
-          className="rounded bg-slate-800 px-3 py-1 text-sm text-white disabled:opacity-50"
         >
-          {isSaving ? "Saving..." : "Save preferences"}
-        </button>
-        {outcome === "saved" ? <span className="text-sm text-green-700">Saved</span> : null}
-        {outcome === "unchanged" ? (
-          <span className="text-sm text-slate-600">Unchanged, nothing saved</span>
-        ) : null}
-        {isChanged && outcome === null ? (
-          <span className="text-xs text-amber-700">Unsaved changes</span>
-        ) : null}
+          Save
+        </Button>
+        <Button
+          icon="plus"
+          onClick={() => {
+            edit([...drafts, emptyDraft(channelIds[0])]);
+          }}
+        >
+          Add preference
+        </Button>
+        <Button variant="ghost" onClick={onClose}>
+          Close
+        </Button>
+        <span aria-live="polite" className="ml-1">
+          {outcome === "saved" ? (
+            <StatusChip tone="success" icon="check">
+              Saved
+            </StatusChip>
+          ) : null}
+          {outcome === "unchanged" ? <StatusChip>Nothing changed</StatusChip> : null}
+          {isChanged && outcome === null ? (
+            <StatusChip tone="warning">Unsaved changes</StatusChip>
+          ) : null}
+        </span>
       </div>
     </div>
   );

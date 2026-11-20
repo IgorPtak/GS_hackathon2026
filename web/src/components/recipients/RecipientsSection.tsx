@@ -1,30 +1,33 @@
-import { ChannelPreferencesEditor } from "./ChannelPreferencesEditor";
+import { EmptyState } from "../ui/EmptyState";
+import { Skeleton } from "../ui/Skeleton";
+import { PersonCard } from "./PersonCard";
 import { useConfigLists } from "./useConfigLists";
 
-/** Channel preferences of the picked team's recipients. */
+/** The picked team's people, each with their channel preferences. */
 export function RecipientsSection({ team }: { readonly team: string }) {
   const { config, error, isLoading, reload } = useConfigLists();
   const recipients = (config?.recipients ?? []).filter((r) => (r.teams ?? []).includes(team));
   const channelIds = (config?.channels ?? []).map((c) => c.id);
   const sourceIds = (config?.sources ?? []).map((s) => s.id);
 
+  if (isLoading) return <Skeleton className="h-40 w-full" />;
+  if (error) {
+    return (
+      <p role="alert" className="rounded-tile bg-critical/12 px-4 py-3 text-critical-ink">
+        Cannot load people ({error}). Check that the API is running, then reload.
+      </p>
+    );
+  }
+  if (recipients.length === 0) {
+    return (
+      <EmptyState icon="people">No one is on this team yet. Add a person in the config.</EmptyState>
+    );
+  }
   return (
-    <section aria-labelledby="recipients-title" className="mt-8 space-y-3">
-      <h2 id="recipients-title" className="text-xl font-semibold">
-        Recipients
-      </h2>
-      {isLoading ? <p className="text-sm text-slate-500">Loading recipients...</p> : null}
-      {error ? (
-        <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800">
-          Cannot load recipients ({error}).
-        </p>
-      ) : null}
-      {config && recipients.length === 0 ? (
-        <p className="text-sm text-slate-500">No recipients in this team.</p>
-      ) : null}
+    <ul className="space-y-4">
       {recipients.map((recipient) => (
-        <ChannelPreferencesEditor
-          key={`${recipient.id}:${JSON.stringify(recipient.channel_preferences)}`}
+        <PersonCard
+          key={recipient.id}
           recipient={recipient}
           team={team}
           channelIds={channelIds}
@@ -32,6 +35,6 @@ export function RecipientsSection({ team }: { readonly team: string }) {
           onSaved={reload}
         />
       ))}
-    </section>
+    </ul>
   );
 }

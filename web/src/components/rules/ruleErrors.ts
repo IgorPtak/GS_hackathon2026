@@ -42,3 +42,97 @@ export function messageFromBody(body: unknown, fallback: string): string {
   }
   return fallback;
 }
+
+const FIELD_WORDS: Record<string, string> = {
+  id: "Rule id",
+  team: "Team",
+  description: "Description",
+  enabled: "Enabled",
+  when: "Condition",
+  severity: "Severity",
+  route: "Who and how",
+  "route.teams": "Teams",
+  "route.recipients": "People",
+  "route.channels": "Channels",
+  present: "Alert text",
+  "present.title": "Alert title",
+  "present.body": "Alert body",
+  dedup: "Duplicates",
+  "dedup.window": "Duplicate window",
+  group: "Grouping",
+  throttle: "Limit per person",
+  runbook: "Runbook",
+};
+
+/** Names where a validation error belongs, in words: "when.all.1.value" becomes "Condition 2, value". */
+export function humanPath(path: string): string {
+  const leaf = /(?:^|\.)all\.(\d+)\.(field|op|value)$/.exec(path);
+  if (leaf?.[1] && leaf[2]) {
+    return `Condition ${String(Number(leaf[1]) + 1)}, ${leaf[2] === "op" ? "operator" : leaf[2]}`;
+  }
+  const single = /^when\.(field|op|value)$/.exec(path);
+  if (single?.[1]) return `Condition 1, ${single[1] === "op" ? "operator" : single[1]}`;
+  if (path === "") return "The rule";
+  const exact = FIELD_WORDS[path] ?? FIELD_WORDS[path.split(".").slice(0, 2).join(".")];
+  return exact ?? FIELD_WORDS[path.split(".")[0] ?? ""] ?? path;
+}
+
+/** Messages for the three inputs of condition row `index`. */
+export function conditionErrors(
+  errors: readonly ConfigValidationError[],
+  index: number,
+  isSingleLeaf: boolean,
+): { field?: string; op?: string; value?: string } {
+  const result: { field?: string; op?: string; value?: string } = {};
+  for (const error of errors) {
+    const match = isSingleLeaf
+      ? /^when\.(field|op|value)$/.exec(error.path)
+      : new RegExp(`(?:^|\\.)all\\.${String(index)}\\.(field|op|value)$`).exec(error.path);
+    const key = match?.[1] as "field" | "op" | "value" | undefined;
+    if (key && result[key] === undefined) result[key] = friendlyMessage(error.path, error.message);
+  }
+  return result;
+}
+
+/** True when the error is shown at a condition input, so the list below skips it. */
+export function isConditionFieldError(error: ConfigValidationError): boolean {
+  return /(?:^|\.)(all\.\d+\.|when\.)(field|op|value)$/.test(error.path);
+}
+
+/** Rewrites the raw pydantic wording of common problems into advice; other messages pass through. */
+export function friendlyMessage(path: string, message: string): string {
+  if (path === "id" && /pattern|match/i.test(message)) {
+    return "Use lowercase letters, digits and dashes, starting with a letter or digit.";
+  }
+  if (/field required|missing/i.test(message)) return "This is required.";
+  if (/at least 1 character/i.test(message)) return "This cannot be empty.";
+  return message;
+}
+
+const isUnionNoise = (e: ConfigValidationError) =>
+  e.path.startsWith("when") && /^(Extra inputs are not permitted|Field required)$/.test(e.message);
+
+/**
+ * The condition is a union of shapes, so the API reports every shape that did not fit. Keep the
+ * real problem, or one plain sentence when nothing more specific is known; drop repeats.
+ */
+export function tidyErrors(errors: readonly ConfigValidationError[]): ConfigValidationError[] {
+  const hasReal = errors.some((e) => e.path.startsWith("when") && !isUnionNoise(e));
+  const kept = errors.filter((e) => !isUnionNoise(e));
+  const summary: ConfigValidationError[] =
+    !hasReal && kept.length < errors.length
+      ? [
+          {
+            path: "when",
+            message: "The condition is not valid. Check its fields in Advanced (YAML).",
+          },
+        ]
+      : [];
+  const seen = new Set<string>();
+  return [...summary, ...kept].filter((e) => {
+    const key = `${e.path}|${e.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}

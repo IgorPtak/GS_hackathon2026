@@ -52,7 +52,8 @@ function toLeaf(pairs: readonly (readonly [string, string])[]): ConditionLeaf {
   const op = raw.get("op")?.trim();
   const isKnownOp = CONDITION_OPS.some((known) => known === op);
   const hasOnlyLeafKeys = [...raw.keys()].every((key) => ["field", "op", "value"].includes(key));
-  if (typeof field !== "string" || field === "" || !isKnownOp || !hasOnlyLeafKeys) {
+  // An empty field is still a leaf: the form shows it and the API asks for it to be filled in.
+  if (typeof field !== "string" || !isKnownOp || !hasOnlyLeafKeys) {
     throw new UnsupportedYamlError("not a leaf");
   }
   return { field, op: op as ConditionOp, value: parseScalar(raw.get("value") ?? "") };
