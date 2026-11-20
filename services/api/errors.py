@@ -21,6 +21,16 @@ _CODES = {
 }
 
 
+class ApiError(Exception):
+    """Raise to answer with a specific ErrorResponse code (e.g. 409 invalid_transition)."""
+
+    def __init__(self, status: int, error: str, message: str) -> None:
+        super().__init__(message)
+        self.status = status
+        self.error = error
+        self.message = message
+
+
 def error_response(status: int, error: str, message: str) -> JSONResponse:
     """Build the contract `ErrorResponse` body."""
     body = ErrorResponse(error=error, message=message)
@@ -31,6 +41,11 @@ async def _http_error(_: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, StarletteHTTPException)
     code = _CODES.get(exc.status_code, "internal_error" if exc.status_code >= 500 else "error")
     return error_response(exc.status_code, code, str(exc.detail))
+
+
+async def _api_error(_: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, ApiError)
+    return error_response(exc.status, exc.error, exc.message)
 
 
 async def _validation_error(_: Request, exc: Exception) -> JSONResponse:
@@ -49,7 +64,8 @@ async def _unexpected_error(request: Request, exc: Exception) -> JSONResponse:
 
 
 def install_error_handlers(app: FastAPI) -> None:
-    """Register the three handlers on `app`."""
+    """Register the handlers on `app`."""
     app.add_exception_handler(StarletteHTTPException, _http_error)
+    app.add_exception_handler(ApiError, _api_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(Exception, _unexpected_error)

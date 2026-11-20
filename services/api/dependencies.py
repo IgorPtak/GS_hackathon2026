@@ -23,7 +23,7 @@ def get_pool(request: Request) -> asyncpg.Pool:
 
 
 def get_config_source(request: Request) -> ConfigSource:
-    """The config source (A-03 registry later)."""
+    """RegistryConfigSource, or DirectoryConfigSource when Postgres was down at startup."""
     return request.app.state.config_source
 
 
