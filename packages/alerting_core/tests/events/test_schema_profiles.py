@@ -216,5 +216,61 @@ def test_benchmark_100k_selections_and_normalizations():
     start = time.perf_counter()
     for i in range(100_000):
         envelope = envelopes[i % len(envelopes)]
-        normalize_event(envelope, MATCHER.select(envelope.payload))
+        profile, _ = MATCHER.select_with_flag(envelope.payload)
+        MATCHER.normalize(envelope, profile)
     assert time.perf_counter() - start < 3.0
+
+
+def test_fingerprint_canonicalizes_numbers_and_keys():
+    assert compute_fingerprint({"n": 25000000}, ["n"]) == compute_fingerprint(
+        {"n": 25000000.0}, ["n"]
+    )
+    assert compute_fingerprint({"n": 1.5}, ["n"]) != compute_fingerprint({"n": 1}, ["n"])
+    assert compute_fingerprint({"n": True}, ["n"]) != compute_fingerprint({"n": 1}, ["n"])
+    assert compute_fingerprint({"d": {"a": 1, "b": 2.0}}, ["d"]) == compute_fingerprint(
+        {"d": {"b": 2, "a": 1}}, ["d"]
+    )
+    assert compute_fingerprint({"l": [1.0, True]}, ["l"]) == compute_fingerprint(
+        {"l": [1, True]}, ["l"]
+    )
+
+
+def test_fingerprint_never_raises():
+    assert len(compute_fingerprint({"n": 10**40}, ["n"])) == 64
+    assert len(compute_fingerprint({"d": {1: "a", 2: "b"}}, ["d"])) == 64
+    assert len(compute_fingerprint({"n": float("nan")}, ["n"])) == 64
+    assert len(compute_fingerprint({"n": float("inf")}, ["n"])) == 64
+
+
+def test_superscript_digit_is_not_a_list_index():
+    assert compute_fingerprint({"a": ["x", "y"]}, ["a.\u00b2"]) == compute_fingerprint({}, ["z"])
+
+
+def test_select_with_flag_single_pass():
+    profile, unknown = MATCHER.select_with_flag(_fixture("unknown_payments.json"))
+    assert (profile.id, unknown) == ("generic", True)
+    profile, unknown = MATCHER.select_with_flag(_fixture("rates_trade_rejected.json"))
+    assert (profile.id, unknown) == ("trade-rejected", False)
+
+
+def test_high_priority_generic_still_known_when_specific_matches():
+    generic = next(p for p in PROFILES if p.id == "generic").model_copy(update={"priority": 99})
+    matcher = ProfileMatcher([generic, *(p for p in PROFILES if p.id != "generic")])
+    payload = {"severity": "x", "eventType": "WORKFLOW_FAILED", "workflowId": "w"}
+    profile, unknown = matcher.select_with_flag(payload)
+    assert (profile.id, unknown) == ("generic", False)
+
+
+def test_uncompilable_profile_is_skipped(caplog):
+    bad = SchemaProfile.model_validate(
+        {
+            "id": "bad",
+            "priority": 50,
+            "match": {"field": "a", "op": "regex", "value": "("},
+            "fields": {},
+            "fingerprint": ["a"],
+        }
+    )
+    matcher = ProfileMatcher([bad, *PROFILES])
+    assert matcher.select({"a": "x"}).id != "bad"
+    assert matcher.select(_fixture("rates_trade_rejected.json")).id == "trade-rejected"
