@@ -14,5 +14,4 @@ present:
   fields: [payload.tradeId, payload.desk]
   color: orange
 dedup: { window: 60s }
-group: { by: [payload.desk], window: 5m }
 runbook: trade-limit-breach
