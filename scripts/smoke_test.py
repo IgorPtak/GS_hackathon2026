@@ -168,21 +168,21 @@ def make_worker_healthz_check(service: str, port: int) -> Callable[[Ctx], str]:
     return check
 
 
-def resolve_open_rates_alerts(ctx: Ctx) -> int:
-    """Resolve earlier runs' rates alerts (best effort; the api may not exist at this gate).
+def resolve_open_alerts(ctx: Ctx, team: str, rule_id: str) -> int:
+    """Resolve earlier runs' alerts of one rule (best effort; the api may not exist at a gate).
 
-    The fixture's fingerprint has no tradeId, so without this the smoke event would fold into an
-    alert from a previous run and send no new notification for the email check to find.
+    The fixtures' fingerprints are stable across runs, so without this the smoke event would
+    fold into an alert from a previous run: no new notification, no new runbook run.
     """
     try:
         page = AlertPage.model_validate(
-            get_json(ctx, f"{ctx.base_url}/api/v1/alerts", team="rates", status="open", limit=200)
+            get_json(ctx, f"{ctx.base_url}/api/v1/alerts", team=team, status="open", limit=200)
         )
     except (CheckFailed, httpx.HTTPError, ValueError):
         return 0
     resolved = 0
     for alert in page.items:
-        if alert.rule_id != RATES_RULE_ID:
+        if alert.rule_id != rule_id:
             continue
         url = f"{ctx.base_url}/api/v1/alerts/{alert.id}/resolve"
         body = {"actor": {"id": "smoke-test"}, "comment": f"smoke {ctx.run_id}"}
@@ -194,6 +194,10 @@ def resolve_open_rates_alerts(ctx: Ctx) -> int:
     return resolved
 
 
+def resolve_open_rates_alerts(ctx: Ctx) -> int:
+    return resolve_open_alerts(ctx, "rates", RATES_RULE_ID)
+
+
 def check_post_rates_fixture(ctx: Ctx) -> str:
     resolve_open_rates_alerts(ctx)
     event, trade_id = rates_event(ctx, "main")
@@ -203,6 +207,7 @@ def check_post_rates_fixture(ctx: Ctx) -> str:
 
 
 def check_post_settlements_fixture(ctx: Ctx) -> str:
+    resolve_open_alerts(ctx, "settlements", "settlements-workflow-failed")
     post_event(ctx, SETTLEMENTS_SOURCE, settlements_event(ctx))
     return "202"
 
@@ -392,7 +397,8 @@ def check_phone_approve(ctx: Ctx) -> str:
     approval = ctx.state["approval"]
     response = ctx.client.post(
         f"{ctx.base_url}/api/v1/phone-simulator/replies",
-        json={"recipient_id": "anna", "text": f"APPROVE {approval['approval_code']}"},
+        # Replies are checked against the sender's teams: settlements is on-call piotr.
+        json={"recipient_id": "piotr", "text": f"APPROVE {approval['approval_code']}"},
     )
     if response.status_code != 200:
         raise CheckFailed(f"phone reply returned {response.status_code}")
