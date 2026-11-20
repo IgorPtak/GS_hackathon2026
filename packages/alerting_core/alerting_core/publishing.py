@@ -23,7 +23,7 @@ def team_channel(team: str) -> str:
 async def _publish(redis: Redis, channel: str, event: BaseModel) -> None:
     try:
         await redis.publish(channel, orjson.dumps(event.model_dump(mode="json")))
-    except RedisError:
+    except (RedisError, OSError):  # OSError covers ConnectionError and timeouts
         # Pub/sub is best effort: the UI refetches over REST after reconnecting.
         log.warning("publish_failed", extra={"channel": channel})
 
