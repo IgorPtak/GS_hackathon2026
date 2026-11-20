@@ -28,7 +28,7 @@ async def _lock_alert(connection: asyncpg.Connection, alert_id: str) -> Alert:
 async def acknowledge_alert(
     connection: asyncpg.Connection, alert_id: str, actor: Actor
 ) -> tuple[Alert, AuditEntry]:
-    """Acknowledge an open alert; the caller publishes events after commit (publish_alert_change)."""
+    """Acknowledge an open alert; the caller publishes events after commit."""
     async with connection.transaction():
         current = await _lock_alert(connection, alert_id)  # row lock: concurrent requests serialize
         if current.status is not AlertStatus.open:
