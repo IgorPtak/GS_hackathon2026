@@ -120,3 +120,23 @@ async def test_grouped_rule_does_not_create_dedup_alerts(pool, redis, make_proce
     await make_processor().handle_batch([message(stale("EURUSD"), "pricing-log")] * 3)
 
     assert await pool.fetchval("SELECT count(*) FROM alerts WHERE rule_id = $1", RULE_ID) == 0
+
+
+async def test_window_survives_a_long_database_outage(
+    pool, redis, make_processor, snapshot
+) -> None:
+    await make_processor().handle_batch([message(stale("EURUSD"), "pricing-log")])
+    worker = flusher(pool, redis, snapshot)
+    now = later_ms(11)
+    claim_args = [RETRY_AFTER_MS, RETRY_AFTER_MS + 60_000]
+    [raw] = await worker._claim(keys=[DEADLINES_KEY], args=[now, 100, *claim_args])
+    flushing = raw.decode()
+
+    for _ in range(10):  # Postgres down for 5 minutes: every retry claims and fails again
+        await redis.pexpire(flushing, 1_000)  # as if the TTL had almost run out
+        now += RETRY_AFTER_MS + 1
+        assert await worker._claim(keys=[DEADLINES_KEY], args=[now, 100, *claim_args]) == [raw]
+        assert await redis.pttl(flushing) > RETRY_AFTER_MS
+
+    assert await worker._flush_window(flushing) == 1
+    assert len(await summaries(pool)) == 1

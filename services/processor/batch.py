@@ -117,6 +117,8 @@ class EventProcessor:
                 log.exception("event_evaluation_failed", extra={"entry_id": message.id})
                 failures[message.id] = f"{type(error).__name__}: {error}"
         await self._persist_with_retry(rule_set.snapshot, outcomes)
+        # A crash between buffering and the ack re-buffers the batch: group counts are
+        # at-least-once, like dedup fold counts.
         await buffer_group_events(self._redis, _buffered_events(outcomes), int(time.time() * 1000))
         # Only after the batch is safely written, so a retried batch never dead-letters twice.
         if invalid:

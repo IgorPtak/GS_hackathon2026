@@ -58,15 +58,19 @@ for i = 1, #due, 2 do
       flushing = string.sub(member, 7)
     else
       local buffer = 'group-buffer:' .. member
-      if redis.call('EXISTS', buffer) == 1 then
-        flushing = 'group-flushing:' .. member .. ':' .. score
+      local target = 'group-flushing:' .. member .. ':' .. score
+      if redis.call('EXISTS', buffer) == 1 and redis.call('EXISTS', target) == 0 then
+        flushing = target
         redis.call('RENAME', buffer, flushing)
-        redis.call('PEXPIRE', flushing, tonumber(ARGV[4]))
       end
     end
     if flushing and redis.call('EXISTS', flushing) == 1 then
+      -- Every claim extends the TTL, so a window survives an outage of any length.
+      redis.call('PEXPIRE', flushing, tonumber(ARGV[4]))
       redis.call('ZADD', KEYS[1], tonumber(ARGV[1]) + tonumber(ARGV[3]), 'retry:' .. flushing)
       table.insert(claimed, flushing)
+    elseif flushing then
+      table.insert(claimed, 'expired:' .. flushing)
     end
   end
 end
@@ -105,6 +109,17 @@ def parse_flushing_key(flushing: str) -> tuple[str, str, int]:
     return rule_id, key, int(float(deadline))
 
 
+def _parse_events(raw_events: list[bytes], rule_id: str, key: str) -> list[GroupEvent]:
+    """Valid events of a window; a corrupt entry is logged and skipped, not the whole window."""
+    events = []
+    for raw in raw_events:
+        try:
+            events.append(GroupEvent.model_validate_json(raw))
+        except ValidationError:
+            log.warning("group_event_invalid", extra={"rule_id": rule_id, "group_key": key})
+    return events
+
+
 class GroupFlusher:
     """Claims due windows and writes their summary alerts (any number of replicas)."""
 
@@ -126,6 +141,9 @@ class GroupFlusher:
         created = 0
         for raw in claimed:
             flushing = raw.decode() if isinstance(raw, bytes) else raw
+            if flushing.startswith("expired:"):
+                log.error("group_window_expired", extra={"flushing_key": flushing[8:]})
+                continue
             created += await self._flush_window(flushing)
         return created
 
@@ -137,10 +155,8 @@ class GroupFlusher:
             log.warning("group_window_dropped", extra={"rule_id": rule_id, "group_key": key})
             await self._finish(flushing)
             return 0
-        try:
-            events = [GroupEvent.model_validate_json(raw) for raw in raw_events]
-        except ValidationError:
-            log.exception("group_window_invalid", extra={"rule_id": rule_id, "group_key": key})
+        events = _parse_events(raw_events, rule_id, key)
+        if not events:
             await self._finish(flushing)
             return 0
         now = datetime.now(UTC)
