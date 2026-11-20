@@ -159,3 +159,22 @@ Changes: `outbox-relay` polls every 50 ms instead of 500 ms; `delivery` runs 2 r
 - Saturation runs right after the rebuild were noisy (p99 ~2.9 s at 350 msg/s) while another agent's compose stack (`agent-a8f146d5f18928360-*`) was running on the same machine; the steady runs above are the clean numbers.
 
 Max sustainable rate (p99 < 2 s, lag drained): **≥ 350 msg/s, below ~460 msg/s** on this laptop; the limit is now ingest, not the pipeline.
+
+## Redis crash (hard kill) under load
+
+`loadtest/redis_kill_test.sh <log>`: steady 200 msg/s for 60 s, `docker kill` Redis at t = 20 s, start it 3 s later.
+
+| Redis persistence | Stream after restart | Accepted / alerts | Deliveries | Lost | p99 |
+|---|---|---|---|---|---|
+| RDB snapshots only, no volume (last snapshot 39 s old) | rolled back 3 253 entries | 11 118 / 11 118 | 21 858 / 22 236 | **378** (stuck `pending`) | 1.8 s |
+| AOF `everysec` on a named volume | kept growing | 11 312 / 11 312 | 22 624 / 22 624 | **0** | 3.0 s |
+
+- Alerts survived even without AOF: the processor had already written them to Postgres; replayed stream entries were absorbed by dedup and `ON CONFLICT`.
+- The loss was relayed-but-undelivered jobs: the outbox row said relayed, the `deliveries` entry vanished with the snapshot rollback.
+- Events not accepted during the outage (~700–900) got an error, not a 202, so the source knows to retry.
+- `everysec` can still lose up to ~1 s on a crash. The relay reconciler (`services/outbox_relay/reconcile.py`) closes that gap from Postgres: every 10 s it re-publishes deliveries still `pending` 30 s after relaying. Started after the RDB-only run above, it found exactly the 378 lost jobs and all 22 236 deliveries of that run ended `delivered`.
+
+### Lost delivery jobs (deterministic)
+
+`loadtest/lost_jobs_test.sh <log>`: steady 100 msg/s for 60 s; at t = 15 s delivery is stopped for 3 s and the `deliveries` stream is trimmed to 0, wiping 717 unread jobs.
+Result (`steady-9b6d7c12`): 12 000 / 12 000 delivered, lost = 0, 755 re-published by the reconciler (717 wiped + jobs in flight at the stop, absorbed by `delivery-done`), p50 40 ms, p99 37.7 s = 30 s stale threshold + up to 10 s tick.
