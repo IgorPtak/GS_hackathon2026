@@ -23,8 +23,10 @@ from .routers import (
     approvals,
     config,
     fix_proposals,
+    metrics,
     ops,
     phone_simulator,
+    recipients,
     rules,
     runbooks,
     schema_profiles,
@@ -47,6 +49,8 @@ ROUTERS = (
     phone_simulator,
     stream,
     ops,
+    metrics,
+    recipients,
 )
 
 
