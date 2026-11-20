@@ -58,3 +58,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-25 metrics summary: /api/v1/metrics/summary from Prometheus (same PromQL as the Grafana dashboard, null when no data, never 5xx) + open alerts from Postgres; MetricsPanel tiles refresh every 5 s, paused while hidden, link to Grafana.
 - B-18 channel preferences: PUT /recipients/{id}/channel-preferences validates channel ids and timezones (422 dot paths), compares with the stored document so a repeated PUT saves nothing; ChannelPreferencesEditor in a Recipients section on the Rules page.
 - B-08-eval LLM runbook eval: 12 runbooks written like non-technical users (typos, PL/EN, prose steps) with expected steps, scoring (step count, action precision/recall, approval accuracy, latency) and a model-comparison script.
+- D-01 README (quickstart, URLs, tabs, what is mocked, load-test results from A-21, AI usage, limitations) and docs/demo.md scene-by-scene script (written by Gemini, reviewed).
