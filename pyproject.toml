@@ -1,0 +1,67 @@
+[project]
+name = "alerting-hackathon"
+version = "0.1.0"
+description = "Flexible Alerting & Notification Service (hackathon workspace root)"
+requires-python = ">=3.12"
+dependencies = [
+    "alerting-contracts",
+    "alerting-core",
+    "pydantic>=2",
+    "pydantic-settings",
+    "pyyaml",
+    "fastapi",
+    "uvicorn[standard]",
+    "uvloop",
+    "orjson",
+    "httpx",
+    "redis>=5",
+    "asyncpg",
+    "prometheus-client",
+    "watchfiles",
+    "python-ulid",
+]
+
+[dependency-groups]
+dev = ["pytest", "pytest-asyncio", "ruff", "respx", "jsonschema"]
+
+[tool.uv]
+# Virtual root: the workspace members are installed, the root itself is not a package.
+package = false
+
+[tool.uv.workspace]
+members = ["contracts", "packages/alerting_core"]
+
+[tool.uv.sources]
+alerting-contracts = { workspace = true }
+alerting-core = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+# contracts/alerting_contracts predates the 100-column rule and is frozen (CLAUDE.md, contracts
+# README). Its long lines and formatting are exempt until the orchestrator reformats it.
+[tool.ruff.lint.per-file-ignores]
+"contracts/alerting_contracts/*.py" = ["E501"]
+
+[tool.ruff.format]
+exclude = ["contracts/alerting_contracts/*.py"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+# Integration tests need the running compose stack; `make test-integration` selects them.
+addopts = "-m 'not integration'"
+markers = ["integration: needs the running compose stack (Postgres, Redis, Mailpit)"]
+testpaths = ["packages", "services", "plugins", "tests"]
+pythonpath = [".", "contracts", "packages/alerting_core"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = []

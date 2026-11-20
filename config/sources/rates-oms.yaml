@@ -1,0 +1,4 @@
+id: rates-oms
+type: webhook
+team: rates
+description: Order management system webhook (Team Rates)

@@ -1,0 +1,6 @@
+id: email
+type: email
+runbook_presentation: full
+retry: { max_attempts: 5, initial_backoff: 1s, max_backoff: 30s }
+fallback_channel_id: ui
+settings: { smtp_host: mailpit, smtp_port: 1025, from_address: alerts@example.com }

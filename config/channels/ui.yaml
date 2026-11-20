@@ -1,0 +1,4 @@
+id: ui
+type: ui
+description: In-app alert feed, delivered once per alert to the team
+runbook_presentation: full

@@ -1,0 +1,182 @@
+# Local stack. `docker compose up -d --build` starts everything except the web profile.
+# Scale workers with: docker compose up -d --scale processor=4
+
+x-env-file: &env-file
+  - path: .env.example
+  - path: .env
+    required: false
+
+# All Python services share one image, built once (same image name and Dockerfile).
+x-python-service: &python-service
+  build:
+    context: .
+    dockerfile: deploy/python.Dockerfile
+  image: alerting-python:dev
+  env_file: *env-file
+  volumes:
+    - ./config:/app/config:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16
+    env_file: *env-file
+    # Published so host-side tests (pytest, smoke, load test) reach the same database.
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs *.sql once, on first start of an empty volume.
+      - ./deploy/postgres/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7
+    # Published so host-side stream tests run against the real Redis.
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  # Local LLM is optional: only started with `--profile local-llm`.
+  ollama:
+    profiles: ["local-llm"]
+    image: ollama/ollama:latest
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+  ingest:
+    <<: *python-service
+    command: ["uvicorn", "services.ingest.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "${INGEST_WORKERS:-2}", "--loop", "uvloop"]
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mock-gateway:
+    <<: *python-service
+    command: ["uvicorn", "services.mock_gateway.main:app", "--host", "0.0.0.0", "--port", "8090"]
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    <<: *python-service
+    command: ["uvicorn", "services.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Workers expose /healthz (and later /metrics) on an internal port only. Prometheus scrapes
+  # them over the compose network, so nothing is published to the host.
+  processor:
+    <<: *python-service
+    command: ["uvicorn", "services.processor.main:app", "--host", "0.0.0.0", "--port", "9101"]
+    expose:
+      - "9101"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9101/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  outbox-relay:
+    <<: *python-service
+    command: ["uvicorn", "services.outbox_relay.main:app", "--host", "0.0.0.0", "--port", "9102"]
+    expose:
+      - "9102"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9102/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  delivery:
+    <<: *python-service
+    command: ["uvicorn", "services.delivery.main:app", "--host", "0.0.0.0", "--port", "9103"]
+    expose:
+      - "9103"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9103/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  runbook-runner:
+    <<: *python-service
+    command: ["uvicorn", "services.runbook_runner.main:app", "--host", "0.0.0.0", "--port", "9104"]
+    expose:
+      - "9104"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9104/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # nginx serves the built SPA and proxies /api/v1/ingest -> ingest:8001 and /api -> api:8000.
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      api:
+        condition: service_healthy
+      ingest:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  ollama:

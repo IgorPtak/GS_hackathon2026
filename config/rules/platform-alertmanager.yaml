@@ -1,0 +1,14 @@
+id: platform-alertmanager
+team: platform
+description: Firing Alertmanager alerts for the platform team
+when:
+  all:
+    - { field: labels.alertname, op: exists, value: true }
+    - { field: status, op: eq, value: firing }
+route: { channels: [ui, email] }
+present:
+  title: "{{labels.alertname}} on {{labels.instance}}"
+  body: "{{annotations.summary}}"
+  fields: [labels.alertname, labels.instance, labels.severity]
+  color: red
+dedup: { window: 60s }

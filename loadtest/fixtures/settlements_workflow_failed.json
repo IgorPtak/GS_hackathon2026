@@ -1,0 +1,12 @@
+{
+  "eventType": "WORKFLOW_FAILED",
+  "workflowId": "wf-settle-20261120-0042",
+  "service": "settlement-engine",
+  "severity": "CRITICAL",
+  "timestamp": "2026-11-20T10:15:00Z",
+  "attempt": 3,
+  "error": {
+    "code": "UPSTREAM_TIMEOUT",
+    "message": "Custodian API did not respond within 30s"
+  }
+}

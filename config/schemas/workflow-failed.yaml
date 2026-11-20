@@ -1,0 +1,11 @@
+id: workflow-failed
+description: WORKFLOW_FAILED events from the settlement engine
+priority: 10
+match: { field: eventType, op: eq, value: WORKFLOW_FAILED }
+fields:
+  type: eventType
+  source: { const: settlements-engine }
+  severity: { path: severity, value_map: { CRITICAL: critical, ERROR: error, WARN: warning, INFO: info }, default: warning }
+  occurred_at: { path: timestamp, format: iso8601 }
+  entity: workflowId
+fingerprint: [eventType, workflowId]

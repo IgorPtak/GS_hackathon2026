@@ -1,0 +1,16 @@
+id: generic
+description: >-
+  Fallback for events no profile matches. Matches only when a severity-like key is present;
+  the heuristics (severity, level, lvl, labels.severity; timestamp, ts, at, time) are applied in code.
+  Unmatched shapes go to the unknown-schema inbox.
+priority: 0
+match:
+  any:
+    - { field: severity, op: exists, value: true }
+    - { field: level, op: exists, value: true }
+    - { field: lvl, op: exists, value: true }
+    - { field: labels.severity, op: exists, value: true }
+fields:
+  type: { const: unknown }
+  source: { const: generic-webhook }
+fingerprint: [evt, svc]

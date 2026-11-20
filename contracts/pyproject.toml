@@ -1,0 +1,13 @@
+[project]
+name = "alerting-contracts"
+version = "0.1.0"
+description = "Frozen Pydantic contracts shared by backend and UI tracks (packaging only)"
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["alerting_contracts"]

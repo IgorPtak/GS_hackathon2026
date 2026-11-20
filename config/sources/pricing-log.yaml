@@ -1,0 +1,9 @@
+id: pricing-log
+type: log_tail
+team: pricing
+description: Pricing engine log file (Team Pricing)
+settings:
+  path: /var/log/pricing/pricing_engine.log
+  start_at: end
+  line_format: regex
+  line_pattern: '^(?P<timestamp>\S+) (?P<level>[A-Z]+) (?P<service>\S+) instrument=(?P<instrument>\S+) feed=(?P<feed>\S+) age_ms=(?P<age_ms>\d+) msg="(?P<msg>[^"]*)"$'

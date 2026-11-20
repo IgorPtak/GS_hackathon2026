@@ -1,0 +1,4 @@
+id: alertmanager
+type: alertmanager
+team: platform
+description: Prometheus Alertmanager webhook receiver (Team Platform)

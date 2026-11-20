@@ -1,0 +1,7 @@
+id: phone
+type: phone
+description: Mock phone call shown in the phone simulator
+runbook_presentation: link
+retry: { max_attempts: 3, initial_backoff: 1s, max_backoff: 10s }
+fallback_channel_id: sms
+settings: { gateway_url: "http://mock-gateway:8090/phone" }
