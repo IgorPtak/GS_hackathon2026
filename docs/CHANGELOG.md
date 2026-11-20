@@ -13,3 +13,6 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-02 alerting_core foundation: Settings, JSON logging, parse_duration, asyncpg/Redis factories, Prometheus helpers, StreamConsumer (ack after success, XAUTOCLAIM > 30 s idle, <stream>-dlq after 5 deliveries)
 - A-04 ingest: ingest service with POST /api/v1/ingest/{source_id} and /batch, idempotency via SET NX, source plugin registry and webhook source, /metrics.
 - A-01 smoke test: cumulative per-gate end-to-end checks (3h/7h/11h/14h) in scripts/smoke_test.py.
+- B-05 RecentEventsPanel: polls /api/v1/events/recent every 2 s (paused while hidden) with source filter, collapsible JSON payload and error banner; Schemas and Alerts tabs.
+- B-10 action plugins: registry + http_get, webhook (YAML-only), retry_workflow, restart_service, open_ticket, escalate; every config/actions/*.yaml resolves to a plugin.
+- B-08 LLM client: alerting_core.llm LlmClient (OpenAI-compatible, json_schema output, one validation retry, think-block strip, LLM_ALLOWED_HOSTS), Luhn-aware redact_secrets, in-memory/Redis cache, LlmConfig.from_settings, scripts/check_llm.py.
