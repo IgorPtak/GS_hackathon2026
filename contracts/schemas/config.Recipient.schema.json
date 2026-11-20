@@ -1,0 +1,180 @@
+{
+  "$defs": {
+    "ChannelPreference": {
+      "additionalProperties": false,
+      "description": "First matching preference wins. Outside working_hours, `otherwise` channels are used.",
+      "properties": {
+        "when": {
+          "$ref": "#/$defs/PreferenceMatch"
+        },
+        "channels": {
+          "items": {
+            "examples": [
+              "rates-large-rejections"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Channels",
+          "type": "array"
+        },
+        "working_hours": {
+          "anyOf": [
+            {
+              "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Working Hours"
+        },
+        "timezone": {
+          "default": "Europe/Warsaw",
+          "title": "Timezone",
+          "type": "string"
+        },
+        "otherwise": {
+          "items": {
+            "examples": [
+              "rates-large-rejections"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+            "type": "string"
+          },
+          "title": "Otherwise",
+          "type": "array"
+        }
+      },
+      "required": [
+        "channels"
+      ],
+      "title": "ChannelPreference",
+      "type": "object"
+    },
+    "Contacts": {
+      "additionalProperties": false,
+      "properties": {
+        "email": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Email"
+        },
+        "sms": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sms"
+        },
+        "phone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Phone"
+        }
+      },
+      "title": "Contacts",
+      "type": "object"
+    },
+    "PreferenceMatch": {
+      "additionalProperties": false,
+      "properties": {
+        "severities": {
+          "description": "Empty = any.",
+          "items": {
+            "$ref": "#/$defs/Severity"
+          },
+          "title": "Severities",
+          "type": "array"
+        },
+        "sources": {
+          "description": "normalized.source values; empty = any.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Sources",
+          "type": "array"
+        }
+      },
+      "title": "PreferenceMatch",
+      "type": "object"
+    },
+    "Severity": {
+      "description": "Ordered from least to most severe; comparisons use SEVERITY_ORDER.",
+      "enum": [
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "config/recipients/<id>.yaml.",
+  "properties": {
+    "id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "display_name": {
+      "title": "Display Name",
+      "type": "string"
+    },
+    "teams": {
+      "items": {
+        "examples": [
+          "rates-large-rejections"
+        ],
+        "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+        "type": "string"
+      },
+      "title": "Teams",
+      "type": "array"
+    },
+    "contacts": {
+      "$ref": "#/$defs/Contacts"
+    },
+    "channel_preferences": {
+      "items": {
+        "$ref": "#/$defs/ChannelPreference"
+      },
+      "title": "Channel Preferences",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "display_name"
+  ],
+  "title": "Recipient",
+  "type": "object"
+}

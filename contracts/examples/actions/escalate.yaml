@@ -1,0 +1,11 @@
+id: escalate
+type: webhook
+description: Page the team lead through the incident webhook
+approval: required
+params:
+  workflow_id: { description: Affected workflow }
+  reason: { description: Why we escalate, is_required: false }
+settings:
+  url: "http://mock-gateway:8090/webhooks/escalations"
+  method: POST
+  body_template: '{"workflow": "{{workflow_id}}", "reason": "{{reason}}"}'

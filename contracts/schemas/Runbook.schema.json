@@ -1,0 +1,207 @@
+{
+  "$defs": {
+    "ApprovalPolicy": {
+      "enum": [
+        "none",
+        "required"
+      ],
+      "title": "ApprovalPolicy",
+      "type": "string"
+    },
+    "RunIf": {
+      "enum": [
+        "always",
+        "previous_failed",
+        "previous_succeeded"
+      ],
+      "title": "RunIf",
+      "type": "string"
+    },
+    "RunbookFormat": {
+      "enum": [
+        "yaml",
+        "markdown",
+        "text"
+      ],
+      "title": "RunbookFormat",
+      "type": "string"
+    },
+    "RunbookStep": {
+      "additionalProperties": false,
+      "description": "One normalized step. `text` and `params` are templates filled from the alert.",
+      "properties": {
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/$defs/StepKind"
+        },
+        "text": {
+          "examples": [
+            "Rejected {{payload.currency}} {{payload.notional}}"
+          ],
+          "title": "Text",
+          "type": "string"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "examples": [
+                "rates-large-rejections"
+              ],
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Action id; required for check/action steps that execute.",
+          "title": "Action"
+        },
+        "params": {
+          "additionalProperties": {
+            "examples": [
+              "Rejected {{payload.currency}} {{payload.notional}}"
+            ],
+            "type": "string"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "approval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ApprovalPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None = inherit from the action config."
+        },
+        "is_automatic": {
+          "default": false,
+          "description": "Runs without a click when the alert opens.",
+          "title": "Is Automatic",
+          "type": "boolean"
+        },
+        "run_if": {
+          "$ref": "#/$defs/RunIf",
+          "default": "always"
+        },
+        "max_attempts": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "kind",
+        "text"
+      ],
+      "title": "RunbookStep",
+      "type": "object"
+    },
+    "StepKind": {
+      "enum": [
+        "text",
+        "check",
+        "action"
+      ],
+      "title": "StepKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A runbook as stored: original source plus normalized steps.",
+  "properties": {
+    "id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "team": {
+      "anyOf": [
+        {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Team"
+    },
+    "format": {
+      "$ref": "#/$defs/RunbookFormat"
+    },
+    "source": {
+      "description": "Original text, always shown next to the steps.",
+      "title": "Source",
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/RunbookStep"
+      },
+      "title": "Steps",
+      "type": "array"
+    },
+    "normalized_by": {
+      "description": "fallback = LLM unavailable, whole text kept as one text step.",
+      "enum": [
+        "parser",
+        "llm",
+        "fallback"
+      ],
+      "title": "Normalized By",
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "format",
+    "source",
+    "steps",
+    "normalized_by"
+  ],
+  "title": "Runbook",
+  "type": "object"
+}

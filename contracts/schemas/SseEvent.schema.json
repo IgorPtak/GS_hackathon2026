@@ -1,0 +1,1947 @@
+{
+  "$defs": {
+    "ActionRun": {
+      "additionalProperties": false,
+      "description": "One execution of a runbook step's action for an alert (table action_runs).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "alert_id": {
+          "title": "Alert Id",
+          "type": "string"
+        },
+        "runbook_id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Runbook Id",
+          "type": "string"
+        },
+        "step_index": {
+          "title": "Step Index",
+          "type": "integer"
+        },
+        "action_id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "status": {
+          "$ref": "#/$defs/ActionRunStatus"
+        },
+        "attempt": {
+          "default": 1,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "requested_by": {
+          "$ref": "#/$defs/Actor"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "alert_id",
+        "runbook_id",
+        "step_index",
+        "action_id",
+        "params",
+        "status",
+        "requested_by",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "ActionRun",
+      "type": "object"
+    },
+    "ActionRunStatus": {
+      "enum": [
+        "pending_approval",
+        "approved",
+        "rejected",
+        "running",
+        "succeeded",
+        "failed",
+        "skipped"
+      ],
+      "title": "ActionRunStatus",
+      "type": "string"
+    },
+    "ActionRunUpdatedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "type": {
+          "const": "action_run.updated",
+          "default": "action_run.updated",
+          "title": "Type",
+          "type": "string"
+        },
+        "action_run": {
+          "$ref": "#/$defs/ActionRun"
+        }
+      },
+      "required": [
+        "at",
+        "action_run"
+      ],
+      "title": "ActionRunUpdatedEvent",
+      "type": "object"
+    },
+    "Actor": {
+      "additionalProperties": false,
+      "description": "Who performed something: a recipient id, 'system:<service>' or 'llm'.",
+      "properties": {
+        "id": {
+          "examples": [
+            "anna",
+            "system:processor",
+            "llm"
+          ],
+          "title": "Id",
+          "type": "string"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Actor",
+      "type": "object"
+    },
+    "Alert": {
+      "additionalProperties": false,
+      "description": "Table alerts. One alert per (rule_id, fingerprint) per dedup window, or per group window.",
+      "properties": {
+        "id": {
+          "description": "UUID v7.",
+          "title": "Id",
+          "type": "string"
+        },
+        "rule_id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "team": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Team",
+          "type": "string"
+        },
+        "schema_profile_id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Schema Profile Id",
+          "type": "string"
+        },
+        "source_id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "fingerprint": {
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "group_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Group Key"
+        },
+        "is_group_summary": {
+          "default": false,
+          "title": "Is Group Summary",
+          "type": "boolean"
+        },
+        "group_members": {
+          "items": {
+            "$ref": "#/$defs/GroupMember"
+          },
+          "title": "Group Members",
+          "type": "array"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "body": {
+          "default": "",
+          "title": "Body",
+          "type": "string"
+        },
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/AlertField"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "color": {
+          "default": "orange",
+          "title": "Color",
+          "type": "string"
+        },
+        "count": {
+          "default": 1,
+          "description": "Events folded in by dedup.",
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "first_seen": {
+          "format": "date-time",
+          "title": "First Seen",
+          "type": "string"
+        },
+        "last_seen": {
+          "format": "date-time",
+          "title": "Last Seen",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/AlertStatus",
+          "default": "open"
+        },
+        "runbook_id": {
+          "anyOf": [
+            {
+              "examples": [
+                "rates-large-rejections"
+              ],
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Runbook Id"
+        },
+        "last_event": {
+          "additionalProperties": true,
+          "description": "Raw payload of the most recent event.",
+          "title": "Last Event",
+          "type": "object"
+        },
+        "acknowledged_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Actor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "acknowledged_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Acknowledged At"
+        },
+        "resolved_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Actor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "resolved_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resolved At"
+        },
+        "resolution_reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResolutionReason"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "rule_id",
+        "team",
+        "schema_profile_id",
+        "source_id",
+        "fingerprint",
+        "severity",
+        "title",
+        "first_seen",
+        "last_seen",
+        "last_event"
+      ],
+      "title": "Alert",
+      "type": "object"
+    },
+    "AlertCreatedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "type": {
+          "const": "alert.created",
+          "default": "alert.created",
+          "title": "Type",
+          "type": "string"
+        },
+        "alert": {
+          "$ref": "#/$defs/Alert"
+        }
+      },
+      "required": [
+        "at",
+        "alert"
+      ],
+      "title": "AlertCreatedEvent",
+      "type": "object"
+    },
+    "AlertField": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "AlertField",
+      "type": "object"
+    },
+    "AlertStatus": {
+      "enum": [
+        "open",
+        "acknowledged",
+        "resolved"
+      ],
+      "title": "AlertStatus",
+      "type": "string"
+    },
+    "AlertUpdatedEvent": {
+      "additionalProperties": false,
+      "description": "Count, status or group membership changed. Dedup increments are coalesced to <= 1/s per alert.",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "type": {
+          "const": "alert.updated",
+          "default": "alert.updated",
+          "title": "Type",
+          "type": "string"
+        },
+        "alert": {
+          "$ref": "#/$defs/Alert"
+        }
+      },
+      "required": [
+        "at",
+        "alert"
+      ],
+      "title": "AlertUpdatedEvent",
+      "type": "object"
+    },
+    "ApprovalDecidedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "type": {
+          "const": "approval.decided",
+          "default": "approval.decided",
+          "title": "Type",
+          "type": "string"
+        },
+        "approval_request": {
+          "$ref": "#/$defs/ApprovalRequest"
+        }
+      },
+      "required": [
+        "at",
+        "approval_request"
+      ],
+      "title": "ApprovalDecidedEvent",
+      "type": "object"
+    },
+    "ApprovalDecision": {
+      "enum": [
+        "approve",
+        "reject"
+      ],
+      "title": "ApprovalDecision",
+      "type": "string"
+    },
+    "ApprovalPolicy": {
+      "enum": [
+        "none",
+        "required"
+      ],
+      "title": "ApprovalPolicy",
+      "type": "string"
+    },
+    "ApprovalRequest": {
+      "additionalProperties": false,
+      "description": "A human decision gating an action run (table approval_requests).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "action_run_id": {
+          "title": "Action Run Id",
+          "type": "string"
+        },
+        "alert_id": {
+          "title": "Alert Id",
+          "type": "string"
+        },
+        "team": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Team",
+          "type": "string"
+        },
+        "summary": {
+          "description": "Rendered step text shown to the approver.",
+          "title": "Summary",
+          "type": "string"
+        },
+        "approval_code": {
+          "description": "Reply 'APPROVE <code>' or 'REJECT <code>'.",
+          "pattern": "^[0-9]{4}$",
+          "title": "Approval Code",
+          "type": "string"
+        },
+        "requested_at": {
+          "format": "date-time",
+          "title": "Requested At",
+          "type": "string"
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ApprovalDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "decided_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Actor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "decided_via": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ApprovalVia"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "decided_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decided At"
+        },
+        "comment": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Comment"
+        }
+      },
+      "required": [
+        "id",
+        "action_run_id",
+        "alert_id",
+        "team",
+        "summary",
+        "approval_code",
+        "requested_at"
+      ],
+      "title": "ApprovalRequest",
+      "type": "object"
+    },
+    "ApprovalRequestedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "type": {
+          "const": "approval.requested",
+          "default": "approval.requested",
+          "title": "Type",
+          "type": "string"
+        },
+        "approval_request": {
+          "$ref": "#/$defs/ApprovalRequest"
+        }
+      },
+      "required": [
+        "at",
+        "approval_request"
+      ],
+      "title": "ApprovalRequestedEvent",
+      "type": "object"
+    },
+    "ApprovalVia": {
+      "enum": [
+        "ui",
+        "sms",
+        "phone"
+      ],
+      "title": "ApprovalVia",
+      "type": "string"
+    },
+    "AutoResolvePolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "on_resolution_event": {
+          "default": true,
+          "title": "On Resolution Event",
+          "type": "boolean"
+        },
+        "after_silence": {
+          "anyOf": [
+            {
+              "examples": [
+                "60s",
+                "5m",
+                "1h"
+              ],
+              "pattern": "^[0-9]+(ms|s|m|h|d)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "After Silence"
+        }
+      },
+      "title": "AutoResolvePolicy",
+      "type": "object"
+    },
+    "ChannelType": {
+      "enum": [
+        "ui",
+        "email",
+        "sms",
+        "phone",
+        "webhook"
+      ],
+      "title": "ChannelType",
+      "type": "string"
+    },
+    "ConditionAll": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ConditionAll"
+              },
+              {
+                "$ref": "#/$defs/ConditionAny"
+              },
+              {
+                "$ref": "#/$defs/ConditionNot"
+              },
+              {
+                "$ref": "#/$defs/ConditionLeaf"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "All",
+          "type": "array"
+        }
+      },
+      "required": [
+        "all"
+      ],
+      "title": "ConditionAll",
+      "type": "object"
+    },
+    "ConditionAny": {
+      "additionalProperties": false,
+      "properties": {
+        "any": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ConditionAll"
+              },
+              {
+                "$ref": "#/$defs/ConditionAny"
+              },
+              {
+                "$ref": "#/$defs/ConditionNot"
+              },
+              {
+                "$ref": "#/$defs/ConditionLeaf"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Any",
+          "type": "array"
+        }
+      },
+      "required": [
+        "any"
+      ],
+      "title": "ConditionAny",
+      "type": "object"
+    },
+    "ConditionLeaf": {
+      "additionalProperties": false,
+      "description": "Compare one field. A missing field never matches, except `exists` with value false.",
+      "properties": {
+        "field": {
+          "examples": [
+            "payload.notional",
+            "normalized.severity"
+          ],
+          "minLength": 1,
+          "title": "Field",
+          "type": "string"
+        },
+        "op": {
+          "$ref": "#/$defs/ConditionOperator"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "field",
+        "op"
+      ],
+      "title": "ConditionLeaf",
+      "type": "object"
+    },
+    "ConditionNot": {
+      "additionalProperties": false,
+      "properties": {
+        "not": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionAll"
+            },
+            {
+              "$ref": "#/$defs/ConditionAny"
+            },
+            {
+              "$ref": "#/$defs/ConditionNot"
+            },
+            {
+              "$ref": "#/$defs/ConditionLeaf"
+            }
+          ],
+          "title": "Not"
+        }
+      },
+      "required": [
+        "not"
+      ],
+      "title": "ConditionNot",
+      "type": "object"
+    },
+    "ConditionOperator": {
+      "enum": [
+        "eq",
+        "ne",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "in",
+        "glob",
+        "regex",
+        "exists"
+      ],
+      "title": "ConditionOperator",
+      "type": "string"
+    },
+    "ConfigChangedEvent": {
+      "additionalProperties": false,
+      "description": "Also the payload of pub/sub channel `config.changed` that makes workers reload.",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "type": {
+          "const": "config.changed",
+          "default": "config.changed",
+          "title": "Type",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "at",
+        "kind",
+        "id",
+        "version"
+      ],
+      "title": "ConfigChangedEvent",
+      "type": "object"
+    },
+    "DedupPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "window": {
+          "default": "60s",
+          "examples": [
+            "60s",
+            "5m",
+            "1h"
+          ],
+          "pattern": "^[0-9]+(ms|s|m|h|d)$",
+          "title": "Window",
+          "type": "string"
+        },
+        "fingerprint": {
+          "anyOf": [
+            {
+              "items": {
+                "examples": [
+                  "payload.notional",
+                  "normalized.severity"
+                ],
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Overrides the schema profile fingerprint for this rule.",
+          "title": "Fingerprint"
+        }
+      },
+      "title": "DedupPolicy",
+      "type": "object"
+    },
+    "Delivery": {
+      "additionalProperties": false,
+      "description": "Table deliveries; one row per outbox delivery entry, updated by delivery workers.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "alert_id": {
+          "title": "Alert Id",
+          "type": "string"
+        },
+        "team": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Team",
+          "type": "string"
+        },
+        "recipient_id": {
+          "anyOf": [
+            {
+              "examples": [
+                "rates-large-rejections"
+              ],
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recipient Id"
+        },
+        "channel_id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Channel Id",
+          "type": "string"
+        },
+        "channel_type": {
+          "$ref": "#/$defs/ChannelType"
+        },
+        "purpose": {
+          "$ref": "#/$defs/DeliveryPurpose"
+        },
+        "status": {
+          "$ref": "#/$defs/DeliveryStatus"
+        },
+        "attempt": {
+          "default": 0,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "last_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Error"
+        },
+        "is_fallback": {
+          "default": false,
+          "title": "Is Fallback",
+          "type": "boolean"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "delivered_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delivered At"
+        }
+      },
+      "required": [
+        "id",
+        "alert_id",
+        "team",
+        "channel_id",
+        "channel_type",
+        "purpose",
+        "status",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "Delivery",
+      "type": "object"
+    },
+    "DeliveryPurpose": {
+      "enum": [
+        "alert",
+        "approval_request",
+        "group_summary"
+      ],
+      "title": "DeliveryPurpose",
+      "type": "string"
+    },
+    "DeliveryStatus": {
+      "enum": [
+        "pending",
+        "sent",
+        "failed",
+        "delivered",
+        "dead_lettered",
+        "suppressed"
+      ],
+      "title": "DeliveryStatus",
+      "type": "string"
+    },
+    "DeliveryUpdatedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "type": {
+          "const": "delivery.updated",
+          "default": "delivery.updated",
+          "title": "Type",
+          "type": "string"
+        },
+        "delivery": {
+          "$ref": "#/$defs/Delivery"
+        }
+      },
+      "required": [
+        "at",
+        "delivery"
+      ],
+      "title": "DeliveryUpdatedEvent",
+      "type": "object"
+    },
+    "FixKind": {
+      "enum": [
+        "threshold",
+        "fields",
+        "dedup_window",
+        "runbook_step",
+        "other"
+      ],
+      "title": "FixKind",
+      "type": "string"
+    },
+    "FixProposal": {
+      "additionalProperties": false,
+      "description": "Table fix_proposals. Created from an alert, decided by the rule's owner team.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "alert_id": {
+          "title": "Alert Id",
+          "type": "string"
+        },
+        "rule_id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "runbook_id": {
+          "anyOf": [
+            {
+              "examples": [
+                "rates-large-rejections"
+              ],
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Runbook Id"
+        },
+        "owner_team": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Owner Team",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/FixKind"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "proposed_rule": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rule"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "proposed_runbook_step": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunbookStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "proposed_by": {
+          "$ref": "#/$defs/Actor"
+        },
+        "status": {
+          "$ref": "#/$defs/ProposalStatus",
+          "default": "pending"
+        },
+        "decided_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Actor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "decided_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decided At"
+        },
+        "decision_comment": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decision Comment"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "alert_id",
+        "rule_id",
+        "owner_team",
+        "kind",
+        "description",
+        "proposed_by",
+        "created_at"
+      ],
+      "title": "FixProposal",
+      "type": "object"
+    },
+    "FixProposalEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "type": {
+          "const": "fix_proposal.updated",
+          "default": "fix_proposal.updated",
+          "title": "Type",
+          "type": "string"
+        },
+        "fix_proposal": {
+          "$ref": "#/$defs/FixProposal"
+        }
+      },
+      "required": [
+        "at",
+        "fix_proposal"
+      ],
+      "title": "FixProposalEvent",
+      "type": "object"
+    },
+    "GroupMember": {
+      "additionalProperties": false,
+      "description": "One distinct event fingerprint inside a group summary alert (drill-down row).",
+      "properties": {
+        "fingerprint": {
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        },
+        "last_seen": {
+          "format": "date-time",
+          "title": "Last Seen",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fingerprint",
+        "title",
+        "count",
+        "last_seen"
+      ],
+      "title": "GroupMember",
+      "type": "object"
+    },
+    "GroupPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "items": {
+            "examples": [
+              "payload.notional",
+              "normalized.severity"
+            ],
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "By",
+          "type": "array"
+        },
+        "window": {
+          "examples": [
+            "60s",
+            "5m",
+            "1h"
+          ],
+          "pattern": "^[0-9]+(ms|s|m|h|d)$",
+          "title": "Window",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "window"
+      ],
+      "title": "GroupPolicy",
+      "type": "object"
+    },
+    "NotificationEvent": {
+      "additionalProperties": false,
+      "description": "Delivery through the `ui` channel: a toast for the team.",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "type": {
+          "const": "notification",
+          "default": "notification",
+          "title": "Type",
+          "type": "string"
+        },
+        "alert_id": {
+          "title": "Alert Id",
+          "type": "string"
+        },
+        "team": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Team",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "delivery_id": {
+          "title": "Delivery Id",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "at",
+        "alert_id",
+        "team",
+        "title",
+        "severity",
+        "delivery_id"
+      ],
+      "title": "NotificationEvent",
+      "type": "object"
+    },
+    "PhoneMessage": {
+      "additionalProperties": false,
+      "description": "A mock SMS or phone call as shown in the phone simulator.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "recipient_id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Recipient Id",
+          "type": "string"
+        },
+        "channel_type": {
+          "enum": [
+            "sms",
+            "phone"
+          ],
+          "title": "Channel Type",
+          "type": "string"
+        },
+        "to": {
+          "title": "To",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "alert_id": {
+          "title": "Alert Id",
+          "type": "string"
+        },
+        "delivery_id": {
+          "title": "Delivery Id",
+          "type": "integer"
+        },
+        "approval_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Approval Code"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "recipient_id",
+        "channel_type",
+        "to",
+        "text",
+        "alert_id",
+        "delivery_id",
+        "at"
+      ],
+      "title": "PhoneMessage",
+      "type": "object"
+    },
+    "PhoneMessageEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "type": {
+          "const": "phone.message",
+          "default": "phone.message",
+          "title": "Type",
+          "type": "string"
+        },
+        "message": {
+          "$ref": "#/$defs/PhoneMessage"
+        }
+      },
+      "required": [
+        "at",
+        "message"
+      ],
+      "title": "PhoneMessageEvent",
+      "type": "object"
+    },
+    "Presentation": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "examples": [
+            "Rejected {{payload.currency}} {{payload.notional}}"
+          ],
+          "title": "Title",
+          "type": "string"
+        },
+        "body": {
+          "default": "",
+          "examples": [
+            "Rejected {{payload.currency}} {{payload.notional}}"
+          ],
+          "title": "Body",
+          "type": "string"
+        },
+        "fields": {
+          "items": {
+            "examples": [
+              "payload.notional",
+              "normalized.severity"
+            ],
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "color": {
+          "default": "orange",
+          "enum": [
+            "gray",
+            "blue",
+            "green",
+            "yellow",
+            "orange",
+            "red",
+            "purple"
+          ],
+          "title": "Color",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "Presentation",
+      "type": "object"
+    },
+    "ProposalStatus": {
+      "enum": [
+        "pending",
+        "accepted",
+        "rejected"
+      ],
+      "title": "ProposalStatus",
+      "type": "string"
+    },
+    "ResolutionReason": {
+      "enum": [
+        "manual",
+        "source_resolved",
+        "silence"
+      ],
+      "title": "ResolutionReason",
+      "type": "string"
+    },
+    "Route": {
+      "additionalProperties": false,
+      "properties": {
+        "teams": {
+          "description": "On-call recipients of these teams. Empty = the rule's team.",
+          "items": {
+            "examples": [
+              "rates-large-rejections"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+            "type": "string"
+          },
+          "title": "Teams",
+          "type": "array"
+        },
+        "recipients": {
+          "items": {
+            "examples": [
+              "rates-large-rejections"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+            "type": "string"
+          },
+          "title": "Recipients",
+          "type": "array"
+        },
+        "channels": {
+          "description": "Used for a recipient with no matching channel preference.",
+          "items": {
+            "examples": [
+              "rates-large-rejections"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+            "type": "string"
+          },
+          "title": "Channels",
+          "type": "array"
+        }
+      },
+      "title": "Route",
+      "type": "object"
+    },
+    "Rule": {
+      "additionalProperties": false,
+      "description": "config/rules/<id>.yaml.",
+      "properties": {
+        "id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "team": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Team",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionAll"
+            },
+            {
+              "$ref": "#/$defs/ConditionAny"
+            },
+            {
+              "$ref": "#/$defs/ConditionNot"
+            },
+            {
+              "$ref": "#/$defs/ConditionLeaf"
+            }
+          ],
+          "title": "When"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Severity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Overrides normalized severity."
+        },
+        "route": {
+          "$ref": "#/$defs/Route"
+        },
+        "present": {
+          "$ref": "#/$defs/Presentation"
+        },
+        "dedup": {
+          "$ref": "#/$defs/DedupPolicy"
+        },
+        "group": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "throttle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThrottlePolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "auto_resolve": {
+          "$ref": "#/$defs/AutoResolvePolicy"
+        },
+        "runbook": {
+          "anyOf": [
+            {
+              "examples": [
+                "rates-large-rejections"
+              ],
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Runbook"
+        }
+      },
+      "required": [
+        "id",
+        "team",
+        "when",
+        "present"
+      ],
+      "title": "Rule",
+      "type": "object"
+    },
+    "RunIf": {
+      "enum": [
+        "always",
+        "previous_failed",
+        "previous_succeeded"
+      ],
+      "title": "RunIf",
+      "type": "string"
+    },
+    "RunbookStep": {
+      "additionalProperties": false,
+      "description": "One normalized step. `text` and `params` are templates filled from the alert.",
+      "properties": {
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/$defs/StepKind"
+        },
+        "text": {
+          "examples": [
+            "Rejected {{payload.currency}} {{payload.notional}}"
+          ],
+          "title": "Text",
+          "type": "string"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "examples": [
+                "rates-large-rejections"
+              ],
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Action id; required for check/action steps that execute.",
+          "title": "Action"
+        },
+        "params": {
+          "additionalProperties": {
+            "examples": [
+              "Rejected {{payload.currency}} {{payload.notional}}"
+            ],
+            "type": "string"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "approval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ApprovalPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None = inherit from the action config."
+        },
+        "is_automatic": {
+          "default": false,
+          "description": "Runs without a click when the alert opens.",
+          "title": "Is Automatic",
+          "type": "boolean"
+        },
+        "run_if": {
+          "$ref": "#/$defs/RunIf",
+          "default": "always"
+        },
+        "max_attempts": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "kind",
+        "text"
+      ],
+      "title": "RunbookStep",
+      "type": "object"
+    },
+    "Severity": {
+      "description": "Ordered from least to most severe; comparisons use SEVERITY_ORDER.",
+      "enum": [
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "StepKind": {
+      "enum": [
+        "text",
+        "check",
+        "action"
+      ],
+      "title": "StepKind",
+      "type": "string"
+    },
+    "ThrottlePolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "max_deliveries": {
+          "description": "Per recipient, per rule, per period.",
+          "minimum": 1,
+          "title": "Max Deliveries",
+          "type": "integer"
+        },
+        "per": {
+          "examples": [
+            "60s",
+            "5m",
+            "1h"
+          ],
+          "pattern": "^[0-9]+(ms|s|m|h|d)$",
+          "title": "Per",
+          "type": "string"
+        }
+      },
+      "required": [
+        "max_deliveries",
+        "per"
+      ],
+      "title": "ThrottlePolicy",
+      "type": "object"
+    },
+    "UnknownSchemaDetectedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "type": {
+          "const": "unknown_schema.detected",
+          "default": "unknown_schema.detected",
+          "title": "Type",
+          "type": "string"
+        },
+        "sample": {
+          "$ref": "#/$defs/UnknownSchemaSample"
+        }
+      },
+      "required": [
+        "at",
+        "sample"
+      ],
+      "title": "UnknownSchemaDetectedEvent",
+      "type": "object"
+    },
+    "UnknownSchemaSample": {
+      "additionalProperties": false,
+      "description": "Table unknown_schema_samples; one row per distinct key shape.",
+      "properties": {
+        "shape_hash": {
+          "title": "Shape Hash",
+          "type": "string"
+        },
+        "source_id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "key_paths": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Key Paths",
+          "type": "array"
+        },
+        "sample_event": {
+          "additionalProperties": true,
+          "title": "Sample Event",
+          "type": "object"
+        },
+        "event_count": {
+          "title": "Event Count",
+          "type": "integer"
+        },
+        "first_seen": {
+          "format": "date-time",
+          "title": "First Seen",
+          "type": "string"
+        },
+        "last_seen": {
+          "format": "date-time",
+          "title": "Last Seen",
+          "type": "string"
+        }
+      },
+      "required": [
+        "shape_hash",
+        "source_id",
+        "key_paths",
+        "sample_event",
+        "event_count",
+        "first_seen",
+        "last_seen"
+      ],
+      "title": "UnknownSchemaSample",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "action_run.updated": "#/$defs/ActionRunUpdatedEvent",
+      "alert.created": "#/$defs/AlertCreatedEvent",
+      "alert.updated": "#/$defs/AlertUpdatedEvent",
+      "approval.decided": "#/$defs/ApprovalDecidedEvent",
+      "approval.requested": "#/$defs/ApprovalRequestedEvent",
+      "config.changed": "#/$defs/ConfigChangedEvent",
+      "delivery.updated": "#/$defs/DeliveryUpdatedEvent",
+      "fix_proposal.updated": "#/$defs/FixProposalEvent",
+      "notification": "#/$defs/NotificationEvent",
+      "phone.message": "#/$defs/PhoneMessageEvent",
+      "unknown_schema.detected": "#/$defs/UnknownSchemaDetectedEvent"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/AlertCreatedEvent"
+    },
+    {
+      "$ref": "#/$defs/AlertUpdatedEvent"
+    },
+    {
+      "$ref": "#/$defs/NotificationEvent"
+    },
+    {
+      "$ref": "#/$defs/DeliveryUpdatedEvent"
+    },
+    {
+      "$ref": "#/$defs/PhoneMessageEvent"
+    },
+    {
+      "$ref": "#/$defs/ActionRunUpdatedEvent"
+    },
+    {
+      "$ref": "#/$defs/ApprovalRequestedEvent"
+    },
+    {
+      "$ref": "#/$defs/ApprovalDecidedEvent"
+    },
+    {
+      "$ref": "#/$defs/FixProposalEvent"
+    },
+    {
+      "$ref": "#/$defs/UnknownSchemaDetectedEvent"
+    },
+    {
+      "$ref": "#/$defs/ConfigChangedEvent"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "additionalProperties": false,
+  "description": "config/teams/<id>.yaml.",
+  "properties": {
+    "id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "display_name": {
+      "title": "Display Name",
+      "type": "string"
+    },
+    "on_call": {
+      "description": "Recipient ids.",
+      "items": {
+        "examples": [
+          "rates-large-rejections"
+        ],
+        "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+        "type": "string"
+      },
+      "title": "On Call",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "display_name"
+  ],
+  "title": "Team",
+  "type": "object"
+}

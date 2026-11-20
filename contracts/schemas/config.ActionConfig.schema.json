@@ -1,0 +1,92 @@
+{
+  "$defs": {
+    "ActionParamSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "is_required": {
+          "default": true,
+          "title": "Is Required",
+          "type": "boolean"
+        }
+      },
+      "title": "ActionParamSpec",
+      "type": "object"
+    },
+    "ApprovalPolicy": {
+      "enum": [
+        "none",
+        "required"
+      ],
+      "title": "ApprovalPolicy",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "config/actions/<id>.yaml. `type` names the plugin; `webhook` actions need no code.",
+  "properties": {
+    "id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "type": {
+      "examples": [
+        "http_get",
+        "webhook",
+        "retry_workflow",
+        "restart_service",
+        "open_ticket",
+        "escalate"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "approval": {
+      "$ref": "#/$defs/ApprovalPolicy",
+      "default": "none"
+    },
+    "timeout": {
+      "default": "10s",
+      "examples": [
+        "60s",
+        "5m",
+        "1h"
+      ],
+      "pattern": "^[0-9]+(ms|s|m|h|d)$",
+      "title": "Timeout",
+      "type": "string"
+    },
+    "params": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ActionParamSpec"
+      },
+      "title": "Params",
+      "type": "object"
+    },
+    "settings": {
+      "additionalProperties": true,
+      "description": "webhook: url, method, headers, body_template.",
+      "title": "Settings",
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "type"
+  ],
+  "title": "ActionConfig",
+  "type": "object"
+}

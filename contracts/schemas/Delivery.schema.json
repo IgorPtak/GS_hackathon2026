@@ -1,0 +1,147 @@
+{
+  "$defs": {
+    "ChannelType": {
+      "enum": [
+        "ui",
+        "email",
+        "sms",
+        "phone",
+        "webhook"
+      ],
+      "title": "ChannelType",
+      "type": "string"
+    },
+    "DeliveryPurpose": {
+      "enum": [
+        "alert",
+        "approval_request",
+        "group_summary"
+      ],
+      "title": "DeliveryPurpose",
+      "type": "string"
+    },
+    "DeliveryStatus": {
+      "enum": [
+        "pending",
+        "sent",
+        "failed",
+        "delivered",
+        "dead_lettered",
+        "suppressed"
+      ],
+      "title": "DeliveryStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Table deliveries; one row per outbox delivery entry, updated by delivery workers.",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "integer"
+    },
+    "alert_id": {
+      "title": "Alert Id",
+      "type": "string"
+    },
+    "team": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Team",
+      "type": "string"
+    },
+    "recipient_id": {
+      "anyOf": [
+        {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Recipient Id"
+    },
+    "channel_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Channel Id",
+      "type": "string"
+    },
+    "channel_type": {
+      "$ref": "#/$defs/ChannelType"
+    },
+    "purpose": {
+      "$ref": "#/$defs/DeliveryPurpose"
+    },
+    "status": {
+      "$ref": "#/$defs/DeliveryStatus"
+    },
+    "attempt": {
+      "default": 0,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "last_error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Error"
+    },
+    "is_fallback": {
+      "default": false,
+      "title": "Is Fallback",
+      "type": "boolean"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "delivered_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Delivered At"
+    }
+  },
+  "required": [
+    "id",
+    "alert_id",
+    "team",
+    "channel_id",
+    "channel_type",
+    "purpose",
+    "status",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "Delivery",
+  "type": "object"
+}

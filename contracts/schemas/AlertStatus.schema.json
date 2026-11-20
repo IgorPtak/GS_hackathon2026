@@ -1,0 +1,9 @@
+{
+  "enum": [
+    "open",
+    "acknowledged",
+    "resolved"
+  ],
+  "title": "AlertStatus",
+  "type": "string"
+}

@@ -1,0 +1,325 @@
+{
+  "$defs": {
+    "Actor": {
+      "additionalProperties": false,
+      "description": "Who performed something: a recipient id, 'system:<service>' or 'llm'.",
+      "properties": {
+        "id": {
+          "examples": [
+            "anna",
+            "system:processor",
+            "llm"
+          ],
+          "title": "Id",
+          "type": "string"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Actor",
+      "type": "object"
+    },
+    "AlertField": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "AlertField",
+      "type": "object"
+    },
+    "AlertStatus": {
+      "enum": [
+        "open",
+        "acknowledged",
+        "resolved"
+      ],
+      "title": "AlertStatus",
+      "type": "string"
+    },
+    "GroupMember": {
+      "additionalProperties": false,
+      "description": "One distinct event fingerprint inside a group summary alert (drill-down row).",
+      "properties": {
+        "fingerprint": {
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        },
+        "last_seen": {
+          "format": "date-time",
+          "title": "Last Seen",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fingerprint",
+        "title",
+        "count",
+        "last_seen"
+      ],
+      "title": "GroupMember",
+      "type": "object"
+    },
+    "ResolutionReason": {
+      "enum": [
+        "manual",
+        "source_resolved",
+        "silence"
+      ],
+      "title": "ResolutionReason",
+      "type": "string"
+    },
+    "Severity": {
+      "description": "Ordered from least to most severe; comparisons use SEVERITY_ORDER.",
+      "enum": [
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Table alerts. One alert per (rule_id, fingerprint) per dedup window, or per group window.",
+  "properties": {
+    "id": {
+      "description": "UUID v7.",
+      "title": "Id",
+      "type": "string"
+    },
+    "rule_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Rule Id",
+      "type": "string"
+    },
+    "team": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Team",
+      "type": "string"
+    },
+    "schema_profile_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Schema Profile Id",
+      "type": "string"
+    },
+    "source_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Source Id",
+      "type": "string"
+    },
+    "fingerprint": {
+      "title": "Fingerprint",
+      "type": "string"
+    },
+    "group_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Group Key"
+    },
+    "is_group_summary": {
+      "default": false,
+      "title": "Is Group Summary",
+      "type": "boolean"
+    },
+    "group_members": {
+      "items": {
+        "$ref": "#/$defs/GroupMember"
+      },
+      "title": "Group Members",
+      "type": "array"
+    },
+    "severity": {
+      "$ref": "#/$defs/Severity"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "body": {
+      "default": "",
+      "title": "Body",
+      "type": "string"
+    },
+    "fields": {
+      "items": {
+        "$ref": "#/$defs/AlertField"
+      },
+      "title": "Fields",
+      "type": "array"
+    },
+    "color": {
+      "default": "orange",
+      "title": "Color",
+      "type": "string"
+    },
+    "count": {
+      "default": 1,
+      "description": "Events folded in by dedup.",
+      "minimum": 1,
+      "title": "Count",
+      "type": "integer"
+    },
+    "first_seen": {
+      "format": "date-time",
+      "title": "First Seen",
+      "type": "string"
+    },
+    "last_seen": {
+      "format": "date-time",
+      "title": "Last Seen",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AlertStatus",
+      "default": "open"
+    },
+    "runbook_id": {
+      "anyOf": [
+        {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Runbook Id"
+    },
+    "last_event": {
+      "additionalProperties": true,
+      "description": "Raw payload of the most recent event.",
+      "title": "Last Event",
+      "type": "object"
+    },
+    "acknowledged_by": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Actor"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "acknowledged_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Acknowledged At"
+    },
+    "resolved_by": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Actor"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "resolved_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Resolved At"
+    },
+    "resolution_reason": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ResolutionReason"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "id",
+    "rule_id",
+    "team",
+    "schema_profile_id",
+    "source_id",
+    "fingerprint",
+    "severity",
+    "title",
+    "first_seen",
+    "last_seen",
+    "last_event"
+  ],
+  "title": "Alert",
+  "type": "object"
+}

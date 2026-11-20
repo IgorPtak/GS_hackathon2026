@@ -1,0 +1,129 @@
+{
+  "$defs": {
+    "RenderedRunbookStep": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "title": "Index",
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/$defs/StepKind"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "examples": [
+                "rates-large-rejections"
+              ],
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action"
+        },
+        "params": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "requires_approval": {
+          "default": false,
+          "title": "Requires Approval",
+          "type": "boolean"
+        },
+        "is_automatic": {
+          "default": false,
+          "title": "Is Automatic",
+          "type": "boolean"
+        },
+        "missing_fields": {
+          "description": "Placeholders that had no value.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Fields",
+          "type": "array"
+        }
+      },
+      "required": [
+        "index",
+        "kind",
+        "text"
+      ],
+      "title": "RenderedRunbookStep",
+      "type": "object"
+    },
+    "RunbookFormat": {
+      "enum": [
+        "yaml",
+        "markdown",
+        "text"
+      ],
+      "title": "RunbookFormat",
+      "type": "string"
+    },
+    "StepKind": {
+      "enum": [
+        "text",
+        "check",
+        "action"
+      ],
+      "title": "StepKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "runbook_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Runbook Id",
+      "type": "string"
+    },
+    "alert_id": {
+      "title": "Alert Id",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "format": {
+      "$ref": "#/$defs/RunbookFormat"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/RenderedRunbookStep"
+      },
+      "title": "Steps",
+      "type": "array"
+    }
+  },
+  "required": [
+    "runbook_id",
+    "alert_id",
+    "title",
+    "format",
+    "source",
+    "steps"
+  ],
+  "title": "RenderedRunbook",
+  "type": "object"
+}

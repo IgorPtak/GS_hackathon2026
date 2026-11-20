@@ -1,0 +1,117 @@
+{
+  "$defs": {
+    "ChannelType": {
+      "enum": [
+        "ui",
+        "email",
+        "sms",
+        "phone",
+        "webhook"
+      ],
+      "title": "ChannelType",
+      "type": "string"
+    },
+    "RetryPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "max_attempts": {
+          "default": 5,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "initial_backoff": {
+          "default": "1s",
+          "examples": [
+            "60s",
+            "5m",
+            "1h"
+          ],
+          "pattern": "^[0-9]+(ms|s|m|h|d)$",
+          "title": "Initial Backoff",
+          "type": "string"
+        },
+        "max_backoff": {
+          "default": "30s",
+          "examples": [
+            "60s",
+            "5m",
+            "1h"
+          ],
+          "pattern": "^[0-9]+(ms|s|m|h|d)$",
+          "title": "Max Backoff",
+          "type": "string"
+        }
+      },
+      "title": "RetryPolicy",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "config/channels/<id>.yaml.",
+  "properties": {
+    "id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "type": {
+      "$ref": "#/$defs/ChannelType"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "runbook_presentation": {
+      "default": "full",
+      "description": "Email/UI show full steps; SMS/phone send a link.",
+      "enum": [
+        "full",
+        "link",
+        "none"
+      ],
+      "title": "Runbook Presentation",
+      "type": "string"
+    },
+    "retry": {
+      "$ref": "#/$defs/RetryPolicy"
+    },
+    "fallback_channel_id": {
+      "anyOf": [
+        {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fallback Channel Id"
+    },
+    "settings": {
+      "additionalProperties": true,
+      "description": "Plugin-specific. email: smtp_host, smtp_port, from_address. sms/phone: gateway_url. webhook: url, method, headers, body_template (Template rendered to JSON text).",
+      "title": "Settings",
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "type"
+  ],
+  "title": "ChannelConfig",
+  "type": "object"
+}

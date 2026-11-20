@@ -1,0 +1,98 @@
+{
+  "$defs": {
+    "Severity": {
+      "description": "Ordered from least to most severe; comparisons use SEVERITY_ORDER.",
+      "enum": [
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Shared fields extracted by a schema profile. Rules address them as `normalized.<name>`.",
+  "properties": {
+    "schema_profile_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Schema Profile Id",
+      "type": "string"
+    },
+    "type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Type"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source"
+    },
+    "severity": {
+      "$ref": "#/$defs/Severity",
+      "default": "warning"
+    },
+    "occurred_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Occurred At"
+    },
+    "entity": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Entity"
+    },
+    "fingerprint": {
+      "description": "sha256 hex of the profile's fingerprint field values.",
+      "title": "Fingerprint",
+      "type": "string"
+    },
+    "is_resolution": {
+      "default": false,
+      "description": "True when the profile's resolution condition matched.",
+      "title": "Is Resolution",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_profile_id",
+    "fingerprint"
+  ],
+  "title": "NormalizedFields",
+  "type": "object"
+}

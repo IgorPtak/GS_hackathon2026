@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "schema": "trade.rejected.v1",
+    "producer": "rates-oms",
+    "ts": 1795168502123
+  },
+  "payload": {
+    "tradeId": "T-20261120-000417",
+    "desk": "rates",
+    "reason": "LIMIT_BREACH",
+    "currency": "EUR",
+    "notional": 25000000,
+    "counterparty": "CPTY-0042",
+    "trader": "jdoe"
+  }
+}

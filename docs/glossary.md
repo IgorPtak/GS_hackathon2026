@@ -24,13 +24,13 @@ JSON on the wire is `snake_case` (no aliasing between Python and TypeScript).
 | **event envelope** | — | Wrapper around a raw event with ingest metadata (`event_id`, `source_id`, `received_at`, `sent_at`). | `alerting_contracts.events.EventEnvelope` |
 | **source** | źródło | A configured input that produces events: `webhook`, `alertmanager`, `log_tail`. | `config/sources/*.yaml`, `plugins/sources/`, `SourceConfig`, UI "Sources" |
 | **source type** | typ źródła | The plugin kind of a source (`webhook`, `alertmanager`, `log_tail`). | `SourceConfig.type`, `SourcePlugin.type` |
-| **schema profile** | profil schematu | YAML that recognises an event shape and maps its shared fields; does not filter. | `config/schemas/*.yaml`, `SchemaProfile`, table `schema_profiles`, UI "Schema profiles" |
+| **schema profile** | profil schematu | YAML that recognises an event shape and maps its shared fields; does not filter. | `config/schemas/*.yaml`, `SchemaProfile`, table `config_documents` (kind `schema_profile`), UI "Schema profiles" |
 | **generic profile** | profil `generic` | Fallback schema profile with heuristics (`severity`, `level`, `labels.severity`) for events no profile matches. | `config/schemas/generic.yaml`, id `generic` |
 | **field mapping** | mapowanie | How one normalized field is extracted (path, constant, format, value map). | `FieldMapping` |
 | **normalized fields** | pola znormalizowane / wspólne | Fields shared by all events after profile mapping: `type`, `source`, `severity`, `occurred_at`, `entity`, `fingerprint`, `is_resolution`. | `NormalizedFields`, rule paths prefixed `normalized.` |
 | **severity** | severity | Ordered level: `debug` < `info` < `warning` < `error` < `critical`. | `Severity` enum |
 | **fingerprint** | fingerprint | Stable hash of selected event fields; identical fingerprint = identical event for dedup. | `NormalizedFields.fingerprint`, `Alert.fingerprint` |
-| **rule** | reguła | Condition + route + presentation + dedup/group/throttle + optional runbook, owned by a team. | `config/rules/*.yaml`, `Rule`, table `rules`, UI "Rules" |
+| **rule** | reguła | Condition + route + presentation + dedup/group/throttle + optional runbook, owned by a team. | `config/rules/*.yaml`, `Rule`, table `config_documents` (kind `rule`), UI "Rules" |
 | **condition** | warunek | Tree of `all` / `any` / `not` / leaf `{field, op, value}` evaluated on raw event JSON and normalized fields. | `Condition`, `alerting_core.rules.evaluate_condition` |
 | **operator** | operator | Leaf comparison: `eq ne gt gte lt lte in glob regex exists`. | `ConditionOperator` |
 | **field path** | ścieżka | Dot path into the raw event (`payload.notional`) or normalized fields (`normalized.severity`). | `alerting_core.rules.resolve_field_path` |
@@ -44,13 +44,13 @@ JSON on the wire is `snake_case` (no aliasing between Python and TypeScript).
 | **alert** | alert | Internal record created from one or more matching events; has a status, count and audit. | `Alert`, table `alerts`, UI "Alerts" |
 | **alert status** | status | `open` → `acknowledged` → `resolved` (any → `resolved`). | `AlertStatus` |
 | **auto-resolve** | auto-zamykanie | Resolving an alert from a source resolution event or after silence. | `Rule.auto_resolve`, `Alert.resolution_reason` |
-| **recipient** | odbiorca (osoba) | A person with contacts and channel preferences. | `config/recipients/*.yaml`, `Recipient`, table `recipients` |
-| **team** | zespół | Group of recipients that owns rules and runbooks; selected in the UI dropdown. | `config/teams/*.yaml`, `Team`, table `teams`, UI team picker |
+| **recipient** | odbiorca (osoba) | A person with contacts and channel preferences. | `config/recipients/*.yaml`, `Recipient`, table `config_documents` (kind `recipient`) |
+| **team** | zespół | Group of recipients that owns rules and runbooks; selected in the UI dropdown. | `config/teams/*.yaml`, `Team`, table `config_documents` (kind `team`), UI team picker |
 | **contact** | kontakt | Address of a recipient on a channel type (email address, phone number). | `Recipient.contacts` |
 | **channel** | kanał | A configured delivery plugin instance: `ui`, `email`, `sms`, `phone`, `webhook`. | `config/channels/*.yaml`, `ChannelConfig`, `plugins/channels/`, `ChannelPlugin` |
 | **channel type** | typ kanału | Plugin kind of a channel. | `ChannelType` |
 | **fallback channel** | kanał zapasowy | Channel used when a delivery is dead-lettered on its primary channel. | `ChannelConfig.fallback_channel_id` |
-| **channel preference** | preferencja kanałów | Recipient rule: for alerts matching severity/source, use these channels during working hours, otherwise those. | `ChannelPreference`, table `channel_preferences`, UI "Channel preferences" |
+| **channel preference** | preferencja kanałów | Recipient rule: for alerts matching severity/source, use these channels during working hours, otherwise those. | `ChannelPreference` (inside `Recipient`), UI "Channel preferences" |
 | **working hours** | godziny | Time-of-day window (`08:00-20:00`, with timezone) inside which a preference's `channels` apply. | `ChannelPreference.working_hours` |
 | **on-call** | on-call / dyżur | Recipients of a team who receive alerts routed to the team. Static list (schedules are out of scope). | `Team.on_call` |
 | **delivery** | dostawa | One attempt-tracked notification of one alert to one recipient on one channel. | `Delivery`, table `deliveries`, stream `deliveries` |
@@ -58,7 +58,7 @@ JSON on the wire is `snake_case` (no aliasing between Python and TypeScript).
 | **outbox** | outbox | Postgres table written in the same transaction as the alert; relayed to Redis streams. | table `outbox`, `OutboxEntry`, `services/outbox_relay` |
 | **outbox relay** | relay | Process that moves unrelayed outbox rows to streams with `FOR UPDATE SKIP LOCKED`. | `services/outbox_relay` |
 | **dead-letter queue** | DLQ / kolejka błędów | Stream for deliveries that exhausted retries (and events that failed validation). | streams `deliveries-dlq`, `events-dlq` |
-| **runbook** | runbook | Response instructions for an alert type, stored in its original format plus normalized steps. | `config/runbooks/*`, `Runbook`, table `runbooks`, UI "Runbooks" |
+| **runbook** | runbook | Response instructions for an alert type, stored in its original format plus normalized steps. | `config/runbooks/*`, `Runbook`, table `config_documents` (kind `runbook`), UI "Runbooks" |
 | **runbook format** | format runbooka | `yaml`, `markdown` or `text`; each has a normalizer plugin. | `RunbookFormat`, `plugins/runbook_formats/` |
 | **runbook step** | krok | One normalized instruction: `kind` = `text` / `check` / `action`. | `RunbookStep` |
 | **rendered runbook** | — | Runbook steps with templates filled from one alert's values. | `RenderedRunbook` |

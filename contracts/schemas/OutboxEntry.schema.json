@@ -1,0 +1,60 @@
+{
+  "$defs": {
+    "OutboxKind": {
+      "enum": [
+        "delivery",
+        "runbook_job"
+      ],
+      "title": "OutboxKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Table outbox. Written in the same transaction as the alert change that caused it.",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "integer"
+    },
+    "kind": {
+      "$ref": "#/$defs/OutboxKind"
+    },
+    "alert_id": {
+      "title": "Alert Id",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "description": "DeliveryJob or RunbookJob as JSON.",
+      "title": "Payload",
+      "type": "object"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "relayed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Relayed At"
+    }
+  },
+  "required": [
+    "id",
+    "kind",
+    "alert_id",
+    "payload",
+    "created_at"
+  ],
+  "title": "OutboxEntry",
+  "type": "object"
+}

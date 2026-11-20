@@ -1,0 +1,785 @@
+{
+  "$defs": {
+    "Actor": {
+      "additionalProperties": false,
+      "description": "Who performed something: a recipient id, 'system:<service>' or 'llm'.",
+      "properties": {
+        "id": {
+          "examples": [
+            "anna",
+            "system:processor",
+            "llm"
+          ],
+          "title": "Id",
+          "type": "string"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Actor",
+      "type": "object"
+    },
+    "ApprovalPolicy": {
+      "enum": [
+        "none",
+        "required"
+      ],
+      "title": "ApprovalPolicy",
+      "type": "string"
+    },
+    "AutoResolvePolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "on_resolution_event": {
+          "default": true,
+          "title": "On Resolution Event",
+          "type": "boolean"
+        },
+        "after_silence": {
+          "anyOf": [
+            {
+              "examples": [
+                "60s",
+                "5m",
+                "1h"
+              ],
+              "pattern": "^[0-9]+(ms|s|m|h|d)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "After Silence"
+        }
+      },
+      "title": "AutoResolvePolicy",
+      "type": "object"
+    },
+    "ConditionAll": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ConditionAll"
+              },
+              {
+                "$ref": "#/$defs/ConditionAny"
+              },
+              {
+                "$ref": "#/$defs/ConditionNot"
+              },
+              {
+                "$ref": "#/$defs/ConditionLeaf"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "All",
+          "type": "array"
+        }
+      },
+      "required": [
+        "all"
+      ],
+      "title": "ConditionAll",
+      "type": "object"
+    },
+    "ConditionAny": {
+      "additionalProperties": false,
+      "properties": {
+        "any": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ConditionAll"
+              },
+              {
+                "$ref": "#/$defs/ConditionAny"
+              },
+              {
+                "$ref": "#/$defs/ConditionNot"
+              },
+              {
+                "$ref": "#/$defs/ConditionLeaf"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Any",
+          "type": "array"
+        }
+      },
+      "required": [
+        "any"
+      ],
+      "title": "ConditionAny",
+      "type": "object"
+    },
+    "ConditionLeaf": {
+      "additionalProperties": false,
+      "description": "Compare one field. A missing field never matches, except `exists` with value false.",
+      "properties": {
+        "field": {
+          "examples": [
+            "payload.notional",
+            "normalized.severity"
+          ],
+          "minLength": 1,
+          "title": "Field",
+          "type": "string"
+        },
+        "op": {
+          "$ref": "#/$defs/ConditionOperator"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "field",
+        "op"
+      ],
+      "title": "ConditionLeaf",
+      "type": "object"
+    },
+    "ConditionNot": {
+      "additionalProperties": false,
+      "properties": {
+        "not": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionAll"
+            },
+            {
+              "$ref": "#/$defs/ConditionAny"
+            },
+            {
+              "$ref": "#/$defs/ConditionNot"
+            },
+            {
+              "$ref": "#/$defs/ConditionLeaf"
+            }
+          ],
+          "title": "Not"
+        }
+      },
+      "required": [
+        "not"
+      ],
+      "title": "ConditionNot",
+      "type": "object"
+    },
+    "ConditionOperator": {
+      "enum": [
+        "eq",
+        "ne",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "in",
+        "glob",
+        "regex",
+        "exists"
+      ],
+      "title": "ConditionOperator",
+      "type": "string"
+    },
+    "DedupPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "window": {
+          "default": "60s",
+          "examples": [
+            "60s",
+            "5m",
+            "1h"
+          ],
+          "pattern": "^[0-9]+(ms|s|m|h|d)$",
+          "title": "Window",
+          "type": "string"
+        },
+        "fingerprint": {
+          "anyOf": [
+            {
+              "items": {
+                "examples": [
+                  "payload.notional",
+                  "normalized.severity"
+                ],
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Overrides the schema profile fingerprint for this rule.",
+          "title": "Fingerprint"
+        }
+      },
+      "title": "DedupPolicy",
+      "type": "object"
+    },
+    "FixKind": {
+      "enum": [
+        "threshold",
+        "fields",
+        "dedup_window",
+        "runbook_step",
+        "other"
+      ],
+      "title": "FixKind",
+      "type": "string"
+    },
+    "GroupPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "items": {
+            "examples": [
+              "payload.notional",
+              "normalized.severity"
+            ],
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "By",
+          "type": "array"
+        },
+        "window": {
+          "examples": [
+            "60s",
+            "5m",
+            "1h"
+          ],
+          "pattern": "^[0-9]+(ms|s|m|h|d)$",
+          "title": "Window",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "window"
+      ],
+      "title": "GroupPolicy",
+      "type": "object"
+    },
+    "Presentation": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "examples": [
+            "Rejected {{payload.currency}} {{payload.notional}}"
+          ],
+          "title": "Title",
+          "type": "string"
+        },
+        "body": {
+          "default": "",
+          "examples": [
+            "Rejected {{payload.currency}} {{payload.notional}}"
+          ],
+          "title": "Body",
+          "type": "string"
+        },
+        "fields": {
+          "items": {
+            "examples": [
+              "payload.notional",
+              "normalized.severity"
+            ],
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "color": {
+          "default": "orange",
+          "enum": [
+            "gray",
+            "blue",
+            "green",
+            "yellow",
+            "orange",
+            "red",
+            "purple"
+          ],
+          "title": "Color",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "Presentation",
+      "type": "object"
+    },
+    "ProposalStatus": {
+      "enum": [
+        "pending",
+        "accepted",
+        "rejected"
+      ],
+      "title": "ProposalStatus",
+      "type": "string"
+    },
+    "Route": {
+      "additionalProperties": false,
+      "properties": {
+        "teams": {
+          "description": "On-call recipients of these teams. Empty = the rule's team.",
+          "items": {
+            "examples": [
+              "rates-large-rejections"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+            "type": "string"
+          },
+          "title": "Teams",
+          "type": "array"
+        },
+        "recipients": {
+          "items": {
+            "examples": [
+              "rates-large-rejections"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+            "type": "string"
+          },
+          "title": "Recipients",
+          "type": "array"
+        },
+        "channels": {
+          "description": "Used for a recipient with no matching channel preference.",
+          "items": {
+            "examples": [
+              "rates-large-rejections"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+            "type": "string"
+          },
+          "title": "Channels",
+          "type": "array"
+        }
+      },
+      "title": "Route",
+      "type": "object"
+    },
+    "Rule": {
+      "additionalProperties": false,
+      "description": "config/rules/<id>.yaml.",
+      "properties": {
+        "id": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "team": {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Team",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionAll"
+            },
+            {
+              "$ref": "#/$defs/ConditionAny"
+            },
+            {
+              "$ref": "#/$defs/ConditionNot"
+            },
+            {
+              "$ref": "#/$defs/ConditionLeaf"
+            }
+          ],
+          "title": "When"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Severity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Overrides normalized severity."
+        },
+        "route": {
+          "$ref": "#/$defs/Route"
+        },
+        "present": {
+          "$ref": "#/$defs/Presentation"
+        },
+        "dedup": {
+          "$ref": "#/$defs/DedupPolicy"
+        },
+        "group": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "throttle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThrottlePolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "auto_resolve": {
+          "$ref": "#/$defs/AutoResolvePolicy"
+        },
+        "runbook": {
+          "anyOf": [
+            {
+              "examples": [
+                "rates-large-rejections"
+              ],
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Runbook"
+        }
+      },
+      "required": [
+        "id",
+        "team",
+        "when",
+        "present"
+      ],
+      "title": "Rule",
+      "type": "object"
+    },
+    "RunIf": {
+      "enum": [
+        "always",
+        "previous_failed",
+        "previous_succeeded"
+      ],
+      "title": "RunIf",
+      "type": "string"
+    },
+    "RunbookStep": {
+      "additionalProperties": false,
+      "description": "One normalized step. `text` and `params` are templates filled from the alert.",
+      "properties": {
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/$defs/StepKind"
+        },
+        "text": {
+          "examples": [
+            "Rejected {{payload.currency}} {{payload.notional}}"
+          ],
+          "title": "Text",
+          "type": "string"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "examples": [
+                "rates-large-rejections"
+              ],
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Action id; required for check/action steps that execute.",
+          "title": "Action"
+        },
+        "params": {
+          "additionalProperties": {
+            "examples": [
+              "Rejected {{payload.currency}} {{payload.notional}}"
+            ],
+            "type": "string"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "approval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ApprovalPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None = inherit from the action config."
+        },
+        "is_automatic": {
+          "default": false,
+          "description": "Runs without a click when the alert opens.",
+          "title": "Is Automatic",
+          "type": "boolean"
+        },
+        "run_if": {
+          "$ref": "#/$defs/RunIf",
+          "default": "always"
+        },
+        "max_attempts": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "kind",
+        "text"
+      ],
+      "title": "RunbookStep",
+      "type": "object"
+    },
+    "Severity": {
+      "description": "Ordered from least to most severe; comparisons use SEVERITY_ORDER.",
+      "enum": [
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "StepKind": {
+      "enum": [
+        "text",
+        "check",
+        "action"
+      ],
+      "title": "StepKind",
+      "type": "string"
+    },
+    "ThrottlePolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "max_deliveries": {
+          "description": "Per recipient, per rule, per period.",
+          "minimum": 1,
+          "title": "Max Deliveries",
+          "type": "integer"
+        },
+        "per": {
+          "examples": [
+            "60s",
+            "5m",
+            "1h"
+          ],
+          "pattern": "^[0-9]+(ms|s|m|h|d)$",
+          "title": "Per",
+          "type": "string"
+        }
+      },
+      "required": [
+        "max_deliveries",
+        "per"
+      ],
+      "title": "ThrottlePolicy",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Table fix_proposals. Created from an alert, decided by the rule's owner team.",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "alert_id": {
+      "title": "Alert Id",
+      "type": "string"
+    },
+    "rule_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Rule Id",
+      "type": "string"
+    },
+    "runbook_id": {
+      "anyOf": [
+        {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Runbook Id"
+    },
+    "owner_team": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Owner Team",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/FixKind"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "proposed_rule": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Rule"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "proposed_runbook_step": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunbookStep"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "proposed_by": {
+      "$ref": "#/$defs/Actor"
+    },
+    "status": {
+      "$ref": "#/$defs/ProposalStatus",
+      "default": "pending"
+    },
+    "decided_by": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Actor"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "decided_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Decided At"
+    },
+    "decision_comment": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Decision Comment"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "alert_id",
+    "rule_id",
+    "owner_team",
+    "kind",
+    "description",
+    "proposed_by",
+    "created_at"
+  ],
+  "title": "FixProposal",
+  "type": "object"
+}

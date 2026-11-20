@@ -1,0 +1,192 @@
+{
+  "$defs": {
+    "AlertField": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "AlertField",
+      "type": "object"
+    },
+    "DeliveryPurpose": {
+      "enum": [
+        "alert",
+        "approval_request",
+        "group_summary"
+      ],
+      "title": "DeliveryPurpose",
+      "type": "string"
+    },
+    "NotificationContent": {
+      "additionalProperties": false,
+      "description": "Rendered once by the producer of the outbox row; channels only format it.",
+      "properties": {
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "body": {
+          "default": "",
+          "title": "Body",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/AlertField"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "alert_url": {
+          "title": "Alert Url",
+          "type": "string"
+        },
+        "runbook_steps": {
+          "description": "Rendered step texts.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Runbook Steps",
+          "type": "array"
+        },
+        "approval_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Approval Code"
+        }
+      },
+      "required": [
+        "title",
+        "severity",
+        "alert_url"
+      ],
+      "title": "NotificationContent",
+      "type": "object"
+    },
+    "Severity": {
+      "description": "Ordered from least to most severe; comparisons use SEVERITY_ORDER.",
+      "enum": [
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload of outbox kind `delivery`; stream `deliveries`, field `job`.",
+  "properties": {
+    "delivery_id": {
+      "description": "= outbox entry id; delivery idempotency key.",
+      "title": "Delivery Id",
+      "type": "integer"
+    },
+    "alert_id": {
+      "title": "Alert Id",
+      "type": "string"
+    },
+    "team": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Team",
+      "type": "string"
+    },
+    "recipient_id": {
+      "anyOf": [
+        {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "None for the team-wide ui channel.",
+      "title": "Recipient Id"
+    },
+    "channel_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Channel Id",
+      "type": "string"
+    },
+    "purpose": {
+      "$ref": "#/$defs/DeliveryPurpose"
+    },
+    "content": {
+      "$ref": "#/$defs/NotificationContent"
+    },
+    "approval_request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approval Request Id"
+    },
+    "event_sent_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "For end-to-end latency.",
+      "title": "Event Sent At"
+    },
+    "is_fallback": {
+      "default": false,
+      "title": "Is Fallback",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "delivery_id",
+    "alert_id",
+    "team",
+    "channel_id",
+    "purpose",
+    "content"
+  ],
+  "title": "DeliveryJob",
+  "type": "object"
+}

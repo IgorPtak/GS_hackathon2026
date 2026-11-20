@@ -1,0 +1,67 @@
+{
+  "$defs": {
+    "SourceType": {
+      "enum": [
+        "webhook",
+        "alertmanager",
+        "log_tail"
+      ],
+      "title": "SourceType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "config/sources/<id>.yaml. Ingest URL for HTTP sources: POST /api/v1/ingest/<id>.",
+  "properties": {
+    "id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "type": {
+      "$ref": "#/$defs/SourceType"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "team": {
+      "anyOf": [
+        {
+          "examples": [
+            "rates-large-rejections"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Default owning team, informational.",
+      "title": "Team"
+    },
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "settings": {
+      "additionalProperties": true,
+      "description": "Plugin-specific. log_tail: path, line_format (json|regex), line_pattern (regex with named groups), start_at (end|beginning). webhook: idempotency_key_path (optional).",
+      "title": "Settings",
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "type"
+  ],
+  "title": "SourceConfig",
+  "type": "object"
+}

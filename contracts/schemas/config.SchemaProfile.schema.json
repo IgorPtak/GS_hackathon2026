@@ -1,0 +1,405 @@
+{
+  "$defs": {
+    "ConditionAll": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ConditionAll"
+              },
+              {
+                "$ref": "#/$defs/ConditionAny"
+              },
+              {
+                "$ref": "#/$defs/ConditionNot"
+              },
+              {
+                "$ref": "#/$defs/ConditionLeaf"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "All",
+          "type": "array"
+        }
+      },
+      "required": [
+        "all"
+      ],
+      "title": "ConditionAll",
+      "type": "object"
+    },
+    "ConditionAny": {
+      "additionalProperties": false,
+      "properties": {
+        "any": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ConditionAll"
+              },
+              {
+                "$ref": "#/$defs/ConditionAny"
+              },
+              {
+                "$ref": "#/$defs/ConditionNot"
+              },
+              {
+                "$ref": "#/$defs/ConditionLeaf"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Any",
+          "type": "array"
+        }
+      },
+      "required": [
+        "any"
+      ],
+      "title": "ConditionAny",
+      "type": "object"
+    },
+    "ConditionLeaf": {
+      "additionalProperties": false,
+      "description": "Compare one field. A missing field never matches, except `exists` with value false.",
+      "properties": {
+        "field": {
+          "examples": [
+            "payload.notional",
+            "normalized.severity"
+          ],
+          "minLength": 1,
+          "title": "Field",
+          "type": "string"
+        },
+        "op": {
+          "$ref": "#/$defs/ConditionOperator"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "field",
+        "op"
+      ],
+      "title": "ConditionLeaf",
+      "type": "object"
+    },
+    "ConditionNot": {
+      "additionalProperties": false,
+      "properties": {
+        "not": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionAll"
+            },
+            {
+              "$ref": "#/$defs/ConditionAny"
+            },
+            {
+              "$ref": "#/$defs/ConditionNot"
+            },
+            {
+              "$ref": "#/$defs/ConditionLeaf"
+            }
+          ],
+          "title": "Not"
+        }
+      },
+      "required": [
+        "not"
+      ],
+      "title": "ConditionNot",
+      "type": "object"
+    },
+    "ConditionOperator": {
+      "enum": [
+        "eq",
+        "ne",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "in",
+        "glob",
+        "regex",
+        "exists"
+      ],
+      "title": "ConditionOperator",
+      "type": "string"
+    },
+    "FieldMappingSpec": {
+      "additionalProperties": false,
+      "description": "Extract one normalized field. Exactly one of `path` or `const` must be set.",
+      "properties": {
+        "path": {
+          "anyOf": [
+            {
+              "examples": [
+                "payload.notional",
+                "normalized.severity"
+              ],
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "const": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Const"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "enum": [
+                "iso8601",
+                "epoch_ms",
+                "epoch_s"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only for occurred_at.",
+          "title": "Format"
+        },
+        "value_map": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Raw value -> normalized value, e.g. {CRIT: critical}.",
+          "title": "Value Map",
+          "type": "object"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        }
+      },
+      "title": "FieldMappingSpec",
+      "type": "object"
+    },
+    "NormalizedFieldMappings": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "examples": [
+                "payload.notional",
+                "normalized.severity"
+              ],
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FieldMappingSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "examples": [
+                "payload.notional",
+                "normalized.severity"
+              ],
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FieldMappingSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "examples": [
+                "payload.notional",
+                "normalized.severity"
+              ],
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FieldMappingSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Severity"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "examples": [
+                "payload.notional",
+                "normalized.severity"
+              ],
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FieldMappingSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "entity": {
+          "anyOf": [
+            {
+              "examples": [
+                "payload.notional",
+                "normalized.severity"
+              ],
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FieldMappingSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entity"
+        }
+      },
+      "title": "NormalizedFieldMappings",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "config/schemas/<id>.yaml. Recognises an event shape and maps shared fields; never filters.",
+  "properties": {
+    "id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "priority": {
+      "default": 0,
+      "description": "Higher wins when several profiles match.",
+      "title": "Priority",
+      "type": "integer"
+    },
+    "match": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConditionAll"
+        },
+        {
+          "$ref": "#/$defs/ConditionAny"
+        },
+        {
+          "$ref": "#/$defs/ConditionNot"
+        },
+        {
+          "$ref": "#/$defs/ConditionLeaf"
+        }
+      ],
+      "title": "Match"
+    },
+    "fields": {
+      "$ref": "#/$defs/NormalizedFieldMappings"
+    },
+    "fingerprint": {
+      "items": {
+        "examples": [
+          "payload.notional",
+          "normalized.severity"
+        ],
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Fingerprint",
+      "type": "array"
+    },
+    "resolution": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConditionAll"
+        },
+        {
+          "$ref": "#/$defs/ConditionAny"
+        },
+        {
+          "$ref": "#/$defs/ConditionNot"
+        },
+        {
+          "$ref": "#/$defs/ConditionLeaf"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "When it matches, the event resolves the open alert with the same fingerprint.",
+      "title": "Resolution"
+    }
+  },
+  "required": [
+    "id",
+    "match",
+    "fields",
+    "fingerprint"
+  ],
+  "title": "SchemaProfile",
+  "type": "object"
+}

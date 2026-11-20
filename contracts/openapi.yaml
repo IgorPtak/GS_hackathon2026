@@ -1,0 +1,4119 @@
+# GENERATED components; paths are hand-written. See contracts/README.md.
+openapi: 3.1.0
+info:
+  title: Flexible Alerting & Notification Service
+  version: 1.0.0
+  description: 'Frozen contract. `/api/v1/ingest/*` is served by the `ingest` service (port 8001); everything
+
+    else by the `api` service (port 8000). The web app proxies both under the same origin.
+
+    `components.schemas` is GENERATED from contracts/alerting_contracts by
+
+    `scripts/generate_contracts.py` — edit the Pydantic models, never this section.
+
+    '
+servers:
+- url: http://localhost:8000
+tags:
+- name: ingest
+- name: alerts
+- name: config
+- name: rules
+- name: schema-profiles
+- name: runbooks
+- name: approvals
+- name: fix-proposals
+- name: phone-simulator
+- name: stream
+- name: ops
+paths:
+  /api/v1/ingest/{source_id}:
+    post:
+      tags:
+      - ingest
+      operationId: ingestEvent
+      summary: Accept one event (or an Alertmanager batch) from an HTTP source; returns 202 after XADD.
+      parameters:
+      - $ref: '#/components/parameters/SourceId'
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      - name: X-Sent-At
+        in: header
+        required: false
+        schema:
+          type: string
+          format: date-time
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestAccepted'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/ingest/{source_id}/batch:
+    post:
+      tags:
+      - ingest
+      operationId: ingestEventBatch
+      summary: Accept a JSON array of events (load generator).
+      parameters:
+      - $ref: '#/components/parameters/SourceId'
+      - name: X-Sent-At
+        in: header
+        required: false
+        schema:
+          type: string
+          format: date-time
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestAccepted'
+  /api/v1/alerts:
+    get:
+      tags:
+      - alerts
+      operationId: listAlerts
+      parameters:
+      - name: team
+        in: query
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/AlertStatus'
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: cursor
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertPage'
+  /api/v1/alerts/{alert_id}:
+    get:
+      tags:
+      - alerts
+      operationId: getAlert
+      summary: Alert with audit, deliveries, rendered runbook, action runs, approvals and fix proposals.
+      parameters:
+      - $ref: '#/components/parameters/AlertId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/alerts/{alert_id}/acknowledge:
+    post:
+      tags:
+      - alerts
+      operationId: acknowledgeAlert
+      parameters:
+      - $ref: '#/components/parameters/AlertId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertAcknowledgeRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/alerts/{alert_id}/resolve:
+    post:
+      tags:
+      - alerts
+      operationId: resolveAlert
+      parameters:
+      - $ref: '#/components/parameters/AlertId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertResolveRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+  /api/v1/alerts/{alert_id}/runbook/steps/{step_index}/run:
+    post:
+      tags:
+      - runbooks
+      operationId: runRunbookStep
+      summary: Start a manual step; creates an approval request when the step requires approval.
+      parameters:
+      - $ref: '#/components/parameters/AlertId'
+      - name: step_index
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StepRunRequest'
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionRun'
+  /api/v1/alerts/{alert_id}/fix-proposals:
+    post:
+      tags:
+      - fix-proposals
+      operationId: createFixProposal
+      parameters:
+      - $ref: '#/components/parameters/AlertId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FixProposalCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixProposal'
+  /api/v1/alerts/{alert_id}/fix-proposals/draft:
+    post:
+      tags:
+      - fix-proposals
+      operationId: draftFixProposal
+      summary: Optional LLM draft of a fix proposal; never saved.
+      parameters:
+      - $ref: '#/components/parameters/AlertId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixProposalCreate'
+        '503':
+          $ref: '#/components/responses/LlmUnavailable'
+  /api/v1/fix-proposals:
+    get:
+      tags:
+      - fix-proposals
+      operationId: listFixProposals
+      parameters:
+      - name: team
+        in: query
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/ProposalStatus'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FixProposal'
+  /api/v1/fix-proposals/{proposal_id}/decision:
+    post:
+      tags:
+      - fix-proposals
+      operationId: decideFixProposal
+      summary: Accepting a proposal with proposed_rule saves it as a new rule version.
+      parameters:
+      - name: proposal_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FixProposalDecisionRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixProposal'
+  /api/v1/config:
+    get:
+      tags:
+      - config
+      operationId: getConfigLists
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigLists'
+  /api/v1/config/validate:
+    post:
+      tags:
+      - config
+      operationId: validateConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigValidationRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigValidationResult'
+  /api/v1/recipients/{recipient_id}/channel-preferences:
+    put:
+      tags:
+      - config
+      operationId: updateChannelPreferences
+      parameters:
+      - name: recipient_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelPreferencesWrite'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recipient'
+  /api/v1/rules:
+    get:
+      tags:
+      - rules
+      operationId: listRules
+      parameters:
+      - name: team
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RuleRecord'
+  /api/v1/rules/{rule_id}:
+    get:
+      tags:
+      - rules
+      operationId: getRule
+      parameters:
+      - $ref: '#/components/parameters/RuleId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+      - rules
+      operationId: saveRule
+      summary: Create or replace; publishes config.changed so workers reload without restart.
+      parameters:
+      - $ref: '#/components/parameters/RuleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuleWrite'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleRecord'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags:
+      - rules
+      operationId: deleteRule
+      parameters:
+      - $ref: '#/components/parameters/RuleId'
+      responses:
+        '204':
+          description: Deleted
+  /api/v1/rules/preview:
+    post:
+      tags:
+      - rules
+      operationId: previewRule
+      summary: Run a draft rule over the last window of the events stream (no side effects).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RulePreviewRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RulePreview'
+  /api/v1/schema-profiles:
+    get:
+      tags:
+      - schema-profiles
+      operationId: listSchemaProfiles
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SchemaProfileRecord'
+  /api/v1/schema-profiles/{profile_id}:
+    put:
+      tags:
+      - schema-profiles
+      operationId: saveSchemaProfile
+      parameters:
+      - name: profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchemaProfileWrite'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaProfileRecord'
+  /api/v1/schema-profiles/propose:
+    post:
+      tags:
+      - schema-profiles
+      operationId: proposeSchemaProfile
+      summary: LLM (falls back to heuristics) drafts a profile for a sample event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchemaProfileProposeRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaProfileProposal'
+  /api/v1/schema-profiles/test:
+    post:
+      tags:
+      - schema-profiles
+      operationId: testSchemaProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchemaProfileTestRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaProfileTestResult'
+  /api/v1/unknown-schemas:
+    get:
+      tags:
+      - schema-profiles
+      operationId: listUnknownSchemas
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UnknownSchemaSample'
+  /api/v1/runbooks:
+    get:
+      tags:
+      - runbooks
+      operationId: listRunbooks
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RunbookSummary'
+  /api/v1/runbooks/normalize:
+    post:
+      tags:
+      - runbooks
+      operationId: normalizeRunbook
+      summary: Normalize without saving (preview in the runbook editor).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunbookWrite'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Runbook'
+  /api/v1/runbooks/{runbook_id}:
+    get:
+      tags:
+      - runbooks
+      operationId: getRunbook
+      parameters:
+      - name: runbook_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Runbook'
+    put:
+      tags:
+      - runbooks
+      operationId: saveRunbook
+      summary: Normalize (LLM for text, at save time) and store.
+      parameters:
+      - name: runbook_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunbookWrite'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Runbook'
+  /api/v1/approvals:
+    get:
+      tags:
+      - approvals
+      operationId: listApprovalRequests
+      parameters:
+      - name: team
+        in: query
+        schema:
+          type: string
+      - name: is_pending
+        in: query
+        schema:
+          type: boolean
+          default: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalRequest'
+  /api/v1/approvals/{approval_request_id}/decision:
+    post:
+      tags:
+      - approvals
+      operationId: decideApprovalRequest
+      parameters:
+      - name: approval_request_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecisionRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/phone-simulator/messages:
+    get:
+      tags:
+      - phone-simulator
+      operationId: listPhoneMessages
+      parameters:
+      - name: recipient_id
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PhoneMessage'
+  /api/v1/phone-simulator/replies:
+    post:
+      tags:
+      - phone-simulator
+      operationId: replyFromPhone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhoneReplyRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhoneReplyResult'
+  /api/v1/stream:
+    get:
+      tags:
+      - stream
+      operationId: streamEvents
+      summary: 'Server-sent events. Each message: `event: <type>`, `data: SseEvent JSON`. Heartbeat comment every 15 s.'
+      parameters:
+      - name: team
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/SseEvent'
+  /api/v1/metrics/summary:
+    get:
+      tags:
+      - ops
+      operationId: getMetricsSummary
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsSummary'
+  /healthz:
+    get:
+      tags:
+      - ops
+      operationId: getHealth
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+components:
+  parameters:
+    SourceId:
+      name: source_id
+      in: path
+      required: true
+      schema:
+        type: string
+    AlertId:
+      name: alert_id
+      in: path
+      required: true
+      schema:
+        type: string
+    RuleId:
+      name: rule_id
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Invalid state transition
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationFailed:
+      description: Invalid body
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    LlmUnavailable:
+      description: Local LLM not reachable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ActionConfig:
+      additionalProperties: false
+      description: config/actions/<id>.yaml. `type` names the plugin; `webhook` actions need no code.
+      properties:
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        type:
+          examples:
+          - http_get
+          - webhook
+          - retry_workflow
+          - restart_service
+          - open_ticket
+          - escalate
+          title: Type
+          type: string
+        description:
+          default: ''
+          title: Description
+          type: string
+        approval:
+          $ref: '#/components/schemas/ApprovalPolicy'
+          default: none
+        timeout:
+          default: 10s
+          examples:
+          - 60s
+          - 5m
+          - 1h
+          pattern: ^[0-9]+(ms|s|m|h|d)$
+          title: Timeout
+          type: string
+        params:
+          additionalProperties:
+            $ref: '#/components/schemas/ActionParamSpec'
+          title: Params
+          type: object
+        settings:
+          additionalProperties: true
+          description: 'webhook: url, method, headers, body_template.'
+          title: Settings
+          type: object
+      required:
+      - id
+      - type
+      title: ActionConfig
+      type: object
+    ActionParamSpec:
+      additionalProperties: false
+      properties:
+        description:
+          default: ''
+          title: Description
+          type: string
+        is_required:
+          default: true
+          title: Is Required
+          type: boolean
+      title: ActionParamSpec
+      type: object
+    ActionRun:
+      additionalProperties: false
+      description: One execution of a runbook step's action for an alert (table action_runs).
+      properties:
+        id:
+          title: Id
+          type: string
+        alert_id:
+          title: Alert Id
+          type: string
+        runbook_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Runbook Id
+          type: string
+        step_index:
+          title: Step Index
+          type: integer
+        action_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Action Id
+          type: string
+        params:
+          additionalProperties:
+            type: string
+          title: Params
+          type: object
+        status:
+          $ref: '#/components/schemas/ActionRunStatus'
+        attempt:
+          default: 1
+          title: Attempt
+          type: integer
+        result:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          default: null
+          title: Result
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Error
+        requested_by:
+          $ref: '#/components/schemas/Actor'
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        updated_at:
+          format: date-time
+          title: Updated At
+          type: string
+      required:
+      - id
+      - alert_id
+      - runbook_id
+      - step_index
+      - action_id
+      - params
+      - status
+      - requested_by
+      - created_at
+      - updated_at
+      title: ActionRun
+      type: object
+    ActionRunStatus:
+      enum:
+      - pending_approval
+      - approved
+      - rejected
+      - running
+      - succeeded
+      - failed
+      - skipped
+      title: ActionRunStatus
+      type: string
+    ActionRunUpdatedEvent:
+      additionalProperties: false
+      properties:
+        at:
+          format: date-time
+          title: At
+          type: string
+        type:
+          const: action_run.updated
+          default: action_run.updated
+          title: Type
+          type: string
+        action_run:
+          $ref: '#/components/schemas/ActionRun'
+      required:
+      - at
+      - action_run
+      title: ActionRunUpdatedEvent
+      type: object
+    Actor:
+      additionalProperties: false
+      description: 'Who performed something: a recipient id, ''system:<service>'' or ''llm''.'
+      properties:
+        id:
+          examples:
+          - anna
+          - system:processor
+          - llm
+          title: Id
+          type: string
+        display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Display Name
+      required:
+      - id
+      title: Actor
+      type: object
+    Alert:
+      additionalProperties: false
+      description: Table alerts. One alert per (rule_id, fingerprint) per dedup window, or per group window.
+      properties:
+        id:
+          description: UUID v7.
+          title: Id
+          type: string
+        rule_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Rule Id
+          type: string
+        team:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Team
+          type: string
+        schema_profile_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Schema Profile Id
+          type: string
+        source_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Source Id
+          type: string
+        fingerprint:
+          title: Fingerprint
+          type: string
+        group_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Group Key
+        is_group_summary:
+          default: false
+          title: Is Group Summary
+          type: boolean
+        group_members:
+          items:
+            $ref: '#/components/schemas/GroupMember'
+          title: Group Members
+          type: array
+        severity:
+          $ref: '#/components/schemas/Severity'
+        title:
+          title: Title
+          type: string
+        body:
+          default: ''
+          title: Body
+          type: string
+        fields:
+          items:
+            $ref: '#/components/schemas/AlertField'
+          title: Fields
+          type: array
+        color:
+          default: orange
+          title: Color
+          type: string
+        count:
+          default: 1
+          description: Events folded in by dedup.
+          minimum: 1
+          title: Count
+          type: integer
+        first_seen:
+          format: date-time
+          title: First Seen
+          type: string
+        last_seen:
+          format: date-time
+          title: Last Seen
+          type: string
+        status:
+          $ref: '#/components/schemas/AlertStatus'
+          default: open
+        runbook_id:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Runbook Id
+        last_event:
+          additionalProperties: true
+          description: Raw payload of the most recent event.
+          title: Last Event
+          type: object
+        acknowledged_by:
+          anyOf:
+          - $ref: '#/components/schemas/Actor'
+          - type: 'null'
+          default: null
+        acknowledged_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Acknowledged At
+        resolved_by:
+          anyOf:
+          - $ref: '#/components/schemas/Actor'
+          - type: 'null'
+          default: null
+        resolved_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Resolved At
+        resolution_reason:
+          anyOf:
+          - $ref: '#/components/schemas/ResolutionReason'
+          - type: 'null'
+          default: null
+      required:
+      - id
+      - rule_id
+      - team
+      - schema_profile_id
+      - source_id
+      - fingerprint
+      - severity
+      - title
+      - first_seen
+      - last_seen
+      - last_event
+      title: Alert
+      type: object
+    AlertAcknowledgeRequest:
+      additionalProperties: false
+      properties:
+        actor:
+          $ref: '#/components/schemas/Actor'
+      required:
+      - actor
+      title: AlertAcknowledgeRequest
+      type: object
+    AlertCreatedEvent:
+      additionalProperties: false
+      properties:
+        at:
+          format: date-time
+          title: At
+          type: string
+        type:
+          const: alert.created
+          default: alert.created
+          title: Type
+          type: string
+        alert:
+          $ref: '#/components/schemas/Alert'
+      required:
+      - at
+      - alert
+      title: AlertCreatedEvent
+      type: object
+    AlertDetail:
+      additionalProperties: false
+      properties:
+        alert:
+          $ref: '#/components/schemas/Alert'
+        audit_entries:
+          items:
+            $ref: '#/components/schemas/AuditEntry'
+          title: Audit Entries
+          type: array
+        deliveries:
+          items:
+            $ref: '#/components/schemas/Delivery'
+          title: Deliveries
+          type: array
+        rendered_runbook:
+          anyOf:
+          - $ref: '#/components/schemas/RenderedRunbook'
+          - type: 'null'
+          default: null
+        action_runs:
+          items:
+            $ref: '#/components/schemas/ActionRun'
+          title: Action Runs
+          type: array
+        approval_requests:
+          items:
+            $ref: '#/components/schemas/ApprovalRequest'
+          title: Approval Requests
+          type: array
+        fix_proposals:
+          items:
+            $ref: '#/components/schemas/FixProposal'
+          title: Fix Proposals
+          type: array
+      required:
+      - alert
+      - audit_entries
+      - deliveries
+      title: AlertDetail
+      type: object
+    AlertField:
+      additionalProperties: false
+      properties:
+        path:
+          title: Path
+          type: string
+        value:
+          default: null
+          title: Value
+      required:
+      - path
+      title: AlertField
+      type: object
+    AlertPage:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/Alert'
+          title: Items
+          type: array
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Next Cursor
+      required:
+      - items
+      title: AlertPage
+      type: object
+    AlertQuery:
+      additionalProperties: false
+      description: Query parameters of GET /api/v1/alerts (documentation only).
+      properties:
+        team:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Team
+        status:
+          anyOf:
+          - $ref: '#/components/schemas/AlertStatus'
+          - type: 'null'
+          default: null
+        limit:
+          default: 50
+          title: Limit
+          type: integer
+        cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Cursor
+      title: AlertQuery
+      type: object
+    AlertResolveRequest:
+      additionalProperties: false
+      properties:
+        actor:
+          $ref: '#/components/schemas/Actor'
+        comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Comment
+      required:
+      - actor
+      title: AlertResolveRequest
+      type: object
+    AlertStatus:
+      enum:
+      - open
+      - acknowledged
+      - resolved
+      title: AlertStatus
+      type: string
+    AlertUpdatedEvent:
+      additionalProperties: false
+      description: Count, status or group membership changed. Dedup increments are coalesced to <= 1/s per alert.
+      properties:
+        at:
+          format: date-time
+          title: At
+          type: string
+        type:
+          const: alert.updated
+          default: alert.updated
+          title: Type
+          type: string
+        alert:
+          $ref: '#/components/schemas/Alert'
+      required:
+      - at
+      - alert
+      title: AlertUpdatedEvent
+      type: object
+    ApprovalDecidedEvent:
+      additionalProperties: false
+      properties:
+        at:
+          format: date-time
+          title: At
+          type: string
+        type:
+          const: approval.decided
+          default: approval.decided
+          title: Type
+          type: string
+        approval_request:
+          $ref: '#/components/schemas/ApprovalRequest'
+      required:
+      - at
+      - approval_request
+      title: ApprovalDecidedEvent
+      type: object
+    ApprovalDecision:
+      enum:
+      - approve
+      - reject
+      title: ApprovalDecision
+      type: string
+    ApprovalDecisionRequest:
+      additionalProperties: false
+      properties:
+        decision:
+          $ref: '#/components/schemas/ApprovalDecision'
+        actor:
+          $ref: '#/components/schemas/Actor'
+        via:
+          $ref: '#/components/schemas/ApprovalVia'
+          default: ui
+        comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Comment
+      required:
+      - decision
+      - actor
+      title: ApprovalDecisionRequest
+      type: object
+    ApprovalPolicy:
+      enum:
+      - none
+      - required
+      title: ApprovalPolicy
+      type: string
+    ApprovalRequest:
+      additionalProperties: false
+      description: A human decision gating an action run (table approval_requests).
+      properties:
+        id:
+          title: Id
+          type: string
+        action_run_id:
+          title: Action Run Id
+          type: string
+        alert_id:
+          title: Alert Id
+          type: string
+        team:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Team
+          type: string
+        summary:
+          description: Rendered step text shown to the approver.
+          title: Summary
+          type: string
+        approval_code:
+          description: Reply 'APPROVE <code>' or 'REJECT <code>'.
+          pattern: ^[0-9]{4}$
+          title: Approval Code
+          type: string
+        requested_at:
+          format: date-time
+          title: Requested At
+          type: string
+        decision:
+          anyOf:
+          - $ref: '#/components/schemas/ApprovalDecision'
+          - type: 'null'
+          default: null
+        decided_by:
+          anyOf:
+          - $ref: '#/components/schemas/Actor'
+          - type: 'null'
+          default: null
+        decided_via:
+          anyOf:
+          - $ref: '#/components/schemas/ApprovalVia'
+          - type: 'null'
+          default: null
+        decided_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Decided At
+        comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Comment
+      required:
+      - id
+      - action_run_id
+      - alert_id
+      - team
+      - summary
+      - approval_code
+      - requested_at
+      title: ApprovalRequest
+      type: object
+    ApprovalRequestedEvent:
+      additionalProperties: false
+      properties:
+        at:
+          format: date-time
+          title: At
+          type: string
+        type:
+          const: approval.requested
+          default: approval.requested
+          title: Type
+          type: string
+        approval_request:
+          $ref: '#/components/schemas/ApprovalRequest'
+      required:
+      - at
+      - approval_request
+      title: ApprovalRequestedEvent
+      type: object
+    ApprovalVia:
+      enum:
+      - ui
+      - sms
+      - phone
+      title: ApprovalVia
+      type: string
+    AuditEntry:
+      additionalProperties: false
+      description: Table audit_entries. Append-only.
+      properties:
+        id:
+          title: Id
+          type: integer
+        alert_id:
+          title: Alert Id
+          type: string
+        at:
+          format: date-time
+          title: At
+          type: string
+        actor:
+          $ref: '#/components/schemas/Actor'
+        verb:
+          $ref: '#/components/schemas/AuditVerb'
+        outcome:
+          default: ok
+          enum:
+          - ok
+          - error
+          - pending
+          title: Outcome
+          type: string
+        detail:
+          additionalProperties: true
+          title: Detail
+          type: object
+      required:
+      - id
+      - alert_id
+      - at
+      - actor
+      - verb
+      title: AuditEntry
+      type: object
+    AuditVerb:
+      enum:
+      - alert_created
+      - alert_grouped
+      - alert_acknowledged
+      - alert_resolved
+      - delivery_delivered
+      - delivery_failed
+      - delivery_dead_lettered
+      - delivery_fallback
+      - delivery_suppressed
+      - runbook_started
+      - action_run_started
+      - action_run_succeeded
+      - action_run_failed
+      - action_run_skipped
+      - approval_requested
+      - approval_decided
+      - fix_proposed
+      - fix_decided
+      title: AuditVerb
+      type: string
+    AutoResolvePolicy:
+      additionalProperties: false
+      properties:
+        on_resolution_event:
+          default: true
+          title: On Resolution Event
+          type: boolean
+        after_silence:
+          anyOf:
+          - examples:
+            - 60s
+            - 5m
+            - 1h
+            pattern: ^[0-9]+(ms|s|m|h|d)$
+            type: string
+          - type: 'null'
+          default: null
+          title: After Silence
+      title: AutoResolvePolicy
+      type: object
+    ChannelConfig:
+      additionalProperties: false
+      description: config/channels/<id>.yaml.
+      properties:
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        type:
+          $ref: '#/components/schemas/ChannelType'
+        description:
+          default: ''
+          title: Description
+          type: string
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        runbook_presentation:
+          default: full
+          description: Email/UI show full steps; SMS/phone send a link.
+          enum:
+          - full
+          - link
+          - none
+          title: Runbook Presentation
+          type: string
+        retry:
+          $ref: '#/components/schemas/RetryPolicy'
+        fallback_channel_id:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Fallback Channel Id
+        settings:
+          additionalProperties: true
+          description: 'Plugin-specific. email: smtp_host, smtp_port, from_address. sms/phone: gateway_url. webhook: url,
+            method, headers, body_template (Template rendered to JSON text).'
+          title: Settings
+          type: object
+      required:
+      - id
+      - type
+      title: ChannelConfig
+      type: object
+    ChannelPreference:
+      additionalProperties: false
+      description: First matching preference wins. Outside working_hours, `otherwise` channels are used.
+      properties:
+        when:
+          $ref: '#/components/schemas/PreferenceMatch'
+        channels:
+          items:
+            examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          minItems: 1
+          title: Channels
+          type: array
+        working_hours:
+          anyOf:
+          - pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$
+            type: string
+          - type: 'null'
+          default: null
+          title: Working Hours
+        timezone:
+          default: Europe/Warsaw
+          title: Timezone
+          type: string
+        otherwise:
+          items:
+            examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          title: Otherwise
+          type: array
+      required:
+      - channels
+      title: ChannelPreference
+      type: object
+    ChannelPreferencesWrite:
+      additionalProperties: false
+      properties:
+        channel_preferences:
+          items:
+            $ref: '#/components/schemas/ChannelPreference'
+          title: Channel Preferences
+          type: array
+        actor:
+          $ref: '#/components/schemas/Actor'
+      required:
+      - channel_preferences
+      - actor
+      title: ChannelPreferencesWrite
+      type: object
+    ChannelType:
+      enum:
+      - ui
+      - email
+      - sms
+      - phone
+      - webhook
+      title: ChannelType
+      type: string
+    ConditionAll:
+      additionalProperties: false
+      properties:
+        all:
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/ConditionAll'
+            - $ref: '#/components/schemas/ConditionAny'
+            - $ref: '#/components/schemas/ConditionNot'
+            - $ref: '#/components/schemas/ConditionLeaf'
+          minItems: 1
+          title: All
+          type: array
+      required:
+      - all
+      title: ConditionAll
+      type: object
+    ConditionAny:
+      additionalProperties: false
+      properties:
+        any:
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/ConditionAll'
+            - $ref: '#/components/schemas/ConditionAny'
+            - $ref: '#/components/schemas/ConditionNot'
+            - $ref: '#/components/schemas/ConditionLeaf'
+          minItems: 1
+          title: Any
+          type: array
+      required:
+      - any
+      title: ConditionAny
+      type: object
+    ConditionLeaf:
+      additionalProperties: false
+      description: Compare one field. A missing field never matches, except `exists` with value false.
+      properties:
+        field:
+          examples:
+          - payload.notional
+          - normalized.severity
+          minLength: 1
+          title: Field
+          type: string
+        op:
+          $ref: '#/components/schemas/ConditionOperator'
+        value:
+          default: null
+          title: Value
+      required:
+      - field
+      - op
+      title: ConditionLeaf
+      type: object
+    ConditionNot:
+      additionalProperties: false
+      properties:
+        not:
+          anyOf:
+          - $ref: '#/components/schemas/ConditionAll'
+          - $ref: '#/components/schemas/ConditionAny'
+          - $ref: '#/components/schemas/ConditionNot'
+          - $ref: '#/components/schemas/ConditionLeaf'
+          title: Not
+      required:
+      - not
+      title: ConditionNot
+      type: object
+    ConditionOperator:
+      enum:
+      - eq
+      - ne
+      - gt
+      - gte
+      - lt
+      - lte
+      - in
+      - glob
+      - regex
+      - exists
+      title: ConditionOperator
+      type: string
+    ConfigChangedEvent:
+      additionalProperties: false
+      description: Also the payload of pub/sub channel `config.changed` that makes workers reload.
+      properties:
+        at:
+          format: date-time
+          title: At
+          type: string
+        type:
+          const: config.changed
+          default: config.changed
+          title: Type
+          type: string
+        kind:
+          title: Kind
+          type: string
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        version:
+          title: Version
+          type: integer
+      required:
+      - at
+      - kind
+      - id
+      - version
+      title: ConfigChangedEvent
+      type: object
+    ConfigLists:
+      additionalProperties: false
+      description: 'GET /api/v1/config: read-only config used by UI dropdowns.'
+      properties:
+        teams:
+          items:
+            $ref: '#/components/schemas/Team'
+          title: Teams
+          type: array
+        recipients:
+          items:
+            $ref: '#/components/schemas/Recipient'
+          title: Recipients
+          type: array
+        channels:
+          items:
+            $ref: '#/components/schemas/ChannelConfig'
+          title: Channels
+          type: array
+        actions:
+          items:
+            $ref: '#/components/schemas/ActionConfig'
+          title: Actions
+          type: array
+        sources:
+          items:
+            $ref: '#/components/schemas/SourceConfig'
+          title: Sources
+          type: array
+      required:
+      - teams
+      - recipients
+      - channels
+      - actions
+      - sources
+      title: ConfigLists
+      type: object
+    ConfigRecord:
+      additionalProperties: false
+      description: Metadata shared by every stored config document.
+      properties:
+        kind:
+          enum:
+          - rule
+          - schema_profile
+          - recipient
+          - team
+          - channel
+          - action
+          - source
+          - runbook
+          title: Kind
+          type: string
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        yaml:
+          description: Canonical YAML serialized by the server.
+          title: Yaml
+          type: string
+        version:
+          title: Version
+          type: integer
+        updated_at:
+          format: date-time
+          title: Updated At
+          type: string
+        updated_by:
+          anyOf:
+          - $ref: '#/components/schemas/Actor'
+          - type: 'null'
+          default: null
+      required:
+      - kind
+      - id
+      - yaml
+      - version
+      - updated_at
+      title: ConfigRecord
+      type: object
+    ConfigValidationError:
+      additionalProperties: false
+      properties:
+        path:
+          description: Dot path into the document, '' for the root.
+          title: Path
+          type: string
+        message:
+          title: Message
+          type: string
+      required:
+      - path
+      - message
+      title: ConfigValidationError
+      type: object
+    ConfigValidationRequest:
+      additionalProperties: false
+      properties:
+        kind:
+          enum:
+          - rule
+          - schema_profile
+          - recipient
+          - team
+          - channel
+          - action
+          - source
+          - runbook
+          title: Kind
+          type: string
+        yaml:
+          title: Yaml
+          type: string
+      required:
+      - kind
+      - yaml
+      title: ConfigValidationRequest
+      type: object
+    ConfigValidationResult:
+      additionalProperties: false
+      properties:
+        is_valid:
+          title: Is Valid
+          type: boolean
+        errors:
+          items:
+            $ref: '#/components/schemas/ConfigValidationError'
+          title: Errors
+          type: array
+        document:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          default: null
+          description: Parsed document when valid.
+          title: Document
+      required:
+      - is_valid
+      title: ConfigValidationResult
+      type: object
+    Contacts:
+      additionalProperties: false
+      properties:
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Email
+        sms:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Sms
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Phone
+      title: Contacts
+      type: object
+    DedupPolicy:
+      additionalProperties: false
+      properties:
+        window:
+          default: 60s
+          examples:
+          - 60s
+          - 5m
+          - 1h
+          pattern: ^[0-9]+(ms|s|m|h|d)$
+          title: Window
+          type: string
+        fingerprint:
+          anyOf:
+          - items:
+              examples:
+              - payload.notional
+              - normalized.severity
+              minLength: 1
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          description: Overrides the schema profile fingerprint for this rule.
+          title: Fingerprint
+      title: DedupPolicy
+      type: object
+    Delivery:
+      additionalProperties: false
+      description: Table deliveries; one row per outbox delivery entry, updated by delivery workers.
+      properties:
+        id:
+          title: Id
+          type: integer
+        alert_id:
+          title: Alert Id
+          type: string
+        team:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Team
+          type: string
+        recipient_id:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Recipient Id
+        channel_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Channel Id
+          type: string
+        channel_type:
+          $ref: '#/components/schemas/ChannelType'
+        purpose:
+          $ref: '#/components/schemas/DeliveryPurpose'
+        status:
+          $ref: '#/components/schemas/DeliveryStatus'
+        attempt:
+          default: 0
+          title: Attempt
+          type: integer
+        last_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Last Error
+        is_fallback:
+          default: false
+          title: Is Fallback
+          type: boolean
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        updated_at:
+          format: date-time
+          title: Updated At
+          type: string
+        delivered_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Delivered At
+      required:
+      - id
+      - alert_id
+      - team
+      - channel_id
+      - channel_type
+      - purpose
+      - status
+      - created_at
+      - updated_at
+      title: Delivery
+      type: object
+    DeliveryJob:
+      additionalProperties: false
+      description: Payload of outbox kind `delivery`; stream `deliveries`, field `job`.
+      properties:
+        delivery_id:
+          description: = outbox entry id; delivery idempotency key.
+          title: Delivery Id
+          type: integer
+        alert_id:
+          title: Alert Id
+          type: string
+        team:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Team
+          type: string
+        recipient_id:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          description: None for the team-wide ui channel.
+          title: Recipient Id
+        channel_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Channel Id
+          type: string
+        purpose:
+          $ref: '#/components/schemas/DeliveryPurpose'
+        content:
+          $ref: '#/components/schemas/NotificationContent'
+        approval_request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Approval Request Id
+        event_sent_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: For end-to-end latency.
+          title: Event Sent At
+        is_fallback:
+          default: false
+          title: Is Fallback
+          type: boolean
+      required:
+      - delivery_id
+      - alert_id
+      - team
+      - channel_id
+      - purpose
+      - content
+      title: DeliveryJob
+      type: object
+    DeliveryPurpose:
+      enum:
+      - alert
+      - approval_request
+      - group_summary
+      title: DeliveryPurpose
+      type: string
+    DeliveryStatus:
+      enum:
+      - pending
+      - sent
+      - failed
+      - delivered
+      - dead_lettered
+      - suppressed
+      title: DeliveryStatus
+      type: string
+    DeliveryUpdatedEvent:
+      additionalProperties: false
+      properties:
+        at:
+          format: date-time
+          title: At
+          type: string
+        type:
+          const: delivery.updated
+          default: delivery.updated
+          title: Type
+          type: string
+        delivery:
+          $ref: '#/components/schemas/Delivery'
+      required:
+      - at
+      - delivery
+      title: DeliveryUpdatedEvent
+      type: object
+    ErrorResponse:
+      additionalProperties: false
+      properties:
+        error:
+          examples:
+          - not_found
+          - invalid_transition
+          - validation_failed
+          - llm_unavailable
+          title: Error
+          type: string
+        message:
+          title: Message
+          type: string
+        details:
+          items:
+            $ref: '#/components/schemas/ConfigValidationError'
+          title: Details
+          type: array
+      required:
+      - error
+      - message
+      title: ErrorResponse
+      type: object
+    EventEnvelope:
+      additionalProperties: false
+      description: 'One raw event plus ingest metadata.
+
+
+        Stored in stream `events` as a single field `envelope` holding this model as JSON (orjson).
+
+        `payload` is the raw event exactly as received (a parsed log line for `log_tail`).'
+      properties:
+        event_id:
+          description: ULID assigned by ingest; sortable by time.
+          title: Event Id
+          type: string
+        idempotency_key:
+          description: Idempotency-Key header, else sha256 of source_id + canonical payload JSON.
+          title: Idempotency Key
+          type: string
+        source_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Source Id
+          type: string
+        source_type:
+          $ref: '#/components/schemas/SourceType'
+        received_at:
+          format: date-time
+          title: Received At
+          type: string
+        sent_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: Producer send time (X-Sent-At header); used for alert_e2e_latency_seconds.
+          title: Sent At
+        payload:
+          additionalProperties: true
+          title: Payload
+          type: object
+      required:
+      - event_id
+      - idempotency_key
+      - source_id
+      - source_type
+      - received_at
+      - payload
+      title: EventEnvelope
+      type: object
+    FieldMappingSpec:
+      additionalProperties: false
+      description: Extract one normalized field. Exactly one of `path` or `const` must be set.
+      properties:
+        path:
+          anyOf:
+          - examples:
+            - payload.notional
+            - normalized.severity
+            minLength: 1
+            type: string
+          - type: 'null'
+          default: null
+          title: Path
+        const:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Const
+        format:
+          anyOf:
+          - enum:
+            - iso8601
+            - epoch_ms
+            - epoch_s
+            type: string
+          - type: 'null'
+          default: null
+          description: Only for occurred_at.
+          title: Format
+        value_map:
+          additionalProperties:
+            type: string
+          description: 'Raw value -> normalized value, e.g. {CRIT: critical}.'
+          title: Value Map
+          type: object
+        default:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Default
+      title: FieldMappingSpec
+      type: object
+    FixKind:
+      enum:
+      - threshold
+      - fields
+      - dedup_window
+      - runbook_step
+      - other
+      title: FixKind
+      type: string
+    FixProposal:
+      additionalProperties: false
+      description: Table fix_proposals. Created from an alert, decided by the rule's owner team.
+      properties:
+        id:
+          title: Id
+          type: string
+        alert_id:
+          title: Alert Id
+          type: string
+        rule_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Rule Id
+          type: string
+        runbook_id:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Runbook Id
+        owner_team:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Owner Team
+          type: string
+        kind:
+          $ref: '#/components/schemas/FixKind'
+        description:
+          title: Description
+          type: string
+        proposed_rule:
+          anyOf:
+          - $ref: '#/components/schemas/Rule'
+          - type: 'null'
+          default: null
+        proposed_runbook_step:
+          anyOf:
+          - $ref: '#/components/schemas/RunbookStep'
+          - type: 'null'
+          default: null
+        proposed_by:
+          $ref: '#/components/schemas/Actor'
+        status:
+          $ref: '#/components/schemas/ProposalStatus'
+          default: pending
+        decided_by:
+          anyOf:
+          - $ref: '#/components/schemas/Actor'
+          - type: 'null'
+          default: null
+        decided_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Decided At
+        decision_comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Decision Comment
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+      required:
+      - id
+      - alert_id
+      - rule_id
+      - owner_team
+      - kind
+      - description
+      - proposed_by
+      - created_at
+      title: FixProposal
+      type: object
+    FixProposalCreate:
+      additionalProperties: false
+      properties:
+        kind:
+          $ref: '#/components/schemas/FixKind'
+        description:
+          minLength: 1
+          title: Description
+          type: string
+        proposed_rule:
+          anyOf:
+          - $ref: '#/components/schemas/Rule'
+          - type: 'null'
+          default: null
+          description: Full rule after the change.
+        proposed_runbook_step:
+          anyOf:
+          - $ref: '#/components/schemas/RunbookStep'
+          - type: 'null'
+          default: null
+        proposed_by:
+          $ref: '#/components/schemas/Actor'
+      required:
+      - kind
+      - description
+      - proposed_by
+      title: FixProposalCreate
+      type: object
+    FixProposalDecisionRequest:
+      additionalProperties: false
+      properties:
+        decision:
+          enum:
+          - accept
+          - reject
+          title: Decision
+          type: string
+        actor:
+          $ref: '#/components/schemas/Actor'
+        comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Comment
+      required:
+      - decision
+      - actor
+      title: FixProposalDecisionRequest
+      type: object
+    FixProposalEvent:
+      additionalProperties: false
+      properties:
+        at:
+          format: date-time
+          title: At
+          type: string
+        type:
+          const: fix_proposal.updated
+          default: fix_proposal.updated
+          title: Type
+          type: string
+        fix_proposal:
+          $ref: '#/components/schemas/FixProposal'
+      required:
+      - at
+      - fix_proposal
+      title: FixProposalEvent
+      type: object
+    GroupMember:
+      additionalProperties: false
+      description: One distinct event fingerprint inside a group summary alert (drill-down row).
+      properties:
+        fingerprint:
+          title: Fingerprint
+          type: string
+        title:
+          title: Title
+          type: string
+        count:
+          title: Count
+          type: integer
+        last_seen:
+          format: date-time
+          title: Last Seen
+          type: string
+      required:
+      - fingerprint
+      - title
+      - count
+      - last_seen
+      title: GroupMember
+      type: object
+    GroupPolicy:
+      additionalProperties: false
+      properties:
+        by:
+          items:
+            examples:
+            - payload.notional
+            - normalized.severity
+            minLength: 1
+            type: string
+          minItems: 1
+          title: By
+          type: array
+        window:
+          examples:
+          - 60s
+          - 5m
+          - 1h
+          pattern: ^[0-9]+(ms|s|m|h|d)$
+          title: Window
+          type: string
+      required:
+      - by
+      - window
+      title: GroupPolicy
+      type: object
+    IngestAccepted:
+      additionalProperties: false
+      properties:
+        event_ids:
+          items:
+            type: string
+          title: Event Ids
+          type: array
+        duplicate_count:
+          description: Events skipped by ingest idempotency.
+          title: Duplicate Count
+          type: integer
+      required:
+      - event_ids
+      - duplicate_count
+      title: IngestAccepted
+      type: object
+    MetricsSummary:
+      additionalProperties: false
+      description: Read from Prometheus by the api service; null when Prometheus has no data yet.
+      properties:
+        ingest_rate_per_second:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Ingest Rate Per Second
+        processed_rate_per_second:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Processed Rate Per Second
+        events_stream_lag:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Events Stream Lag
+        deliveries_stream_lag:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Deliveries Stream Lag
+        e2e_latency_p50_seconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: E2E Latency P50 Seconds
+        e2e_latency_p99_seconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: E2E Latency P99 Seconds
+        retries_total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Retries Total
+        dead_lettered_total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Dead Lettered Total
+        open_alert_count:
+          title: Open Alert Count
+          type: integer
+      required:
+      - ingest_rate_per_second
+      - processed_rate_per_second
+      - events_stream_lag
+      - deliveries_stream_lag
+      - e2e_latency_p50_seconds
+      - e2e_latency_p99_seconds
+      - retries_total
+      - dead_lettered_total
+      - open_alert_count
+      title: MetricsSummary
+      type: object
+    NormalizedFieldMappings:
+      additionalProperties: false
+      properties:
+        type:
+          anyOf:
+          - examples:
+            - payload.notional
+            - normalized.severity
+            minLength: 1
+            type: string
+          - $ref: '#/components/schemas/FieldMappingSpec'
+          - type: 'null'
+          default: null
+          title: Type
+        source:
+          anyOf:
+          - examples:
+            - payload.notional
+            - normalized.severity
+            minLength: 1
+            type: string
+          - $ref: '#/components/schemas/FieldMappingSpec'
+          - type: 'null'
+          default: null
+          title: Source
+        severity:
+          anyOf:
+          - examples:
+            - payload.notional
+            - normalized.severity
+            minLength: 1
+            type: string
+          - $ref: '#/components/schemas/FieldMappingSpec'
+          - type: 'null'
+          default: null
+          title: Severity
+        occurred_at:
+          anyOf:
+          - examples:
+            - payload.notional
+            - normalized.severity
+            minLength: 1
+            type: string
+          - $ref: '#/components/schemas/FieldMappingSpec'
+          - type: 'null'
+          default: null
+          title: Occurred At
+        entity:
+          anyOf:
+          - examples:
+            - payload.notional
+            - normalized.severity
+            minLength: 1
+            type: string
+          - $ref: '#/components/schemas/FieldMappingSpec'
+          - type: 'null'
+          default: null
+          title: Entity
+      title: NormalizedFieldMappings
+      type: object
+    NormalizedFields:
+      additionalProperties: false
+      description: Shared fields extracted by a schema profile. Rules address them as `normalized.<name>`.
+      properties:
+        schema_profile_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Schema Profile Id
+          type: string
+        type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Type
+        source:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Source
+        severity:
+          $ref: '#/components/schemas/Severity'
+          default: warning
+        occurred_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Occurred At
+        entity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Entity
+        fingerprint:
+          description: sha256 hex of the profile's fingerprint field values.
+          title: Fingerprint
+          type: string
+        is_resolution:
+          default: false
+          description: True when the profile's resolution condition matched.
+          title: Is Resolution
+          type: boolean
+      required:
+      - schema_profile_id
+      - fingerprint
+      title: NormalizedFields
+      type: object
+    NotificationContent:
+      additionalProperties: false
+      description: Rendered once by the producer of the outbox row; channels only format it.
+      properties:
+        title:
+          title: Title
+          type: string
+        body:
+          default: ''
+          title: Body
+          type: string
+        severity:
+          $ref: '#/components/schemas/Severity'
+        fields:
+          items:
+            $ref: '#/components/schemas/AlertField'
+          title: Fields
+          type: array
+        alert_url:
+          title: Alert Url
+          type: string
+        runbook_steps:
+          description: Rendered step texts.
+          items:
+            type: string
+          title: Runbook Steps
+          type: array
+        approval_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Approval Code
+      required:
+      - title
+      - severity
+      - alert_url
+      title: NotificationContent
+      type: object
+    NotificationEvent:
+      additionalProperties: false
+      description: 'Delivery through the `ui` channel: a toast for the team.'
+      properties:
+        at:
+          format: date-time
+          title: At
+          type: string
+        type:
+          const: notification
+          default: notification
+          title: Type
+          type: string
+        alert_id:
+          title: Alert Id
+          type: string
+        team:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Team
+          type: string
+        title:
+          title: Title
+          type: string
+        severity:
+          $ref: '#/components/schemas/Severity'
+        delivery_id:
+          title: Delivery Id
+          type: integer
+      required:
+      - at
+      - alert_id
+      - team
+      - title
+      - severity
+      - delivery_id
+      title: NotificationEvent
+      type: object
+    OutboxEntry:
+      additionalProperties: false
+      description: Table outbox. Written in the same transaction as the alert change that caused it.
+      properties:
+        id:
+          title: Id
+          type: integer
+        kind:
+          $ref: '#/components/schemas/OutboxKind'
+        alert_id:
+          title: Alert Id
+          type: string
+        payload:
+          additionalProperties: true
+          description: DeliveryJob or RunbookJob as JSON.
+          title: Payload
+          type: object
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        relayed_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Relayed At
+      required:
+      - id
+      - kind
+      - alert_id
+      - payload
+      - created_at
+      title: OutboxEntry
+      type: object
+    OutboxKind:
+      enum:
+      - delivery
+      - runbook_job
+      title: OutboxKind
+      type: string
+    PhoneMessage:
+      additionalProperties: false
+      description: A mock SMS or phone call as shown in the phone simulator.
+      properties:
+        id:
+          title: Id
+          type: string
+        recipient_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Recipient Id
+          type: string
+        channel_type:
+          enum:
+          - sms
+          - phone
+          title: Channel Type
+          type: string
+        to:
+          title: To
+          type: string
+        text:
+          title: Text
+          type: string
+        alert_id:
+          title: Alert Id
+          type: string
+        delivery_id:
+          title: Delivery Id
+          type: integer
+        approval_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Approval Code
+        at:
+          format: date-time
+          title: At
+          type: string
+      required:
+      - id
+      - recipient_id
+      - channel_type
+      - to
+      - text
+      - alert_id
+      - delivery_id
+      - at
+      title: PhoneMessage
+      type: object
+    PhoneMessageEvent:
+      additionalProperties: false
+      properties:
+        at:
+          format: date-time
+          title: At
+          type: string
+        type:
+          const: phone.message
+          default: phone.message
+          title: Type
+          type: string
+        message:
+          $ref: '#/components/schemas/PhoneMessage'
+      required:
+      - at
+      - message
+      title: PhoneMessageEvent
+      type: object
+    PhoneReplyRequest:
+      additionalProperties: false
+      description: Reply typed in the phone simulator, e.g. 'APPROVE 4821', 'REJECT 4821', 'ACK'.
+      properties:
+        recipient_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Recipient Id
+          type: string
+        text:
+          minLength: 1
+          title: Text
+          type: string
+      required:
+      - recipient_id
+      - text
+      title: PhoneReplyRequest
+      type: object
+    PhoneReplyResult:
+      additionalProperties: false
+      properties:
+        is_understood:
+          title: Is Understood
+          type: boolean
+        message:
+          title: Message
+          type: string
+        approval_request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Approval Request Id
+      required:
+      - is_understood
+      - message
+      title: PhoneReplyResult
+      type: object
+    PreferenceMatch:
+      additionalProperties: false
+      properties:
+        severities:
+          description: Empty = any.
+          items:
+            $ref: '#/components/schemas/Severity'
+          title: Severities
+          type: array
+        sources:
+          description: normalized.source values; empty = any.
+          items:
+            type: string
+          title: Sources
+          type: array
+      title: PreferenceMatch
+      type: object
+    Presentation:
+      additionalProperties: false
+      properties:
+        title:
+          examples:
+          - Rejected {{payload.currency}} {{payload.notional}}
+          title: Title
+          type: string
+        body:
+          default: ''
+          examples:
+          - Rejected {{payload.currency}} {{payload.notional}}
+          title: Body
+          type: string
+        fields:
+          items:
+            examples:
+            - payload.notional
+            - normalized.severity
+            minLength: 1
+            type: string
+          title: Fields
+          type: array
+        color:
+          default: orange
+          enum:
+          - gray
+          - blue
+          - green
+          - yellow
+          - orange
+          - red
+          - purple
+          title: Color
+          type: string
+      required:
+      - title
+      title: Presentation
+      type: object
+    PreviewAlert:
+      additionalProperties: false
+      properties:
+        title:
+          title: Title
+          type: string
+        severity:
+          $ref: '#/components/schemas/Severity'
+        fingerprint:
+          title: Fingerprint
+          type: string
+        group_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Group Key
+        count:
+          title: Count
+          type: integer
+        first_seen:
+          format: date-time
+          title: First Seen
+          type: string
+      required:
+      - title
+      - severity
+      - fingerprint
+      - count
+      - first_seen
+      title: PreviewAlert
+      type: object
+    PreviewDeliveryCount:
+      additionalProperties: false
+      properties:
+        recipient_id:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          title: Recipient Id
+        channel_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Channel Id
+          type: string
+        count:
+          title: Count
+          type: integer
+      required:
+      - recipient_id
+      - channel_id
+      - count
+      title: PreviewDeliveryCount
+      type: object
+    ProposalStatus:
+      enum:
+      - pending
+      - accepted
+      - rejected
+      title: ProposalStatus
+      type: string
+    Recipient:
+      additionalProperties: false
+      description: config/recipients/<id>.yaml.
+      properties:
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        display_name:
+          title: Display Name
+          type: string
+        teams:
+          items:
+            examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          title: Teams
+          type: array
+        contacts:
+          $ref: '#/components/schemas/Contacts'
+        channel_preferences:
+          items:
+            $ref: '#/components/schemas/ChannelPreference'
+          title: Channel Preferences
+          type: array
+      required:
+      - id
+      - display_name
+      title: Recipient
+      type: object
+    RenderedRunbook:
+      additionalProperties: false
+      properties:
+        runbook_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Runbook Id
+          type: string
+        alert_id:
+          title: Alert Id
+          type: string
+        title:
+          title: Title
+          type: string
+        format:
+          $ref: '#/components/schemas/RunbookFormat'
+        source:
+          title: Source
+          type: string
+        steps:
+          items:
+            $ref: '#/components/schemas/RenderedRunbookStep'
+          title: Steps
+          type: array
+      required:
+      - runbook_id
+      - alert_id
+      - title
+      - format
+      - source
+      - steps
+      title: RenderedRunbook
+      type: object
+    RenderedRunbookStep:
+      additionalProperties: false
+      properties:
+        index:
+          title: Index
+          type: integer
+        kind:
+          $ref: '#/components/schemas/StepKind'
+        text:
+          title: Text
+          type: string
+        action:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Action
+        params:
+          additionalProperties:
+            type: string
+          title: Params
+          type: object
+        requires_approval:
+          default: false
+          title: Requires Approval
+          type: boolean
+        is_automatic:
+          default: false
+          title: Is Automatic
+          type: boolean
+        missing_fields:
+          description: Placeholders that had no value.
+          items:
+            type: string
+          title: Missing Fields
+          type: array
+      required:
+      - index
+      - kind
+      - text
+      title: RenderedRunbookStep
+      type: object
+    ResolutionReason:
+      enum:
+      - manual
+      - source_resolved
+      - silence
+      title: ResolutionReason
+      type: string
+    RetryPolicy:
+      additionalProperties: false
+      properties:
+        max_attempts:
+          default: 5
+          minimum: 1
+          title: Max Attempts
+          type: integer
+        initial_backoff:
+          default: 1s
+          examples:
+          - 60s
+          - 5m
+          - 1h
+          pattern: ^[0-9]+(ms|s|m|h|d)$
+          title: Initial Backoff
+          type: string
+        max_backoff:
+          default: 30s
+          examples:
+          - 60s
+          - 5m
+          - 1h
+          pattern: ^[0-9]+(ms|s|m|h|d)$
+          title: Max Backoff
+          type: string
+      title: RetryPolicy
+      type: object
+    Route:
+      additionalProperties: false
+      properties:
+        teams:
+          description: On-call recipients of these teams. Empty = the rule's team.
+          items:
+            examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          title: Teams
+          type: array
+        recipients:
+          items:
+            examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          title: Recipients
+          type: array
+        channels:
+          description: Used for a recipient with no matching channel preference.
+          items:
+            examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          title: Channels
+          type: array
+      title: Route
+      type: object
+    Rule:
+      additionalProperties: false
+      description: config/rules/<id>.yaml.
+      properties:
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        team:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Team
+          type: string
+        description:
+          default: ''
+          title: Description
+          type: string
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        when:
+          anyOf:
+          - $ref: '#/components/schemas/ConditionAll'
+          - $ref: '#/components/schemas/ConditionAny'
+          - $ref: '#/components/schemas/ConditionNot'
+          - $ref: '#/components/schemas/ConditionLeaf'
+          title: When
+        severity:
+          anyOf:
+          - $ref: '#/components/schemas/Severity'
+          - type: 'null'
+          default: null
+          description: Overrides normalized severity.
+        route:
+          $ref: '#/components/schemas/Route'
+        present:
+          $ref: '#/components/schemas/Presentation'
+        dedup:
+          $ref: '#/components/schemas/DedupPolicy'
+        group:
+          anyOf:
+          - $ref: '#/components/schemas/GroupPolicy'
+          - type: 'null'
+          default: null
+        throttle:
+          anyOf:
+          - $ref: '#/components/schemas/ThrottlePolicy'
+          - type: 'null'
+          default: null
+        auto_resolve:
+          $ref: '#/components/schemas/AutoResolvePolicy'
+        runbook:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Runbook
+      required:
+      - id
+      - team
+      - when
+      - present
+      title: Rule
+      type: object
+    RulePreview:
+      additionalProperties: false
+      properties:
+        window_start:
+          format: date-time
+          title: Window Start
+          type: string
+        window_end:
+          format: date-time
+          title: Window End
+          type: string
+        events_scanned:
+          title: Events Scanned
+          type: integer
+        events_matched:
+          title: Events Matched
+          type: integer
+        alerts_created:
+          description: After dedup and grouping.
+          title: Alerts Created
+          type: integer
+        deliveries:
+          items:
+            $ref: '#/components/schemas/PreviewDeliveryCount'
+          title: Deliveries
+          type: array
+        sample_alerts:
+          items:
+            $ref: '#/components/schemas/PreviewAlert'
+          maxItems: 20
+          title: Sample Alerts
+          type: array
+        duration_ms:
+          title: Duration Ms
+          type: integer
+        warnings:
+          items:
+            type: string
+          title: Warnings
+          type: array
+      required:
+      - window_start
+      - window_end
+      - events_scanned
+      - events_matched
+      - alerts_created
+      - deliveries
+      - sample_alerts
+      - duration_ms
+      title: RulePreview
+      type: object
+    RulePreviewRequest:
+      additionalProperties: false
+      properties:
+        rule:
+          $ref: '#/components/schemas/Rule'
+        window:
+          default: 1h
+          examples:
+          - 60s
+          - 5m
+          - 1h
+          pattern: ^[0-9]+(ms|s|m|h|d)$
+          title: Window
+          type: string
+        max_events:
+          default: 50000
+          maximum: 500000
+          minimum: 1
+          title: Max Events
+          type: integer
+      required:
+      - rule
+      title: RulePreviewRequest
+      type: object
+    RuleRecord:
+      additionalProperties: false
+      properties:
+        kind:
+          enum:
+          - rule
+          - schema_profile
+          - recipient
+          - team
+          - channel
+          - action
+          - source
+          - runbook
+          title: Kind
+          type: string
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        yaml:
+          description: Canonical YAML serialized by the server.
+          title: Yaml
+          type: string
+        version:
+          title: Version
+          type: integer
+        updated_at:
+          format: date-time
+          title: Updated At
+          type: string
+        updated_by:
+          anyOf:
+          - $ref: '#/components/schemas/Actor'
+          - type: 'null'
+          default: null
+        rule:
+          $ref: '#/components/schemas/Rule'
+      required:
+      - kind
+      - id
+      - yaml
+      - version
+      - updated_at
+      - rule
+      title: RuleRecord
+      type: object
+    RuleWrite:
+      additionalProperties: false
+      properties:
+        rule:
+          $ref: '#/components/schemas/Rule'
+        actor:
+          $ref: '#/components/schemas/Actor'
+      required:
+      - rule
+      - actor
+      title: RuleWrite
+      type: object
+    RunIf:
+      enum:
+      - always
+      - previous_failed
+      - previous_succeeded
+      title: RunIf
+      type: string
+    Runbook:
+      additionalProperties: false
+      description: 'A runbook as stored: original source plus normalized steps.'
+      properties:
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        title:
+          title: Title
+          type: string
+        team:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Team
+        format:
+          $ref: '#/components/schemas/RunbookFormat'
+        source:
+          description: Original text, always shown next to the steps.
+          title: Source
+          type: string
+        steps:
+          items:
+            $ref: '#/components/schemas/RunbookStep'
+          title: Steps
+          type: array
+        normalized_by:
+          description: fallback = LLM unavailable, whole text kept as one text step.
+          enum:
+          - parser
+          - llm
+          - fallback
+          title: Normalized By
+          type: string
+        version:
+          default: 1
+          title: Version
+          type: integer
+        updated_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Updated At
+      required:
+      - id
+      - title
+      - format
+      - source
+      - steps
+      - normalized_by
+      title: Runbook
+      type: object
+    RunbookFormat:
+      enum:
+      - yaml
+      - markdown
+      - text
+      title: RunbookFormat
+      type: string
+    RunbookJob:
+      additionalProperties: false
+      description: Payload of outbox kind `runbook_job`; stream `runbook-jobs`, field `job`.
+      properties:
+        job_type:
+          enum:
+          - start_runbook
+          - execute_action_run
+          title: Job Type
+          type: string
+        alert_id:
+          title: Alert Id
+          type: string
+        runbook_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Runbook Id
+          type: string
+        action_run_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Action Run Id
+      required:
+      - job_type
+      - alert_id
+      - runbook_id
+      title: RunbookJob
+      type: object
+    RunbookRevisionProposal:
+      additionalProperties: false
+      description: 'Optional (cut-1): steps skipped and actions taken outside the runbook -> new version.'
+      properties:
+        id:
+          title: Id
+          type: string
+        runbook_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Runbook Id
+          type: string
+        based_on_alert_ids:
+          items:
+            type: string
+          title: Based On Alert Ids
+          type: array
+        summary:
+          title: Summary
+          type: string
+        proposed_steps:
+          items:
+            $ref: '#/components/schemas/RunbookStep'
+          title: Proposed Steps
+          type: array
+        status:
+          $ref: '#/components/schemas/ProposalStatus'
+          default: pending
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+      required:
+      - id
+      - runbook_id
+      - based_on_alert_ids
+      - summary
+      - proposed_steps
+      - created_at
+      title: RunbookRevisionProposal
+      type: object
+    RunbookStep:
+      additionalProperties: false
+      description: One normalized step. `text` and `params` are templates filled from the alert.
+      properties:
+        index:
+          minimum: 0
+          title: Index
+          type: integer
+        kind:
+          $ref: '#/components/schemas/StepKind'
+        text:
+          examples:
+          - Rejected {{payload.currency}} {{payload.notional}}
+          title: Text
+          type: string
+        action:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          description: Action id; required for check/action steps that execute.
+          title: Action
+        params:
+          additionalProperties:
+            examples:
+            - Rejected {{payload.currency}} {{payload.notional}}
+            type: string
+          title: Params
+          type: object
+        approval:
+          anyOf:
+          - $ref: '#/components/schemas/ApprovalPolicy'
+          - type: 'null'
+          default: null
+          description: None = inherit from the action config.
+        is_automatic:
+          default: false
+          description: Runs without a click when the alert opens.
+          title: Is Automatic
+          type: boolean
+        run_if:
+          $ref: '#/components/schemas/RunIf'
+          default: always
+        max_attempts:
+          default: 1
+          minimum: 1
+          title: Max Attempts
+          type: integer
+      required:
+      - index
+      - kind
+      - text
+      title: RunbookStep
+      type: object
+    RunbookSummary:
+      additionalProperties: false
+      properties:
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        title:
+          title: Title
+          type: string
+        team:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          title: Team
+        format:
+          $ref: '#/components/schemas/RunbookFormat'
+        step_count:
+          title: Step Count
+          type: integer
+        normalized_by:
+          enum:
+          - parser
+          - llm
+          - fallback
+          title: Normalized By
+          type: string
+        version:
+          title: Version
+          type: integer
+      required:
+      - id
+      - title
+      - team
+      - format
+      - step_count
+      - normalized_by
+      - version
+      title: RunbookSummary
+      type: object
+    RunbookWrite:
+      additionalProperties: false
+      properties:
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        title:
+          title: Title
+          type: string
+        team:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Team
+        format:
+          $ref: '#/components/schemas/RunbookFormat'
+        source:
+          minLength: 1
+          title: Source
+          type: string
+        actor:
+          $ref: '#/components/schemas/Actor'
+      required:
+      - id
+      - title
+      - format
+      - source
+      - actor
+      title: RunbookWrite
+      type: object
+    RunbookYamlDocument:
+      additionalProperties: false
+      description: Content of a `yaml`-format runbook file (config/runbooks/<id>.yaml).
+      properties:
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        title:
+          title: Title
+          type: string
+        team:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Team
+        steps:
+          items:
+            $ref: '#/components/schemas/RunbookStep'
+          minItems: 1
+          title: Steps
+          type: array
+      required:
+      - id
+      - title
+      - steps
+      title: RunbookYamlDocument
+      type: object
+    SchemaProfile:
+      additionalProperties: false
+      description: config/schemas/<id>.yaml. Recognises an event shape and maps shared fields; never filters.
+      properties:
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        description:
+          default: ''
+          title: Description
+          type: string
+        priority:
+          default: 0
+          description: Higher wins when several profiles match.
+          title: Priority
+          type: integer
+        match:
+          anyOf:
+          - $ref: '#/components/schemas/ConditionAll'
+          - $ref: '#/components/schemas/ConditionAny'
+          - $ref: '#/components/schemas/ConditionNot'
+          - $ref: '#/components/schemas/ConditionLeaf'
+          title: Match
+        fields:
+          $ref: '#/components/schemas/NormalizedFieldMappings'
+        fingerprint:
+          items:
+            examples:
+            - payload.notional
+            - normalized.severity
+            minLength: 1
+            type: string
+          minItems: 1
+          title: Fingerprint
+          type: array
+        resolution:
+          anyOf:
+          - $ref: '#/components/schemas/ConditionAll'
+          - $ref: '#/components/schemas/ConditionAny'
+          - $ref: '#/components/schemas/ConditionNot'
+          - $ref: '#/components/schemas/ConditionLeaf'
+          - type: 'null'
+          default: null
+          description: When it matches, the event resolves the open alert with the same fingerprint.
+          title: Resolution
+      required:
+      - id
+      - match
+      - fields
+      - fingerprint
+      title: SchemaProfile
+      type: object
+    SchemaProfileProposal:
+      additionalProperties: false
+      description: Draft profile for a sample event. Never saved until a human submits it.
+      properties:
+        profile:
+          $ref: '#/components/schemas/SchemaProfile'
+        generated_by:
+          enum:
+          - llm
+          - heuristic
+          title: Generated By
+          type: string
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Model
+        notes:
+          items:
+            type: string
+          title: Notes
+          type: array
+      required:
+      - profile
+      - generated_by
+      title: SchemaProfileProposal
+      type: object
+    SchemaProfileProposeRequest:
+      additionalProperties: false
+      properties:
+        sample_event:
+          additionalProperties: true
+          title: Sample Event
+          type: object
+        profile_id:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Profile Id
+      required:
+      - sample_event
+      title: SchemaProfileProposeRequest
+      type: object
+    SchemaProfileRecord:
+      additionalProperties: false
+      properties:
+        kind:
+          enum:
+          - rule
+          - schema_profile
+          - recipient
+          - team
+          - channel
+          - action
+          - source
+          - runbook
+          title: Kind
+          type: string
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        yaml:
+          description: Canonical YAML serialized by the server.
+          title: Yaml
+          type: string
+        version:
+          title: Version
+          type: integer
+        updated_at:
+          format: date-time
+          title: Updated At
+          type: string
+        updated_by:
+          anyOf:
+          - $ref: '#/components/schemas/Actor'
+          - type: 'null'
+          default: null
+        schema_profile:
+          $ref: '#/components/schemas/SchemaProfile'
+      required:
+      - kind
+      - id
+      - yaml
+      - version
+      - updated_at
+      - schema_profile
+      title: SchemaProfileRecord
+      type: object
+    SchemaProfileTestRequest:
+      additionalProperties: false
+      properties:
+        schema_profile:
+          $ref: '#/components/schemas/SchemaProfile'
+        window:
+          default: 1h
+          examples:
+          - 60s
+          - 5m
+          - 1h
+          pattern: ^[0-9]+(ms|s|m|h|d)$
+          title: Window
+          type: string
+        sample_event:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          default: null
+          description: Also test this event.
+          title: Sample Event
+      required:
+      - schema_profile
+      title: SchemaProfileTestRequest
+      type: object
+    SchemaProfileTestResult:
+      additionalProperties: false
+      properties:
+        events_scanned:
+          title: Events Scanned
+          type: integer
+        events_matched:
+          title: Events Matched
+          type: integer
+        samples:
+          items:
+            $ref: '#/components/schemas/SchemaProfileTestSample'
+          maxItems: 20
+          title: Samples
+          type: array
+      required:
+      - events_scanned
+      - events_matched
+      - samples
+      title: SchemaProfileTestResult
+      type: object
+    SchemaProfileTestSample:
+      additionalProperties: false
+      properties:
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Id
+        normalized:
+          $ref: '#/components/schemas/NormalizedFields'
+      required:
+      - event_id
+      - normalized
+      title: SchemaProfileTestSample
+      type: object
+    SchemaProfileWrite:
+      additionalProperties: false
+      properties:
+        schema_profile:
+          $ref: '#/components/schemas/SchemaProfile'
+        actor:
+          $ref: '#/components/schemas/Actor'
+      required:
+      - schema_profile
+      - actor
+      title: SchemaProfileWrite
+      type: object
+    Severity:
+      description: Ordered from least to most severe; comparisons use SEVERITY_ORDER.
+      enum:
+      - debug
+      - info
+      - warning
+      - error
+      - critical
+      title: Severity
+      type: string
+    SourceConfig:
+      additionalProperties: false
+      description: 'config/sources/<id>.yaml. Ingest URL for HTTP sources: POST /api/v1/ingest/<id>.'
+      properties:
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        type:
+          $ref: '#/components/schemas/SourceType'
+        description:
+          default: ''
+          title: Description
+          type: string
+        team:
+          anyOf:
+          - examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          - type: 'null'
+          default: null
+          description: Default owning team, informational.
+          title: Team
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        settings:
+          additionalProperties: true
+          description: 'Plugin-specific. log_tail: path, line_format (json|regex), line_pattern (regex with named groups),
+            start_at (end|beginning). webhook: idempotency_key_path (optional).'
+          title: Settings
+          type: object
+      required:
+      - id
+      - type
+      title: SourceConfig
+      type: object
+    SourceType:
+      enum:
+      - webhook
+      - alertmanager
+      - log_tail
+      title: SourceType
+      type: string
+    SseEvent:
+      discriminator:
+        mapping:
+          action_run.updated: '#/components/schemas/ActionRunUpdatedEvent'
+          alert.created: '#/components/schemas/AlertCreatedEvent'
+          alert.updated: '#/components/schemas/AlertUpdatedEvent'
+          approval.decided: '#/components/schemas/ApprovalDecidedEvent'
+          approval.requested: '#/components/schemas/ApprovalRequestedEvent'
+          config.changed: '#/components/schemas/ConfigChangedEvent'
+          delivery.updated: '#/components/schemas/DeliveryUpdatedEvent'
+          fix_proposal.updated: '#/components/schemas/FixProposalEvent'
+          notification: '#/components/schemas/NotificationEvent'
+          phone.message: '#/components/schemas/PhoneMessageEvent'
+          unknown_schema.detected: '#/components/schemas/UnknownSchemaDetectedEvent'
+        propertyName: type
+      oneOf:
+      - $ref: '#/components/schemas/AlertCreatedEvent'
+      - $ref: '#/components/schemas/AlertUpdatedEvent'
+      - $ref: '#/components/schemas/NotificationEvent'
+      - $ref: '#/components/schemas/DeliveryUpdatedEvent'
+      - $ref: '#/components/schemas/PhoneMessageEvent'
+      - $ref: '#/components/schemas/ActionRunUpdatedEvent'
+      - $ref: '#/components/schemas/ApprovalRequestedEvent'
+      - $ref: '#/components/schemas/ApprovalDecidedEvent'
+      - $ref: '#/components/schemas/FixProposalEvent'
+      - $ref: '#/components/schemas/UnknownSchemaDetectedEvent'
+      - $ref: '#/components/schemas/ConfigChangedEvent'
+    StepKind:
+      enum:
+      - text
+      - check
+      - action
+      title: StepKind
+      type: string
+    StepRunRequest:
+      additionalProperties: false
+      properties:
+        actor:
+          $ref: '#/components/schemas/Actor'
+      required:
+      - actor
+      title: StepRunRequest
+      type: object
+    Team:
+      additionalProperties: false
+      description: config/teams/<id>.yaml.
+      properties:
+        id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Id
+          type: string
+        display_name:
+          title: Display Name
+          type: string
+        on_call:
+          description: Recipient ids.
+          items:
+            examples:
+            - rates-large-rejections
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            type: string
+          title: On Call
+          type: array
+      required:
+      - id
+      - display_name
+      title: Team
+      type: object
+    ThrottlePolicy:
+      additionalProperties: false
+      properties:
+        max_deliveries:
+          description: Per recipient, per rule, per period.
+          minimum: 1
+          title: Max Deliveries
+          type: integer
+        per:
+          examples:
+          - 60s
+          - 5m
+          - 1h
+          pattern: ^[0-9]+(ms|s|m|h|d)$
+          title: Per
+          type: string
+      required:
+      - max_deliveries
+      - per
+      title: ThrottlePolicy
+      type: object
+    UnknownSchemaDetectedEvent:
+      additionalProperties: false
+      properties:
+        at:
+          format: date-time
+          title: At
+          type: string
+        type:
+          const: unknown_schema.detected
+          default: unknown_schema.detected
+          title: Type
+          type: string
+        sample:
+          $ref: '#/components/schemas/UnknownSchemaSample'
+      required:
+      - at
+      - sample
+      title: UnknownSchemaDetectedEvent
+      type: object
+    UnknownSchemaSample:
+      additionalProperties: false
+      description: Table unknown_schema_samples; one row per distinct key shape.
+      properties:
+        shape_hash:
+          title: Shape Hash
+          type: string
+        source_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Source Id
+          type: string
+        key_paths:
+          items:
+            type: string
+          title: Key Paths
+          type: array
+        sample_event:
+          additionalProperties: true
+          title: Sample Event
+          type: object
+        event_count:
+          title: Event Count
+          type: integer
+        first_seen:
+          format: date-time
+          title: First Seen
+          type: string
+        last_seen:
+          format: date-time
+          title: Last Seen
+          type: string
+      required:
+      - shape_hash
+      - source_id
+      - key_paths
+      - sample_event
+      - event_count
+      - first_seen
+      - last_seen
+      title: UnknownSchemaSample
+      type: object

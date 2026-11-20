@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-20T10:15:02.123Z",
+  "level": "ERROR",
+  "service": "pricing-engine",
+  "instrument": "EURUSD",
+  "feed": "reuters",
+  "age_ms": "31000",
+  "msg": "Price stale for 31s",
+  "raw_line": "2026-11-20T10:15:02.123Z ERROR pricing-engine instrument=EURUSD feed=reuters age_ms=31000 msg=\"Price stale for 31s\""
+}

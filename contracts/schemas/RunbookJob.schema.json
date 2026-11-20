@@ -1,0 +1,45 @@
+{
+  "additionalProperties": false,
+  "description": "Payload of outbox kind `runbook_job`; stream `runbook-jobs`, field `job`.",
+  "properties": {
+    "job_type": {
+      "enum": [
+        "start_runbook",
+        "execute_action_run"
+      ],
+      "title": "Job Type",
+      "type": "string"
+    },
+    "alert_id": {
+      "title": "Alert Id",
+      "type": "string"
+    },
+    "runbook_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Runbook Id",
+      "type": "string"
+    },
+    "action_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Action Run Id"
+    }
+  },
+  "required": [
+    "job_type",
+    "alert_id",
+    "runbook_id"
+  ],
+  "title": "RunbookJob",
+  "type": "object"
+}

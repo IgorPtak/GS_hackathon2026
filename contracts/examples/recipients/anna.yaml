@@ -1,0 +1,10 @@
+id: anna
+display_name: Anna Kowalska
+teams: [settlements]
+contacts: { email: anna@example.com, sms: "+48600000000", phone: "+48600000000" }
+channel_preferences:
+  - when: { severities: [critical], sources: [settlement-engine] }
+    channels: [sms, phone]
+    working_hours: "08:00-20:00"
+    timezone: Europe/Warsaw
+    otherwise: [email]

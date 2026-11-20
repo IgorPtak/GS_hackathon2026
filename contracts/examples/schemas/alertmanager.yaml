@@ -1,0 +1,12 @@
+id: alertmanager
+description: One alert from an Alertmanager webhook (ingest splits the batch)
+priority: 10
+match: { field: labels.alertname, op: exists, value: true }
+fields:
+  type: labels.alertname
+  source: labels.job
+  severity: { path: labels.severity, value_map: { page: critical, warn: warning }, default: warning }
+  occurred_at: { path: startsAt, format: iso8601 }
+  entity: labels.instance
+fingerprint: [labels.alertname, labels.instance]
+resolution: { field: status, op: eq, value: resolved }

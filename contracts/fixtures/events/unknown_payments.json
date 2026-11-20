@@ -1,0 +1,7 @@
+{
+  "evt": "payment.declined",
+  "lvl": "WARN",
+  "svc": "payments-api",
+  "at": "2026-11-20T10:30:00+01:00",
+  "data": { "paymentId": "P-99812", "amount": 1250.0, "currency": "PLN", "declineCode": "INSUFFICIENT_FUNDS" }
+}

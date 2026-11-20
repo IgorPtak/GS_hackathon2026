@@ -1,0 +1,148 @@
+{
+  "$defs": {
+    "ActionRunStatus": {
+      "enum": [
+        "pending_approval",
+        "approved",
+        "rejected",
+        "running",
+        "succeeded",
+        "failed",
+        "skipped"
+      ],
+      "title": "ActionRunStatus",
+      "type": "string"
+    },
+    "Actor": {
+      "additionalProperties": false,
+      "description": "Who performed something: a recipient id, 'system:<service>' or 'llm'.",
+      "properties": {
+        "id": {
+          "examples": [
+            "anna",
+            "system:processor",
+            "llm"
+          ],
+          "title": "Id",
+          "type": "string"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Actor",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One execution of a runbook step's action for an alert (table action_runs).",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "alert_id": {
+      "title": "Alert Id",
+      "type": "string"
+    },
+    "runbook_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Runbook Id",
+      "type": "string"
+    },
+    "step_index": {
+      "title": "Step Index",
+      "type": "integer"
+    },
+    "action_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Action Id",
+      "type": "string"
+    },
+    "params": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Params",
+      "type": "object"
+    },
+    "status": {
+      "$ref": "#/$defs/ActionRunStatus"
+    },
+    "attempt": {
+      "default": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "result": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Result"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "requested_by": {
+      "$ref": "#/$defs/Actor"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "alert_id",
+    "runbook_id",
+    "step_index",
+    "action_id",
+    "params",
+    "status",
+    "requested_by",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "ActionRun",
+  "type": "object"
+}

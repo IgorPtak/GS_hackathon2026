@@ -1,0 +1,107 @@
+{
+  "$defs": {
+    "Actor": {
+      "additionalProperties": false,
+      "description": "Who performed something: a recipient id, 'system:<service>' or 'llm'.",
+      "properties": {
+        "id": {
+          "examples": [
+            "anna",
+            "system:processor",
+            "llm"
+          ],
+          "title": "Id",
+          "type": "string"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Actor",
+      "type": "object"
+    },
+    "AuditVerb": {
+      "enum": [
+        "alert_created",
+        "alert_grouped",
+        "alert_acknowledged",
+        "alert_resolved",
+        "delivery_delivered",
+        "delivery_failed",
+        "delivery_dead_lettered",
+        "delivery_fallback",
+        "delivery_suppressed",
+        "runbook_started",
+        "action_run_started",
+        "action_run_succeeded",
+        "action_run_failed",
+        "action_run_skipped",
+        "approval_requested",
+        "approval_decided",
+        "fix_proposed",
+        "fix_decided"
+      ],
+      "title": "AuditVerb",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Table audit_entries. Append-only.",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "integer"
+    },
+    "alert_id": {
+      "title": "Alert Id",
+      "type": "string"
+    },
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    },
+    "actor": {
+      "$ref": "#/$defs/Actor"
+    },
+    "verb": {
+      "$ref": "#/$defs/AuditVerb"
+    },
+    "outcome": {
+      "default": "ok",
+      "enum": [
+        "ok",
+        "error",
+        "pending"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "detail": {
+      "additionalProperties": true,
+      "title": "Detail",
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "alert_id",
+    "at",
+    "actor",
+    "verb"
+  ],
+  "title": "AuditEntry",
+  "type": "object"
+}

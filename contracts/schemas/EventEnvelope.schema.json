@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "SourceType": {
+      "enum": [
+        "webhook",
+        "alertmanager",
+        "log_tail"
+      ],
+      "title": "SourceType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One raw event plus ingest metadata.\n\nStored in stream `events` as a single field `envelope` holding this model as JSON (orjson).\n`payload` is the raw event exactly as received (a parsed log line for `log_tail`).",
+  "properties": {
+    "event_id": {
+      "description": "ULID assigned by ingest; sortable by time.",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "description": "Idempotency-Key header, else sha256 of source_id + canonical payload JSON.",
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "source_id": {
+      "examples": [
+        "rates-large-rejections"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Source Id",
+      "type": "string"
+    },
+    "source_type": {
+      "$ref": "#/$defs/SourceType"
+    },
+    "received_at": {
+      "format": "date-time",
+      "title": "Received At",
+      "type": "string"
+    },
+    "sent_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Producer send time (X-Sent-At header); used for alert_e2e_latency_seconds.",
+      "title": "Sent At"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_id",
+    "idempotency_key",
+    "source_id",
+    "source_type",
+    "received_at",
+    "payload"
+  ],
+  "title": "EventEnvelope",
+  "type": "object"
+}
