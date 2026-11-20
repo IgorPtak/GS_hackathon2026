@@ -1,0 +1,211 @@
+"""Condition operators, coercion, missing fields, nesting, real config and a benchmark."""
+
+import json
+import time
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+from alerting_contracts.config import Condition, Rule
+from alerting_core.rules import (
+    MISSING,
+    build_context,
+    compile_condition,
+    evaluate_condition,
+    resolve_field_path,
+)
+from pydantic import TypeAdapter
+
+ROOT = Path(__file__).resolve().parents[4]
+_adapter: TypeAdapter[Condition] = TypeAdapter(Condition)
+
+
+def cond(spec: dict[str, Any]) -> Condition:
+    return _adapter.validate_python(spec)
+
+
+def leaf(field: str, op: str, value: Any = None) -> Condition:
+    return cond({"field": field, "op": op, "value": value})
+
+
+def check(
+    spec: Condition, payload: dict[str, Any], normalized: dict[str, Any] | None = None
+) -> bool:
+    return compile_condition(spec)(build_context(payload, normalized or {}))
+
+
+def test_resolve_field_path_dicts_lists_and_missing() -> None:
+    context = {"a": {"b": [{"c": 1}, 2]}, "n": None}
+    assert resolve_field_path(context, "a.b.0.c") == (True, 1)
+    assert resolve_field_path(context, "a.b.1") == (True, 2)
+    assert resolve_field_path(context, "n") == (True, None)
+    assert resolve_field_path(context, "a.b.5") == (False, None)
+    assert resolve_field_path(context, "a.x.y") == (False, None)
+    assert resolve_field_path(context, "a.b.x") == (False, None)
+    assert not MISSING
+
+
+def test_build_context_does_not_copy_payload_and_exposes_normalized() -> None:
+    payload = {"normalized": "spoof", "x": 1}
+    context = build_context(payload, {"type": "t"}, {"id": "a1"})
+    assert resolve_field_path(context, "normalized.type") == (True, "t")
+    assert resolve_field_path(context, "alert.id") == (True, "a1")
+    assert resolve_field_path(context, "x") == (True, 1)
+    payload["late"] = 2
+    assert resolve_field_path(context, "late") == (True, 2)
+
+
+@pytest.mark.parametrize(
+    ("op", "value", "actual", "expected"),
+    [
+        ("eq", "a", "a", True),
+        ("eq", "a", "A", False),
+        ("eq", 5, "5", True),
+        ("eq", "5", 5, True),
+        ("eq", 5, "five", False),
+        ("eq", True, 1, False),
+        ("eq", True, True, True),
+        ("eq", "1", True, False),
+        ("ne", "a", "b", True),
+        ("ne", 5, "5", False),
+        ("gt", 10, 11, True),
+        ("gt", 10, "11", True),
+        ("gt", 10, "9", False),
+        ("gt", "10", 11, True),
+        ("gte", 10, 10, True),
+        ("lt", 10, 9.5, True),
+        ("lte", 10, "10", True),
+        ("gt", 10, True, False),
+        ("gt", 10, "abc", False),
+        ("gt", 10, None, False),
+        ("gt", 10, [1], False),
+        ("gt", "b", "c", True),
+        ("lt", "b", "a", True),
+        ("in", ["ERROR", "CRITICAL"], "ERROR", True),
+        ("in", ["ERROR", "CRITICAL"], "INFO", False),
+        ("in", [1, 2], "2", True),
+        ("in", [[1], [2]], [1], True),
+        ("in", [1], True, False),
+        ("glob", "trade.rejected.*", "trade.rejected.v1", True),
+        ("glob", "trade.rejected.*", "TRADE.rejected.v1", False),
+        ("glob", "a?c", "abc", True),
+        ("glob", "a*", 5, False),
+        ("regex", "^Price stale", "Price stale for 31s", True),
+        ("regex", "stale", "a Price stale", True),
+        ("regex", "^stale", "a Price stale", False),
+        ("regex", "1", 1, False),
+        ("exists", True, 0, True),
+        ("exists", None, None, True),
+        ("exists", False, 0, False),
+    ],
+)
+def test_operator_on_present_field(op: str, value: Any, actual: Any, expected: bool) -> None:
+    assert check(leaf("f", op, value), {"f": actual}) is expected
+
+
+def test_missing_field_never_matches_except_exists_false() -> None:
+    for op, value in [("eq", 1), ("ne", 1), ("gt", 1), ("in", [1]), ("glob", "*"), ("regex", ".*")]:
+        assert check(leaf("f.g", op, value), {}) is False
+        assert check(leaf("f", op, value), {}) is False
+    assert check(leaf("f", "exists", True), {}) is False
+    assert check(leaf("f", "exists"), {}) is False
+    assert check(leaf("f", "exists", False), {}) is True
+    assert check(leaf("f", "exists", False), {"f": None}) is False
+
+
+def test_nested_all_any_not() -> None:
+    spec = cond(
+        {
+            "all": [
+                {"field": "a", "op": "eq", "value": 1},
+                {
+                    "any": [
+                        {"field": "b", "op": "eq", "value": 2},
+                        {"not": {"field": "c", "op": "exists"}},
+                    ]
+                },
+            ]
+        }
+    )
+    assert check(spec, {"a": 1, "b": 2, "c": 1})
+    assert check(spec, {"a": 1, "b": 9})
+    assert not check(spec, {"a": 1, "b": 9, "c": 1})
+    assert not check(spec, {"a": 2, "b": 2})
+    assert check(cond({"not": {"field": "x", "op": "eq", "value": 1}}), {})  # not over missing
+
+
+def test_normalized_paths_and_numeric_list_index() -> None:
+    spec = cond(
+        {
+            "all": [
+                {"field": "normalized.severity", "op": "eq", "value": "critical"},
+                {"field": "items.1.n", "op": "gt", "value": 3},
+            ]
+        }
+    )
+    assert check(spec, {"items": [{"n": 1}, {"n": "4"}]}, {"severity": "critical"})
+
+
+def test_bad_regex_and_in_value_fail_at_compile_time() -> None:
+    with pytest.raises(Exception):  # noqa: B017 - re.error subclass varies by version
+        compile_condition(leaf("f", "regex", "("))
+    with pytest.raises(ValueError):
+        compile_condition(leaf("f", "in", "notalist"))
+
+
+def test_evaluate_condition_convenience_caches_compilation() -> None:
+    spec = leaf("f", "regex", "^x")
+    assert evaluate_condition(spec, {"f": "xy"}) is True
+    assert evaluate_condition(spec, {"f": "yx"}) is False
+
+
+def _load_rule(name: str) -> Rule:
+    return Rule.model_validate(yaml.safe_load((ROOT / "config/rules" / f"{name}.yaml").read_text()))
+
+
+def _event(name: str) -> dict[str, Any]:
+    return json.loads((ROOT / "contracts/fixtures/events" / name).read_text())
+
+
+def test_real_rules_match_their_fixtures() -> None:
+    rates = compile_condition(_load_rule("rates-large-rejections").when)
+    context = build_context(_event("rates_trade_rejected.json"), {"type": "trade.rejected.v1"})
+    assert rates(context)
+    assert not rates(build_context(_event("unknown_payments.json"), {"type": None}))
+    assert not rates(build_context(_event("unknown_payments.json"), {"type": "payment.declined"}))
+
+    settlements = compile_condition(_load_rule("settlements-workflow-failed").when)
+    assert settlements(build_context(_event("settlements_workflow_failed.json"), {}))
+
+    pricing = compile_condition(_load_rule("pricing-stale-feed").when)
+    assert pricing(build_context(_event("pricing_price_stale.json"), {}))
+
+
+def test_benchmark_100k_events_against_50_rules_under_two_seconds() -> None:
+    rules = [
+        compile_condition(
+            cond(
+                {
+                    "all": [
+                        {"field": "normalized.type", "op": "glob", "value": f"type{index}.*"},
+                        {"field": "payload.notional", "op": "gt", "value": 10000000},
+                        {"field": "payload.desk", "op": "eq", "value": "rates"},
+                    ]
+                }
+            )
+        )
+        for index in range(50)
+    ]
+    payload = {"payload": {"notional": "25000000", "desk": "rates"}}
+    contexts = [build_context(payload, {"type": f"type{index % 50}.v1"}) for index in range(100)]
+    started = time.perf_counter()
+    matched = 0
+    for index in range(100_000):
+        context = contexts[index % 100]
+        for rule in rules:
+            if rule(context):
+                matched += 1
+    elapsed = time.perf_counter() - started
+    assert matched == 100_000
+    assert elapsed < 2.0, f"took {elapsed:.2f}s"
