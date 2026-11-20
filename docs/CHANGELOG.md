@@ -22,3 +22,6 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-14 mock gateway: /sms, /phone, /workflows retry and service restart endpoints with outage toggles for demos.
 - A-05 generator: synthetic event generator for fixtures and load scenarios.
 - A-10 routing: recipients x channels from rule routes and preferences (working hours with DST, ui once), per-recipient throttle that fails open.
+- A-08 rules and templating: compiled conditions (numeric coercion, ReDoS guard, rule index by normalized.type), EventContext layering, {{path}} templates.
+- A-07 schema profiles: ProfileMatcher (precompiled, priority order, unknown-shape flag), normalization with value maps, stable canonical fingerprints.
+- A-06 sources: Alertmanager webhook split with source-scoped idempotency keys; log_tail runner with Redis lock, generation-scoped offsets, rotation/truncation handling and DLQ for bad lines.
