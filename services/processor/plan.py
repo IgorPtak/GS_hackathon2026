@@ -70,6 +70,8 @@ def group_matches(outcomes: list[EventOutcome]) -> list[MatchGroup]:
     groups: dict[tuple[str, str], MatchGroup] = {}
     for outcome in outcomes:
         for match in outcome.matches:
+            if match.group_key is not None:
+                continue  # grouped rules go to group windows, not dedup (decision 5)
             key = (match.rule.id, match.fingerprint)
             group = groups.get(key)
             if group is None:

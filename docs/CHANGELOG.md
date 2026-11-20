@@ -35,3 +35,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-12/A-15 channels: ui, email (smtplib in a thread instead of aiosmtplib), sms/phone via mock gateway with phone_messages, webhook body_template; shared HTTP status classification, header-injection guard, CHANNEL_ALLOWED_HOSTS.
 - A-13 delivery worker: delivery-done idempotency (pending/done), backoff retries via delivery-retries (atomic Lua poller), deliveries-dlq + fallback channel, shared circuit breaker, alert_e2e_latency_seconds.
 - A-01 smoke test: resolves earlier rates alerts before posting so the email check sees a new alert; compose project is named `alerting` for everyone.
+- A-16 group windows: group-buffer + group-deadlines, Lua claim with retry entry, one summary alert per window (alert_grouped, purpose group_summary), deterministic ids
