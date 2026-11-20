@@ -54,6 +54,7 @@ from .folds import FoldTracker
 from .groups import BufferedEvent, buffer_group_events
 from .metrics import ALERTS_CREATED, EVENT_TO_ALERT_SECONDS, EVENTS_PROCESSED
 from .plan import BatchPlan, Fold, MatchGroup, decide, group_matches
+from .silences import push_alert_silences
 from .unknown_shapes import collect_unknown_samples, publish_new_samples
 
 log = get_logger(__name__)
@@ -211,6 +212,15 @@ class EventProcessor:
             self._folds.add(
                 fold.alert_id, count_key, last.envelope.received_at, last.envelope.payload
             )
+        rules = {group.rule.id: group.rule for group in (c.group for c in plan.creates)} | {
+            f.group.rule.id: f.group.rule for f in plan.folds
+        }
+        await push_alert_silences(
+            self._redis,
+            [(a.id, rules[a.rule_id]) for a in plan.created]
+            + [(f.alert_id, f.group.rule) for f in plan.folds],
+            int(time.time() * 1000),
+        )
         ALERTS_CREATED.inc(len(plan.created))
         created_ids = {alert.id for alert in plan.created}
         for create in plan.creates:
