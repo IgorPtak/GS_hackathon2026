@@ -87,7 +87,7 @@ services:
 
   ingest:
     <<: *python-service
-    command: ["uvicorn", "services.ingest.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    command: ["uvicorn", "services.ingest.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "${INGEST_WORKERS:-2}", "--loop", "uvloop"]
     ports:
       - "8001:8001"
     healthcheck:

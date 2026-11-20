@@ -11,3 +11,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - S-00 contracts v1 frozen: hour-0 review applied (A1–A7, B2–B8, hybrid LLM endpoint); further changes only via feat(contracts) commits acked by both people
 - A-00 Python workspace, compose stack, Makefile: uv workspace (alerting_contracts, alerting_core), one Python image, compose services with /healthz stubs, Prometheus and Grafana config, Makefile targets.
 - A-02 alerting_core foundation: Settings, JSON logging, parse_duration, asyncpg/Redis factories, Prometheus helpers, StreamConsumer (ack after success, XAUTOCLAIM > 30 s idle, <stream>-dlq after 5 deliveries)
+- A-04 ingest: ingest service with POST /api/v1/ingest/{source_id} and /batch, idempotency via SET NX, source plugin registry and webhook source, /metrics.
