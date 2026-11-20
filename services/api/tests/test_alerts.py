@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from services.api.dependencies import get_pool, get_redis
 from services.api.main import create_app
 from services.api.routers import alerts as alerts_router
+from services.api.routers.runbooks import get_catalog
 
 ALERT_ID = "0190a0a0-0000-7000-8000-000000000001"
 ACTOR = {"id": "anna"}
@@ -188,3 +189,56 @@ def test_transition_errors_are_error_responses_and_do_not_publish(
 
 def test_missing_actor_is_422(client: TestClient) -> None:
     assert client.post(f"/api/v1/alerts/{ALERT_ID}/acknowledge", json={}).status_code == 422
+
+
+class StubCatalog:
+    def __init__(self, runbook: Any = None, error: Exception | None = None) -> None:
+        self._runbook, self._error = runbook, error
+
+    def get(self, runbook_id: str) -> Any:
+        if self._error:
+            raise self._error
+        return self._runbook
+
+    def actions(self) -> dict[str, Any]:
+        return {}
+
+
+def detail_with_runbook() -> AlertDetail:
+    alert = make_alert().model_copy(
+        update={"runbook_id": "workflow-failed", "last_event": {"workflowId": "wf-1"}}
+    )
+    return AlertDetail(alert=alert, audit_entries=[], deliveries=[])
+
+
+def test_detail_renders_runbook(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from alerting_contracts.runbooks import Runbook, RunbookFormat, RunbookStep, StepKind
+
+    runbook = Runbook(
+        id="workflow-failed",
+        title="WF",
+        format=RunbookFormat.text,
+        source="s",
+        steps=[RunbookStep(index=0, kind=StepKind.text, text="Check {{ workflowId }}")],
+        normalized_by="parser",
+    )
+    monkeypatch.setattr(alerts_router, "get_alert_detail", fake(detail_with_runbook()))
+    client.app.dependency_overrides[get_catalog] = lambda: StubCatalog(runbook)
+    body = client.get(f"/api/v1/alerts/{ALERT_ID}").json()
+    assert body["rendered_runbook"]["runbook_id"] == "workflow-failed"
+    assert "wf-1" in body["rendered_runbook"]["steps"][0]["text"]
+
+
+def test_detail_missing_runbook_is_none(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(alerts_router, "get_alert_detail", fake(detail_with_runbook()))
+    client.app.dependency_overrides[get_catalog] = lambda: StubCatalog(None)
+    assert client.get(f"/api/v1/alerts/{ALERT_ID}").json()["rendered_runbook"] is None
+
+
+def test_detail_render_failure_is_none(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(alerts_router, "get_alert_detail", fake(detail_with_runbook()))
+    client.app.dependency_overrides[get_catalog] = lambda: StubCatalog(error=RuntimeError("boom"))
+    response = client.get(f"/api/v1/alerts/{ALERT_ID}")
+    assert response.status_code == 200 and response.json()["rendered_runbook"] is None

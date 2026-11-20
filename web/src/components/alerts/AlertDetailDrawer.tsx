@@ -5,6 +5,7 @@ import type { AlertTransition } from "./useAlertTransition";
 import { AlertFields } from "./AlertFields";
 import { AuditTimeline } from "./AuditTimeline";
 import { DeliveryList } from "./DeliveryList";
+import { RunbookPanel } from "../runbooks/RunbookPanel";
 import { SeverityBadge } from "./SeverityBadge";
 
 interface AlertDetailDrawerProps {
@@ -53,7 +54,7 @@ export function AlertDetailDrawer({
         onClick={(event) => {
           event.stopPropagation();
         }}
-        className="h-full w-full overflow-y-auto bg-white p-4 shadow-xl sm:max-w-xl sm:p-6"
+        className="h-full w-full overflow-y-auto bg-white p-4 shadow-xl sm:max-w-xl sm:p-6 lg:max-w-4xl"
       >
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-lg font-semibold break-words">{alert?.title ?? "Alert"}</h2>
@@ -117,6 +118,15 @@ export function AlertDetailDrawer({
             ) : null}
             <Section title="Fields">
               <AlertFields alert={alert} />
+            </Section>
+            <Section title="Runbook">
+              <RunbookPanel
+                runbook={detail.detail.rendered_runbook}
+                team={alert.team}
+                actionRuns={detail.detail.action_runs ?? []}
+                approvals={detail.detail.approval_requests ?? []}
+                onRunStarted={detail.applyActionRun}
+              />
             </Section>
             <Section title="Deliveries">
               <DeliveryList deliveries={detail.detail.deliveries} />
