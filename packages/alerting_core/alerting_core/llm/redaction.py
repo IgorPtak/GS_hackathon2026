@@ -4,18 +4,14 @@ import re
 
 REDACTED = "[REDACTED]"
 
-_AUTH_HEADER = re.compile(
-    r"(?i)(authorization\s*[:=]\s*)(?:bearer|basic)\s+[^\s\"',;]+"
-)
+_AUTH_HEADER = re.compile(r"(?i)(authorization\s*[:=]\s*)(?:bearer|basic)\s+[^\s\"',;]+")
 _BEARER = re.compile(r"(?i)\b(bearer\s+)[A-Za-z0-9\-._~+/]{8,}=*")
 _KEY_VALUE = re.compile(
     r"(?i)([\"']?[\w.-]*(?:password|passwd|pwd|token|secret|api[_-]?key)[\w-]*[\"']?\s*[:=]\s*)"
     r"([\"']?)([^\s\"',;&}]+)"
 )
 _AWS_ACCESS_KEY = re.compile(r"\bAKIA[0-9A-Z]{16}\b")
-_AWS_SECRET = re.compile(
-    r"(?i)(aws[_\s-]?secret\w*\s*[:=]?\s*[\"']?)[A-Za-z0-9/+=]{40}\b"
-)
+_AWS_SECRET = re.compile(r"(?i)(aws[_\s-]?secret\w*\s*[:=]?\s*[\"']?)[A-Za-z0-9/+=]{40}\b")
 _JWT = re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*")
 _CARD = re.compile(r"(?<![\d-])\d(?:[ -]?\d){12,18}(?![\d])")
 

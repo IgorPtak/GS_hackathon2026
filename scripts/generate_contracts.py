@@ -1,20 +1,19 @@
-"""Regenerate every contract artifact derived from the Pydantic models in ``contracts/alerting_contracts``.
+"""Regenerate every contract artifact derived from the models in ``contracts/alerting_contracts``.
 
 Writes:
   * ``contracts/schemas/*.schema.json``      one JSON Schema per top-level model
-  * ``contracts/openapi.yaml``               ONLY the ``components.schemas`` block (spliced textually,
-                                             so ``paths`` and the rest stay byte-identical)
+  * ``contracts/openapi.yaml``               ONLY the ``components.schemas`` block
+                                             (spliced textually, so ``paths`` stay byte-identical)
   * ``web/src/api/schema.gen.ts``            via ``npx -y openapi-typescript@7``
 
 Also validates that every ``$ref`` in openapi.yaml resolves and that every YAML file in
 ``contracts/examples/<kind>/`` validates against its model's JSON Schema.
 
-Invocation (no pyproject yet; run from the repo root)::
+Invocation (from the repo root)::
 
-    PYTHONPATH=contracts uv run --no-project --with pydantic --with pyyaml --with jsonschema \\
-        python scripts/generate_contracts.py [--check]
+    uv run python scripts/generate_contracts.py [--check]
 
-``--check`` writes nothing into the repo and exits 1, listing differing files, when output on disk is stale.
+``--check`` writes nothing and exits 1, listing differing files, when output on disk is stale.
 """
 
 from __future__ import annotations
@@ -87,11 +86,7 @@ def _public_types() -> dict[str, Any]:
     found: dict[str, Any] = {}
     for mod in MODULES:
         for name, obj in vars(mod).items():
-            if (
-                name.startswith("_")
-                or not inspect.isclass(obj)
-                or obj.__module__ != mod.__name__
-            ):
+            if name.startswith("_") or not inspect.isclass(obj) or obj.__module__ != mod.__name__:
                 continue
             if issubclass(obj, BaseModel) or issubclass(obj, enum.Enum):
                 found[name] = obj
@@ -115,7 +110,7 @@ def _sorted_top(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_components(types: dict[str, Any]) -> dict[str, Any]:
-    """``components.schemas`` mapping, sorted by name, refs rewritten to ``#/components/schemas/``."""
+    """``components.schemas`` sorted by name, refs rewritten to ``#/components/schemas/``."""
     out: dict[str, Any] = {}
     for name, tp in types.items():
         schema = _adapter(tp).json_schema(ref_template=REF_PREFIX + "{model}")
@@ -143,12 +138,9 @@ def build_schema_files(types: dict[str, Any]) -> dict[Path, str]:
 
 
 def _dump_components_block(components: dict[str, Any]) -> str:
-    body = yaml.safe_dump(
-        {"schemas": components}, sort_keys=False, width=118, allow_unicode=True
-    )
+    body = yaml.safe_dump({"schemas": components}, sort_keys=False, width=118, allow_unicode=True)
     return "".join(
-        ("  " + line if line.strip() else line)
-        for line in body.splitlines(keepends=True)
+        ("  " + line if line.strip() else line) for line in body.splitlines(keepends=True)
     )
 
 
@@ -200,9 +192,7 @@ def validate_examples(types: dict[str, Any]) -> list[str]:
     """Validate every YAML example against its model's JSON Schema; return error strings."""
     try:
         import jsonschema
-    except (
-        ImportError
-    ):  # fall back to the models themselves (they generated the schema)
+    except ImportError:  # fall back to the models themselves (they generated the schema)
         jsonschema = None
         _log("jsonschema_missing", fallback="pydantic TypeAdapter validation")
 
@@ -274,13 +264,9 @@ def main() -> int:
         files[TS_OUT] = tmp_ts.read_text()
 
     if args.check:
-        differing = [
-            p for p, c in files.items() if not p.exists() or p.read_text() != c
-        ]
+        differing = [p for p, c in files.items() if not p.exists() or p.read_text() != c]
         expected = {p.name for p in files if p.parent == SCHEMAS_DIR}
-        differing += [
-            p for p in SCHEMAS_DIR.glob("*.schema.json") if p.name not in expected
-        ]
+        differing += [p for p in SCHEMAS_DIR.glob("*.schema.json") if p.name not in expected]
         if differing:
             _log("drift", files=[str(p.relative_to(ROOT)) for p in differing])
             return 1

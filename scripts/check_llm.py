@@ -23,7 +23,8 @@ MIN_VALID = 2
 SYSTEM = (
     "You convert an operations runbook written in free text into ordered, normalized steps. "
     "Return JSON only, matching the given schema. index starts at 0. "
-    "Use {{field}} placeholders for values that come from the alert (e.g. {{feed}}, {{instrument}}). "
+    "Use {{field}} placeholders for values that come from the alert "
+    "(e.g. {{feed}}, {{instrument}}). "
     'Set approval to "required" for steps the text says need approval.\n\n'
     "Available action ids (use only these in `action`):\n"
     "- http-health-check (kind check): params {url}\n"
@@ -66,9 +67,7 @@ async def main() -> int:
             result = await client.generate(text, StepsResponse, system=SYSTEM)
         except LlmError as error:
             latencies.append(time.perf_counter() - started)
-            print(
-                f"run {run}: {latencies[-1]:.1f}s FAILED {type(error).__name__}: {error}"
-            )
+            print(f"run {run}: {latencies[-1]:.1f}s FAILED {type(error).__name__}: {error}")
             continue
         latencies.append(time.perf_counter() - started)
         assert isinstance(result, StepsResponse)
@@ -82,12 +81,9 @@ async def main() -> int:
         else None
     )
     print(f"model={client.model} host={client.base_host}")
-    print(
-        f"median={median:.1f}s valid={valid}/{RUNS} steps={len(last.steps) if last else 0}"
-    )
-    print(
-        f"restart-pricing-adapter approval required: {restart is not None and restart.approval == 'required'}"
-    )
+    print(f"median={median:.1f}s valid={valid}/{RUNS} steps={len(last.steps) if last else 0}")
+    is_restart_gated = restart is not None and restart.approval == "required"
+    print(f"restart-pricing-adapter approval required: {is_restart_gated}")
     return 1 if median > MAX_MEDIAN_SECONDS or valid < MIN_VALID else 0
 
 

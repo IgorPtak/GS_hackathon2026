@@ -39,9 +39,7 @@ class WebhookAction(ActionPlugin):
 
     async def _run(self, params: dict[str, str], config: ActionConfig) -> ActionResult:
         if not config.settings.get("url"):
-            return ActionResult(
-                is_success=False, detail="webhook settings.url is not configured"
-            )
+            return ActionResult(is_success=False, detail="webhook settings.url is not configured")
         return await call_webhook(self, params, config, config.settings)
 
 

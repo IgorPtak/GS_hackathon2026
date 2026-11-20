@@ -11,9 +11,7 @@ class Answer(BaseModel):
 
 @pytest.fixture
 def config() -> LlmConfig:
-    return LlmConfig(
-        base_url="http://localhost:11434/v1", api_key="sk-test-key-123456", model="m"
-    )
+    return LlmConfig(base_url="http://localhost:11434/v1", api_key="sk-test-key-123456", model="m")
 
 
 def chat(content: str) -> dict:

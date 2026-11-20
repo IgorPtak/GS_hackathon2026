@@ -18,9 +18,7 @@ class OpenTicketAction(ActionPlugin):
             return await call_webhook(self, params, config, config.settings)
         summary = params.get("summary", "")
         if not summary:
-            return ActionResult(
-                is_success=False, detail="missing required params: summary"
-            )
+            return ActionResult(is_success=False, detail="missing required params: summary")
         url = str(config.settings.get("url") or f"{mock_gateway_url()}/tickets")
         body = {
             "summary": summary,

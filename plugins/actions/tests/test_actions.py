@@ -14,9 +14,7 @@ GW = "http://mock-gateway:8090"
 CONFIG_DIR = Path(__file__).resolve().parents[3] / "config" / "actions"
 
 
-def cfg(
-    type_: str, params: dict | None = None, settings: dict | None = None, timeout="5s"
-):
+def cfg(type_: str, params: dict | None = None, settings: dict | None = None, timeout="5s"):
     return ActionConfig.model_validate(
         {
             "id": "a1",
@@ -44,9 +42,7 @@ def test_unknown_type():
         get_action_plugin("nope")
 
 
-@pytest.mark.parametrize(
-    "path", sorted(CONFIG_DIR.glob("*.yaml")), ids=lambda p: p.name
-)
+@pytest.mark.parametrize("path", sorted(CONFIG_DIR.glob("*.yaml")), ids=lambda p: p.name)
 def test_every_demo_action_resolves(path):
     c = ActionConfig.model_validate(yaml.safe_load(path.read_text()))
     assert get_action_plugin(c.type).type == c.type
@@ -68,9 +64,7 @@ async def test_http_get_ok_and_non2xx():
 @respx.mock
 async def test_timeout_is_failure():
     respx.get("http://x/slow").mock(side_effect=httpx.ReadTimeout("t"))
-    r = await get_action_plugin("http_get").execute(
-        {"url": "http://x/slow"}, cfg("http_get")
-    )
+    r = await get_action_plugin("http_get").execute({"url": "http://x/slow"}, cfg("http_get"))
     assert not r.is_success and "timeout" in r.detail
 
 
@@ -132,9 +126,7 @@ async def test_escalate_with_url_and_failure():
     r = await get_action_plugin("escalate").execute({"reason": "x"}, c)
     assert r.is_success and json.loads(route.calls[0].request.content) == {"r": "x"}
     respx.post(f"{GW}/webhooks/escalations").respond(500)
-    assert not (
-        await get_action_plugin("escalate").execute({}, cfg("escalate"))
-    ).is_success
+    assert not (await get_action_plugin("escalate").execute({}, cfg("escalate"))).is_success
 
 
 @pytest.mark.asyncio
@@ -150,16 +142,11 @@ async def test_webhook_template_json_escaping_and_url_param():
             "body_template": '{"msg": "{{msg}}"}',
         },
     )
-    r = await get_action_plugin("webhook").execute(
-        {"msg": 'say "hi"\nnow', "name": "a b"}, c
-    )
+    r = await get_action_plugin("webhook").execute({"msg": 'say "hi"\nnow', "name": "a b"}, c)
     assert r.is_success
     req = route.calls[0].request
     assert json.loads(req.content) == {"msg": 'say "hi"\nnow'}
-    assert (
-        req.headers["x-token"] == "t"
-        and req.headers["content-type"] == "application/json"
-    )
+    assert req.headers["x-token"] == "t" and req.headers["content-type"] == "application/json"
 
 
 @pytest.mark.asyncio
@@ -187,7 +174,5 @@ async def test_demo_webhook_actions_execute():
         ("escalate", {"workflow_id": "w"}, f"{GW}/webhooks/escalations"),
     ]:
         respx.post(url).respond(200)
-        c = ActionConfig.model_validate(
-            yaml.safe_load((CONFIG_DIR / f"{name}.yaml").read_text())
-        )
+        c = ActionConfig.model_validate(yaml.safe_load((CONFIG_DIR / f"{name}.yaml").read_text()))
         assert (await get_action_plugin(c.type).execute(p, c)).is_success, name

@@ -50,9 +50,7 @@ class ActionResult(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
-def render_template(
-    template: str, params: dict[str, str], *, json_escape: bool = False
-) -> str:
+def render_template(template: str, params: dict[str, str], *, json_escape: bool = False) -> str:
     """Replace ``{{name}}`` with params values; unknown/absent params become "".
 
     With ``json_escape`` values are escaped for embedding inside a JSON string literal.
@@ -91,9 +89,7 @@ class ActionPlugin(abc.ABC):
             if spec.is_required and not str(params.get(name, "")).strip()
         ]
 
-    async def execute(
-        self, params: dict[str, str], config: ActionConfig
-    ) -> ActionResult:
+    async def execute(self, params: dict[str, str], config: ActionConfig) -> ActionResult:
         """Validate required params, then run the action. Never raises for business failures."""
         missing = self.missing_required(params, config)
         if missing:
@@ -104,9 +100,7 @@ class ActionPlugin(abc.ABC):
         try:
             return await self._run(params, config)
         except httpx.HTTPError as exc:  # safety net for anything not handled in send()
-            return ActionResult(
-                is_success=False, detail=f"http error: {type(exc).__name__}"
-            )
+            return ActionResult(is_success=False, detail=f"http error: {type(exc).__name__}")
 
     @abc.abstractmethod
     async def _run(self, params: dict[str, str], config: ActionConfig) -> ActionResult:
@@ -131,26 +125,16 @@ class ActionPlugin(abc.ABC):
                 )
             else:
                 async with httpx.AsyncClient(timeout=timeout) as client:
-                    resp = await client.request(
-                        method, url, headers=headers, content=content
-                    )
+                    resp = await client.request(method, url, headers=headers, content=content)
         except httpx.TimeoutException:
-            return ActionResult(
-                is_success=False, detail=f"timeout after {config.timeout}"
-            )
+            return ActionResult(is_success=False, detail=f"timeout after {config.timeout}")
         except httpx.HTTPError as exc:
-            return ActionResult(
-                is_success=False, detail=f"request failed: {type(exc).__name__}"
-            )
+            return ActionResult(is_success=False, detail=f"request failed: {type(exc).__name__}")
         elapsed_ms = int((time.monotonic() - started) * 1000)
         data: dict[str, Any] = {
             "status_code": resp.status_code,
             "elapsed_ms": elapsed_ms,
         }
         if resp.is_success:
-            return ActionResult(
-                is_success=True, detail=f"HTTP {resp.status_code}", data=data
-            )
-        return ActionResult(
-            is_success=False, detail=f"HTTP {resp.status_code}", data=data
-        )
+            return ActionResult(is_success=True, detail=f"HTTP {resp.status_code}", data=data)
+        return ActionResult(is_success=False, detail=f"HTTP {resp.status_code}", data=data)
