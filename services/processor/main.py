@@ -57,7 +57,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         folds = FoldTracker(pool, redis)
         processor = EventProcessor(pool, redis, registry, resolved, folds)
         consumer = StreamConsumer(
-            redis, EVENTS_STREAM, CONSUMER_GROUP, default_consumer_name("processor"), processor.handle_batch
+            redis,
+            EVENTS_STREAM,
+            CONSUMER_GROUP,
+            default_consumer_name("processor"),
+            processor.handle_batch,
         )
         processor.dead_letter = consumer.dead_letter
         stop = asyncio.Event()
