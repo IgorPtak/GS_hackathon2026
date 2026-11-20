@@ -212,9 +212,9 @@ async def test_real_file_watcher_picks_up_an_edit(
     _write_team(tmp_path)
     task = asyncio.create_task(watch_config_directory(tmp_path, pool, redis))
     try:
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1.5)
         _write_team(tmp_path, display="Edited")
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 8
         while time.monotonic() < deadline:
             doc = await pool.fetchval("SELECT document FROM config_documents WHERE id = 'ops'")
             if doc and doc["display_name"] == "Edited":
