@@ -45,12 +45,12 @@ def _not_found(alert_id: str) -> ApiError:
 @router.get("/api/v1/alerts")
 async def list_alerts_route(
     pool: PoolDep,
-    team: Annotated[str, Query()],
+    team: Annotated[str | None, Query()] = None,
     status: Annotated[AlertStatus | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     cursor: Annotated[str | None, Query()] = None,
 ) -> AlertPage:
-    """One page of a team's alerts, newest activity first."""
+    """One page of alerts (optionally one team's), newest activity first."""
     try:
         return await list_alerts(
             pool, team, [status] if status else None, limit=limit, cursor=cursor
