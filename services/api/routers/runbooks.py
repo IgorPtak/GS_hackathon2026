@@ -19,6 +19,7 @@ from alerting_contracts.config import ActionConfig
 from alerting_contracts.runbooks import Runbook, RunbookFormat
 from alerting_core.logging import get_logger
 from alerting_core.runbooks import normalize_runbook, save_runbook
+from alerting_core.runbooks.normalize import normalize_runbook_with_llm
 from alerting_core.runbooks.store import KIND, load_runbook_file
 from fastapi import APIRouter, Depends, Request
 from fastapi import Path as PathParam
@@ -142,7 +143,11 @@ async def list_runbooks_route(catalog: CatalogDep) -> list[RunbookSummary]:
 
 @router.post("/api/v1/runbooks/normalize", response_model=Runbook)
 async def normalize_runbook_route(body: RunbookNormalizeRequest, catalog: CatalogDep) -> Any:
-    """Preview normalization without saving; id is `preview`, title is guessed or a placeholder."""
+    """Preview normalization without saving; id is `preview`, title is guessed or a placeholder.
+
+    LLM-free on purpose: a text runbook previews as the fallback (one text step). The LLM runs
+    only when a text runbook is saved (PUT).
+    """
     title, team = _preview_meta(body.format, body.source)
     try:
         return normalize_runbook(
@@ -165,18 +170,28 @@ async def get_runbook_route(runbook_id: RunbookId, catalog: CatalogDep) -> Runbo
 async def save_runbook_route(
     runbook_id: RunbookId,
     body: RunbookWrite,
+    request: Request,
     catalog: CatalogDep,
     pool: PoolDep,
     redis: RedisDep,
 ) -> Any:
-    """Normalize and store; returns the runbook with its new version."""
+    """Normalize and store; returns the runbook with its new version.
+
+    For format text the LLM proposes the steps (normalized_by "llm", llm_model set); without an
+    LLM, or on any LLM error, the whole text is kept as one text step ("fallback"). yaml and
+    markdown are parsed.
+    """
     if body.id != runbook_id:
         raise ApiError(422, "validation_failed", "path id and body id differ")
-    # B-09 seam: for body.format == text, call the LLM normalizer here and fall back to this
-    # plain path (normalized_by="fallback") when it is unavailable.
     try:
-        runbook = normalize_runbook(
-            body.id, body.title, body.team, body.format, body.source, catalog.actions()
+        runbook = await normalize_runbook_with_llm(
+            body.id,
+            body.title,
+            body.team,
+            body.format,
+            body.source,
+            catalog.actions(),
+            getattr(request.app.state, "llm", None),
         )
     except (ValidationError, ValueError) as error:
         return _validation_response(error)

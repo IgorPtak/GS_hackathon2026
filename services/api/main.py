@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 import asyncpg
 from alerting_core.config import ConfigRegistry
 from alerting_core.connections import create_database_pool, create_redis_client
+from alerting_core.llm import LlmClient, LlmConfig, LlmHostNotAllowedError
 from alerting_core.logging import configure_logging, get_logger
 from alerting_core.metrics import render_metrics
 from alerting_core.runbooks import register_runbook_kind
@@ -67,6 +68,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.config_source = DirectoryConfigSource(resolved.config_dir)
         app.state.database_lock = asyncio.Lock()
         app.state.next_database_attempt = 0.0
+        try:
+            app.state.llm = LlmClient(LlmConfig.from_settings(resolved))
+        except LlmHostNotAllowedError as error:
+            log.warning("llm_disabled", extra={"reason": str(error)})
+            app.state.llm = None
         register_runbook_kind()  # before ConfigRegistry.start so the kind is loaded
 
         async def connect_database() -> asyncpg.Pool | None:
@@ -110,6 +116,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if app.state.registry is not None:
             await app.state.registry.stop()
         await app.state.redis.aclose()
+        # LlmClient opens a short-lived httpx client per call: nothing to close.
         if app.state.pool is not None:
             await app.state.pool.close()
 

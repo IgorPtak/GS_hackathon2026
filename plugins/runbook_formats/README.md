@@ -8,7 +8,11 @@ Normalizing: `alerting_core.runbooks.normalize_runbook(id, title, team, format, 
 Runbooks are the `runbook` config kind (`config/runbooks/<id>.yaml|.md|.txt`, id = file stem),
 registered by `register_runbook_kind()`; actions are read from the sibling `config/actions/`.
 Markdown keyword table (phrase -> action id): `KEYWORD_ACTIONS` in `markdown_format.py`.
-Text runbooks are one text step until B-09 passes an `llm_normalizer` to `TextRunbookFormat`.
+Text runbooks are normalized by the LLM only when saved (`PUT /api/v1/runbooks/{id}`, via
+`alerting_core.runbooks.normalize_runbook_with_llm`): the output is validated by
+`validate_llm_steps` (unknown actions become text steps, approval-required actions always need
+approval) and stored with `normalized_by: llm` and `llm_model`. Loaders, the `/normalize` preview and
+an unavailable LLM give the fallback: one text step with the whole source (`normalized_by: fallback`).
 
 ## Add a runbook format in one file
 
