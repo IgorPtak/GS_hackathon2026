@@ -61,6 +61,7 @@ class EventContext(dict[str, Any]):
     Subscript access (what lookups use) falls through to the raw payload without copying it.
     That is cheaper than `ChainMap`, whose `__getitem__` is a Python-level loop. Membership
     tests and `.get` see only the layered keys, so always read with `context[key]`.
+    Do not serialize or copy it: it holds only the layers, the payload is referenced.
     """
 
     __slots__ = ("payload",)

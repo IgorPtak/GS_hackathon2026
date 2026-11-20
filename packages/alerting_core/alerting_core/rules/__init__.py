@@ -36,6 +36,7 @@ def _type_constraint(condition: Condition) -> tuple[str, str] | None:
     Only a top-level leaf, or a leaf directly inside a top-level `all`, counts: anything
     nested under `any`/`not` does not restrict the type, so such rules stay candidates.
     """
+    # Assumes type names are non-numeric strings: `eq` coercion of numeric strings is ignored.
     leaves = condition.all if isinstance(condition, ConditionAll) else [condition]
     for leaf in leaves:
         if not isinstance(leaf, ConditionLeaf) or leaf.field != _TYPE_PATH:
@@ -72,7 +73,10 @@ class RuleIndex[T]:
         self._cache: dict[str | None, list[T]] = {}
 
     def candidates(self, event_type: str | None) -> list[T]:
-        """Rules that could match an event of this type, in their original order."""
+        """Rules that could match an event of this type, in their original order.
+
+        Returns a shared cached list: do not mutate it.
+        """
         cached = self._cache.get(event_type)
         if cached is not None:
             return cached

@@ -355,3 +355,19 @@ def test_benchmark_100k_events_through_type_index_under_two_seconds() -> None:
     print(f"indexed benchmark: {elapsed:.2f}s")
     assert matched == 100_000 * 3
     assert elapsed < 2.0, f"took {elapsed:.2f}s"
+
+
+@pytest.mark.parametrize(
+    "pattern", ["a{99999999999}", "a{1,99999999999}", "(?:a{0,99999999999})+", "(" * 5000]
+)
+def test_overflowing_or_pathological_regex_raises_value_error(pattern: str) -> None:
+    with pytest.raises(ValueError):
+        compile_condition(leaf("f", "regex", pattern))
+
+
+def test_non_object_payload_behaves_like_missing_fields() -> None:
+    context = build_context([1, 2], {"type": "t"})  # type: ignore[arg-type]
+    assert compile_condition(leaf("x", "eq", 1))(context) is False
+    assert compile_condition(leaf("x", "exists", False))(context) is True
+    assert compile_condition(leaf("x.y", "eq", 1))(context) is False
+    assert compile_condition(leaf("normalized.type", "eq", "t"))(context) is True

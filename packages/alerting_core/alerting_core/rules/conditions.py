@@ -156,7 +156,7 @@ def _check_pattern_safety(pattern: str) -> None:
         raise ValueError(f"regex longer than {MAX_PATTERN_LENGTH} characters")
     try:
         tree = _sre_parser.parse(pattern)
-    except re.error as exc:
+    except (re.error, OverflowError, RecursionError) as exc:
         raise ValueError(f"invalid regex: {exc}") from exc
 
     def has_unbounded(node: Any) -> bool:
@@ -180,7 +180,9 @@ def _check_pattern_safety(pattern: str) -> None:
             if isinstance(item, tuple) and len(item) == 2 and item[0] in _REPEAT_OPS:
                 _, high, body = item[1]
                 if high == _sre_constants.MAXREPEAT and has_unbounded(body):
-                    raise ValueError("regex has nested unbounded quantifiers")
+                    raise ValueError(
+                        "regex has nested unbounded quantifiers; bound the inner one, e.g. {1,20}"
+                    )
                 visit(body)
             elif isinstance(item, tuple | list | _sre_parser.SubPattern):
                 visit(item)
@@ -194,7 +196,7 @@ _REPEAT_OPS = (_sre_constants.MAX_REPEAT, _sre_constants.MIN_REPEAT)
 def _compile_pattern(pattern: str) -> re.Pattern[str]:
     try:
         return re.compile(pattern)
-    except re.error as exc:
+    except (re.error, OverflowError, RecursionError) as exc:
         raise ValueError(f"invalid pattern {pattern!r}: {exc}") from exc
 
 
@@ -251,7 +253,7 @@ def _compile_leaf(leaf: ConditionLeaf) -> CompiledCondition:
         def matches_top_level(context: Mapping[str, Any]) -> bool:
             try:
                 return predicate((context.payload if is_payload_path else context)[key])  # type: ignore[attr-defined]
-            except (KeyError, AttributeError):
+            except (KeyError, TypeError, AttributeError):
                 return matches_general(context)
 
         return matches_top_level
