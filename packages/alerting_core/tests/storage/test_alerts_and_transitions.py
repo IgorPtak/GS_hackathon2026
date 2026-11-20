@@ -243,3 +243,14 @@ async def test_alert_from_row_roundtrip(pool, insert_alert) -> None:
     alert = await insert_alert()
     record = await pool.fetchrow("SELECT * FROM alerts WHERE id = $1::uuid", alert.id)
     assert alert_from_row(record) == alert
+
+
+async def test_list_alerts_without_team_lists_every_team(pool, insert_alert) -> None:  # noqa: ANN001
+    await insert_alert(team="rates")
+    await insert_alert(team="other")
+
+    every_team = {alert.team for alert in (await list_alerts(pool, None, limit=200)).items}
+    rates_only = {alert.team for alert in (await list_alerts(pool, "rates", limit=200)).items}
+
+    assert every_team == {"rates", "other"}
+    assert rates_only == {"rates"}

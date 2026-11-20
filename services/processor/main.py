@@ -10,6 +10,7 @@ from alerting_core.config.store import sync_config_files
 from alerting_core.connections import create_database_pool, create_redis_client
 from alerting_core.logging import configure_logging, get_logger
 from alerting_core.metrics import render_metrics
+from alerting_core.runbooks.store import register_runbook_kind
 from alerting_core.settings import Settings, get_settings
 from alerting_core.streams import StreamConsumer, default_consumer_name
 from fastapi import FastAPI, Response
@@ -50,6 +51,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         configure_logging("processor", resolved.log_level)
         pool = await create_database_pool(resolved)
         redis = create_redis_client(resolved)
+        # Before the sync, so config/runbooks lands in config_documents (B-07 renders steps).
+        register_runbook_kind()
         # Atomic per document, so every replica may run it; the api's watcher handles later edits.
         await sync_config_files(pool, redis, resolved.config_dir)
         registry = ConfigRegistry()

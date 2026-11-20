@@ -31,3 +31,7 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - B-06 runbook formats (core): yaml/markdown/text plugins with registry; alerting_core.runbooks normalize_runbook, register_runbook_kind, save_runbook; runbooks load as A-03 config kind `runbook`.
 - B-02 SSE endpoint: GET /api/v1/stream?team= forwards team and broadcast pub/sub as named SSE events with 15 s heartbeat and clean unsubscribe.
 - B-03 alerts API: list, detail, acknowledge, resolve with 404/409/400 ErrorResponses and one alert.updated publish per transition; /config served from ConfigRegistry with config/ fallback while it is empty.
+- A-09 processor: batched dedup (SET NX with pre-generated id, deterministic successors after resolve), one transaction per batch for alerts + audit + outbox, 1 s count flushes, unknown-schema sampling, sorted writes with deadlock retry.
+- A-12/A-15 channels: ui, email (smtplib in a thread instead of aiosmtplib), sms/phone via mock gateway with phone_messages, webhook body_template; shared HTTP status classification, header-injection guard, CHANNEL_ALLOWED_HOSTS.
+- A-13 delivery worker: delivery-done idempotency (pending/done), backoff retries via delivery-retries (atomic Lua poller), deliveries-dlq + fallback channel, shared circuit breaker, alert_e2e_latency_seconds.
+- A-01 smoke test: resolves earlier rates alerts before posting so the email check sees a new alert; compose project is named `alerting` for everyone.
