@@ -4,8 +4,10 @@ import type {
   FieldMappingSpec,
   NormalizedFieldMappings,
   SchemaProfile,
+  SchemaProfileTestResult,
 } from "../../api/types";
 
+type TestSample = SchemaProfileTestResult["samples"][number];
 export type SampleEvent = Record<string, unknown>;
 export type FieldName = keyof NormalizedFieldMappings;
 export type Match = SchemaProfile["match"];
@@ -106,4 +108,32 @@ export function errorsUnder(
 export function unmatchedErrors(errors: readonly ConfigValidationError[]): ConfigValidationError[] {
   const prefixes = ["id", "description", "priority", "match", "fingerprint", "fields"];
   return errors.filter((e) => !prefixes.some((p) => errorsUnder([e], p).length > 0));
+}
+
+export const FIELD_LABELS: Record<FieldName, string> = {
+  type: "Event type",
+  source: "Source",
+  severity: "Severity",
+  occurred_at: "Time",
+  entity: "Entity",
+};
+
+const SUMMARY_ENTRIES = 3;
+
+/** "WARN → warning, ERROR → error …" for the first few value-map entries. */
+export function summarizeValueMap(valueMap: Readonly<Record<string, string>>): string {
+  const entries = Object.entries(valueMap);
+  const shown = entries.slice(0, SUMMARY_ENTRIES).map(([raw, value]) => `${raw} → ${value}`);
+  return entries.length > SUMMARY_ENTRIES ? `${shown.join(", ")} …` : shown.join(", ");
+}
+
+/** The test row that stands for the pasted or picked sample (it has no stored event id). */
+export function findSampleRow(result: SchemaProfileTestResult): TestSample | null {
+  return result.samples.find((s) => s.event_id === null) ?? null;
+}
+
+/** The profile "reads" the sample when the sample row exists and has a type or an entity. */
+export function isSampleRead(result: SchemaProfileTestResult): boolean {
+  const row = findSampleRow(result);
+  return row !== null && (row.normalized.type !== null || row.normalized.entity !== null);
 }

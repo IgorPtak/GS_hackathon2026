@@ -114,6 +114,19 @@ const ICON_PATHS = {
       <path d="M12 10v4.5M12 17v.01" />
     </>
   ),
+  sparkle: (
+    <>
+      <path d="M12 3.5 13.9 9l5.6 1.9-5.6 1.9L12 18.5l-1.9-5.7L4.5 10.9 10.1 9z" />
+      <path d="M19 3.5v3M17.5 5h3" />
+    </>
+  ),
+  file: (
+    <>
+      <path d="M7 3.5h6.5L18 8v12.5H7z" />
+      <path d="M13 3.5V8.5h5M9.5 13h6M9.5 16.5h6" />
+    </>
+  ),
+  arrowRight: <path d="M5 12h14m-5-5 5 5-5 5" />,
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof ICON_PATHS;
