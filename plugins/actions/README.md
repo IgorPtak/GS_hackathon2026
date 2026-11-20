@@ -43,9 +43,11 @@ from alerting_contracts.config import ActionConfig
 from plugins.actions.base import ActionPlugin, ActionResult
 from plugins.actions.registry import register_action_plugin
 
+
 @register_action_plugin
 class PingAction(ActionPlugin):
     type = "ping"
+
     async def _run(self, params: dict[str, str], config: ActionConfig) -> ActionResult:
         return await self.send("GET", params["url"], config)
 ```
