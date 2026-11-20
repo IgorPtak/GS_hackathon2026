@@ -704,6 +704,32 @@ paths:
             text/event-stream:
               schema:
                 $ref: '#/components/schemas/SseEvent'
+  /api/v1/events/recent:
+    get:
+      tags:
+      - ops
+      operationId: listRecentEvents
+      summary: Newest raw events from the events stream (XREVRANGE); used by the 3 h gate and schema onboarding.
+      parameters:
+      - name: source_id
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 500
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventEnvelope'
   /api/v1/metrics/summary:
     get:
       tags:
