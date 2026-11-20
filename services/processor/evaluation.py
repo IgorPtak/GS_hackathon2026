@@ -15,7 +15,7 @@ from alerting_contracts.events import EventEnvelope, NormalizedFields
 from alerting_core.config.registry import ConfigSnapshot
 from alerting_core.events import ProfileMatcher, compute_fingerprint
 from alerting_core.logging import get_logger
-from alerting_core.rules import build_context, compile_condition
+from alerting_core.rules import build_context, compile_condition, index_rules_by_type
 from alerting_core.rules.conditions import CompiledCondition
 from alerting_core.templating import render_presentation
 
@@ -55,17 +55,20 @@ class RuleSet:
     def __init__(self, snapshot: ConfigSnapshot) -> None:
         profiles: Mapping[str, SchemaProfile] = snapshot.of_kind("schema_profile")
         self.profiles = ProfileMatcher(list(profiles.values()))
-        self.rules: list[CompiledRule] = []
+        compiled_rules: list[CompiledRule] = []
         rules: Mapping[str, Rule] = snapshot.of_kind("rule")
         for rule in rules.values():
             if not rule.enabled:
                 continue
             try:
-                self.rules.append(CompiledRule(rule, compile_condition(rule.when)))
+                compiled_rules.append(CompiledRule(rule, compile_condition(rule.when)))
             except (ValueError, TypeError) as error:
                 # A rule that cannot compile is skipped, never fatal: other rules keep working.
                 log.error("rule_skipped", extra={"rule_id": rule.id, "error": str(error)})
-        log.info("rule_set_compiled", extra={"rules": len(self.rules)})
+        # Only rules whose `normalized.type` constraint fits the event are evaluated per event.
+        self.rules = index_rules_by_type((c, c.rule.when) for c in compiled_rules)
+        self.rule_count = len(compiled_rules)
+        log.info("rule_set_compiled", extra={"rules": self.rule_count})
 
 
 def evaluate_event(rule_set: RuleSet, envelope: EventEnvelope) -> EventOutcome:
@@ -77,7 +80,7 @@ def evaluate_event(rule_set: RuleSet, envelope: EventEnvelope) -> EventOutcome:
     matches: list[RuleMatch] = []
     # A resolution event closes alerts (A-18); it must never open a new one.
     if not normalized.is_resolution:
-        for compiled in rule_set.rules:
+        for compiled in rule_set.rules.candidates(normalized.type):
             if compiled.matches(context):
                 matches.append(_render_match(compiled.rule, normalized, context))
     return EventOutcome(envelope, profile, normalized, is_unknown_shape, matches)
