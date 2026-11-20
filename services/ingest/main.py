@@ -17,7 +17,10 @@ from alerting_core.settings import Settings, get_settings
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Histogram
-from redis.asyncio import Redis
+from pydantic import ValidationError
+from redis.asyncio.client import Redis
+from redis.commands.core import AsyncScript
+from redis.exceptions import RedisError
 from ulid import ULID
 
 from plugins.sources import get_source_plugin
@@ -33,6 +36,16 @@ EVENTS_TOTAL = Counter("ingest_events_total", "Events seen by ingest", ["source_
 REQUEST_SECONDS = Histogram(
     "ingest_request_seconds", "Ingest request duration", buckets=LATENCY_BUCKETS
 )
+
+
+# Set the idempotency key and append in one step; nil (false) means the key already existed.
+APPEND_SCRIPT = """
+if redis.call('SET', KEYS[1], '1', 'NX', 'EX', ARGV[1]) then
+  return redis.call('XADD', KEYS[2], '*', 'envelope', ARGV[2])
+else
+  return false
+end
+"""
 
 
 class RequestError(Exception):
@@ -51,6 +64,7 @@ def error_response(status: int, error: str, message: str) -> JSONResponse:
     return JSONResponse(body.model_dump(mode="json"), status_code=status)
 
 
+# Temporary: A-08's field_paths helper replaces lookup_path.
 def lookup_path(payload: dict[str, Any], path: str) -> Any:
     """Value at a dot path in `payload`, or None when any segment is missing."""
     node: Any = payload
@@ -66,9 +80,12 @@ def parse_sent_at(raw: str | None) -> datetime | None:
     if raw is None:
         return None
     try:
-        return datetime.fromisoformat(raw)
+        parsed = datetime.fromisoformat(raw)
     except ValueError:
         raise RequestError(422, "validation_failed", "X-Sent-At must be ISO 8601") from None
+    if parsed.tzinfo is None:
+        raise RequestError(422, "validation_failed", "sent_at must include a timezone")
+    return parsed
 
 
 def get_source(request: Request, source_id: str) -> SourceConfig | None:
@@ -90,19 +107,26 @@ def build_envelopes(
     header_key: str | None,
     sent_at: datetime | None,
 ) -> list[EventEnvelope]:
-    """Wrap every payload from the source plugin in an EventEnvelope."""
+    """Wrap every payload from the source plugin in an EventEnvelope.
+
+    The caller has already checked that the source type has an HTTP plugin.
+    """
     plugin = get_source_plugin(source.type)
     if plugin is None:
         raise RequestError(404, "not_found", "source is not an HTTP source")
     key_path = source.settings.get("idempotency_key_path")
     now = datetime.now(UTC)
+    payloads = [p for body in bodies for p in plugin.extract_payloads(body, source)]
     envelopes = []
-    for body in bodies:
-        for payload in plugin.extract_payloads(body, source):
-            key = header_key
-            if key is None and key_path:
-                found = lookup_path(payload, key_path)
-                key = None if found is None else str(found)
+    for index, payload in enumerate(payloads):
+        key = None
+        if header_key:
+            # One client key for several payloads would drop all but the first event.
+            key = header_key if len(payloads) == 1 else f"{header_key}:{index}"
+        elif key_path:
+            found = lookup_path(payload, key_path)
+            key = None if found is None else str(found)
+        try:
             envelopes.append(
                 EventEnvelope(
                     event_id=str(ULID()),
@@ -114,32 +138,38 @@ def build_envelopes(
                     payload=payload,
                 )
             )
+        except ValidationError as error:
+            raise RequestError(422, "validation_failed", f"invalid event: {error}") from None
     return envelopes
 
 
-async def append_envelopes(redis: Redis, envelopes: list[EventEnvelope]) -> tuple[list[str], int]:
-    """XADD the non-duplicate envelopes; returns (accepted event ids, duplicate count)."""
-    keyed = [e for e in envelopes if e.idempotency_key is not None]
-    duplicates: set[str] = set()
-    if keyed:
-        pipe = redis.pipeline(transaction=False)
-        for envelope in keyed:
-            pipe.set(
+async def append_envelopes(
+    redis: Redis, script: AsyncScript, envelopes: list[EventEnvelope]
+) -> tuple[list[str], int]:
+    """Append envelopes in one pipeline; returns (accepted event ids, duplicate count).
+
+    Keyed envelopes go through a Lua script so the idempotency key is only set when the XADD
+    happens in the same step; a failed append never blocks the client's retry.
+    """
+    pipe = redis.pipeline(transaction=False)
+    for envelope in envelopes:
+        raw = orjson.dumps(envelope.model_dump(mode="json"))
+        if envelope.idempotency_key is None:
+            pipe.xadd(STREAM, {"envelope": raw})
+        else:
+            pipe.scripts.add(script)
+            pipe.evalsha(
+                script.sha,
+                2,
                 f"ingest-idempotency:{envelope.idempotency_key}",
-                1,
-                nx=True,
-                ex=IDEMPOTENCY_TTL_SECONDS,
+                STREAM,
+                IDEMPOTENCY_TTL_SECONDS,
+                raw,
             )
-        results = await pipe.execute()
-        # The same key twice in one batch also works: SET NX makes the second one a duplicate.
-        duplicates = {e.event_id for e, created in zip(keyed, results, strict=True) if not created}
-    accepted = [e for e in envelopes if e.event_id not in duplicates]
-    if accepted:
-        pipe = redis.pipeline(transaction=False)
-        for envelope in accepted:
-            pipe.xadd(STREAM, {"envelope": orjson.dumps(envelope.model_dump(mode="json"))})
-        await pipe.execute()
-    return [e.event_id for e in accepted], len(duplicates)
+    results = await pipe.execute()
+    # A nil result means SET NX found the key: a duplicate.
+    accepted = [e.event_id for e, result in zip(envelopes, results, strict=True) if result]
+    return accepted, len(envelopes) - len(accepted)
 
 
 def parse_bodies(body: Any, *, is_batch: bool) -> list[Any]:
@@ -162,9 +192,15 @@ async def handle_ingest(request: Request, source_id: str, *, is_batch: bool) -> 
             raise RequestError(404, "not_found", f"unknown source '{source_id}'")
         bodies = parse_bodies(await parse_body(request), is_batch=is_batch)
         sent_at = parse_sent_at(request.headers.get("x-sent-at"))
-        header_key = None if is_batch else request.headers.get("idempotency-key")
+        header_key = None if is_batch else (request.headers.get("idempotency-key") or "").strip()
         envelopes = build_envelopes(source, bodies, header_key, sent_at)
-        event_ids, duplicate_count = await append_envelopes(request.app.state.redis, envelopes)
+        try:
+            event_ids, duplicate_count = await append_envelopes(
+                request.app.state.redis, request.app.state.append_script, envelopes
+            )
+        except RedisError as error:
+            log.error("ingest_append_failed", extra={"source_id": source_id, "error": str(error)})
+            raise RequestError(503, "unavailable", "event store unavailable, retry") from None
     except RequestError as error:
         EVENTS_TOTAL.labels(source_id, "rejected").inc()
         return error_response(error.status, error.error, error.message)
@@ -187,6 +223,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.settings = resolved
         app.state.sources = load_sources(resolved.config_dir)
         app.state.redis = create_redis_client(resolved)
+        app.state.append_script = app.state.redis.register_script(APPEND_SCRIPT)
         log.info("ingest_started", extra={"sources": sorted(app.state.sources)})
         yield
         await app.state.redis.aclose()

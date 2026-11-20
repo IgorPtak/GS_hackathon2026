@@ -9,11 +9,15 @@ import orjson
 import pytest
 import redis
 import yaml
+from alerting_contracts.config import SourceConfig
+from alerting_contracts.events import SourceType
 from alerting_core.settings import Settings
 from fastapi.testclient import TestClient
 from ulid import ULID
 
+from plugins.sources import HttpSourcePlugin, get_source_plugin, register_source_plugin
 from services.ingest.main import create_app
+from services.ingest.sources import load_sources
 
 REDIS_URL = "redis://localhost:6379/15"
 EXAMPLES = Path(__file__).resolve().parents[3] / "contracts" / "examples" / "sources"
@@ -164,4 +168,80 @@ def test_p50_latency_note(client: TestClient) -> None:
         started = time.perf_counter()
         client.post("/api/v1/ingest/rates-oms", json={"a": 1})
         durations.append((time.perf_counter() - started) * 1000)
-    print(f"ingest p50 over 200 sequential requests: {statistics.median(durations):.2f} ms")
+    p50 = statistics.median(durations)
+    print(f"ingest p50 over 200 sequential requests: {p50:.2f} ms")
+    assert p50 < 20  # loose in-process bound; the real target is < 5 ms
+
+
+def test_redis_failure_returns_503_and_retry_lands(
+    client: TestClient, sync_redis: redis.Redis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    headers = {"Idempotency-Key": "retry-me"}
+    with monkeypatch.context() as patch:
+
+        async def broken_execute(self, *args, **kwargs):
+            raise redis.exceptions.ConnectionError("down")
+
+        patch.setattr(redis.asyncio.client.Pipeline, "execute", broken_execute)
+        response = client.post("/api/v1/ingest/rates-oms", json={"a": 1}, headers=headers)
+    assert response.status_code == 503
+    assert response.json()["error"] == "unavailable"
+    assert sync_redis.xlen("events") == 0
+    retry = client.post("/api/v1/ingest/rates-oms", json={"a": 1}, headers=headers)
+    assert retry.status_code == 202
+    assert retry.json()["duplicate_count"] == 0
+    assert sync_redis.xlen("events") == 1
+
+
+class TwoPayloadSource(HttpSourcePlugin):
+    def extract_payloads(self, body: dict, source: SourceConfig) -> list[dict]:
+        return [{"n": 1}, {"n": 2}]
+
+
+def test_header_key_with_several_payloads_is_suffixed(
+    client: TestClient, sync_redis: redis.Redis, config_dir: str
+) -> None:
+    (Path(config_dir) / "sources" / "multi.yaml").write_text(
+        yaml.safe_dump({"id": "multi", "type": "alertmanager"})
+    )
+    client.app.state.sources.update(load_sources(config_dir))
+    previous = get_source_plugin(SourceType.alertmanager)
+    register_source_plugin(SourceType.alertmanager, TwoPayloadSource())
+    try:
+        headers = {"Idempotency-Key": "am-1"}
+        first = client.post("/api/v1/ingest/multi", json={}, headers=headers)
+        assert len(first.json()["event_ids"]) == 2
+        second = client.post("/api/v1/ingest/multi", json={}, headers=headers)
+        assert second.json() == {"event_ids": [], "duplicate_count": 2}
+    finally:
+        if previous is not None:
+            register_source_plugin(SourceType.alertmanager, previous)
+    keys = sorted(envelope["idempotency_key"] for envelope in entries(sync_redis))
+    assert keys == ["am-1:0", "am-1:1"]
+
+
+def test_blank_idempotency_key_header_is_ignored(
+    client: TestClient, sync_redis: redis.Redis
+) -> None:
+    for _ in range(2):
+        client.post("/api/v1/ingest/rates-oms", json={}, headers={"Idempotency-Key": "  "})
+    assert sync_redis.xlen("events") == 2
+    assert entries(sync_redis)[0]["idempotency_key"] is None
+
+
+def test_naive_sent_at_returns_422(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/ingest/rates-oms", json={}, headers={"X-Sent-At": "2026-01-01T10:00:00"}
+    )
+    assert response.status_code == 422
+    assert "timezone" in response.json()["message"]
+
+
+def test_invalid_envelope_returns_422_not_500(client: TestClient) -> None:
+    # A source id that fails ConfigId validation cannot be built into an envelope.
+    client.app.state.sources["Bad Id"] = SourceConfig.model_construct(
+        id="Bad Id", type=SourceType.webhook, enabled=True, settings={}
+    )
+    response = client.post("/api/v1/ingest/Bad Id", json={})
+    assert response.status_code == 422
+    assert response.json()["error"] == "validation_failed"
