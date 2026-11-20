@@ -47,7 +47,7 @@ _KINDS: dict[str, KindSpec] = {
     spec.kind: spec
     for spec in (
         _model_spec("source", "sources", SourceConfig),
-        _model_spec("schema", "schemas", SchemaProfile),
+        _model_spec("schema_profile", "schemas", SchemaProfile),
         _model_spec("rule", "rules", Rule),
         _model_spec("recipient", "recipients", Recipient),
         _model_spec("team", "teams", Team),

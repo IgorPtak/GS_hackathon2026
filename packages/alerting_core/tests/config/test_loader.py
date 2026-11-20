@@ -10,7 +10,7 @@ def test_every_real_config_file_loads_and_round_trips() -> None:
     assert result.errors == []
     assert {d.kind for d in result.documents} == {
         "source",
-        "schema",
+        "schema_profile",
         "rule",
         "recipient",
         "team",

@@ -21,6 +21,7 @@ from redis.asyncio import Redis
 pytestmark = pytest.mark.integration
 
 ACTOR = Actor(id="anna")
+CONFIG_DIR = Path(__file__).resolve().parents[4] / "config"
 
 
 def _write_team(root: Path, name: str = "ops", display: str = "Ops") -> Path:
@@ -223,3 +224,28 @@ async def test_real_file_watcher_picks_up_an_edit(
         pytest.fail("watcher did not save the edit")
     finally:
         task.cancel()
+
+
+async def test_schema_profile_kind_matches_contract(pool: asyncpg.Pool, redis: Redis) -> None:
+    from alerting_core.config import load_config_directory
+
+    profile = next(
+        d for d in load_config_directory(CONFIG_DIR).documents if d.file.parent.name == "schemas"
+    )
+    assert profile.kind == "schema_profile"
+    await save_config_document(pool, redis, "schema_profile", profile.model, ACTOR)
+    registry = ConfigRegistry()
+    await registry.start(pool, redis)
+    try:
+        assert profile.id in registry.schema_profiles()
+    finally:
+        await registry.stop()
+
+
+async def test_start_failure_leaves_no_tasks(pool: asyncpg.Pool) -> None:
+    unreachable = Redis.from_url("redis://localhost:1/12")
+    registry = ConfigRegistry(initial_load_timeout=1.0)
+    with pytest.raises(Exception):  # noqa: B017 - timeout or connection error, both acceptable
+        await registry.start(pool, unreachable)
+    assert registry._tasks == []
+    await unreachable.aclose()

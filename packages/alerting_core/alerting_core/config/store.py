@@ -117,7 +117,8 @@ async def save_config_document(
     """
     model = _validated(kind, document)
     version = await _upsert(pool, kind, model, actor)
-    assert version is not None  # unguarded upsert always returns a row
+    if version is None:  # the unguarded upsert always returns a row
+        raise RuntimeError(f"saving {kind}/{model.id} returned no version")  # type: ignore[attr-defined]
     document_id = str(model.id)  # type: ignore[attr-defined]
     await _publish_after_write(redis, kind, document_id, version)
     log.info(
