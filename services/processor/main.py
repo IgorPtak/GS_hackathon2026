@@ -5,6 +5,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 
+from alerting_core.auto_resolve import run_silence_resolver
 from alerting_core.config.registry import ConfigRegistry
 from alerting_core.config.store import sync_config_files
 from alerting_core.connections import create_database_pool, create_redis_client
@@ -18,6 +19,7 @@ from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
+from .auto_resolution import make_resolution_hook
 from .batch import EventProcessor
 from .folds import FoldTracker
 from .groups import GroupFlusher
@@ -59,7 +61,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         registry = ConfigRegistry()
         await registry.start(pool, redis)
         folds = FoldTracker(pool, redis)
-        processor = EventProcessor(pool, redis, registry, resolved, folds)
+        processor = EventProcessor(
+            pool, redis, registry, resolved, folds, make_resolution_hook(pool, redis, registry)
+        )
         consumer = StreamConsumer(
             redis,
             EVENTS_STREAM,
@@ -74,6 +78,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             asyncio.create_task(folds.run(stop)),
             asyncio.create_task(GroupFlusher(pool, redis, registry, resolved).run(stop)),
             asyncio.create_task(trim_events(redis, stop)),
+            asyncio.create_task(
+                run_silence_resolver(pool, redis, lambda: registry.snapshot.of_kind("rule"), stop)
+            ),
         ]
         app.state.tasks = tasks
         yield
