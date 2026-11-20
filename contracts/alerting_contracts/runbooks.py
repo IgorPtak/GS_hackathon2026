@@ -65,6 +65,7 @@ class Runbook(ContractModel):
     normalized_by: Literal["parser", "llm", "fallback"] = Field(
         description="fallback = LLM unavailable, whole text kept as one text step."
     )
+    llm_model: str | None = Field(default=None, description="Model that normalized it, when normalized_by = llm.")
     version: int = 1
     updated_at: datetime | None = None
 
@@ -77,6 +78,8 @@ class RenderedRunbookStep(ContractModel):
     params: dict[str, str] = Field(default_factory=dict)
     requires_approval: bool = False
     is_automatic: bool = False
+    run_if: RunIf = RunIf.always
+    max_attempts: int = Field(default=1, ge=1)
     missing_fields: list[str] = Field(default_factory=list, description="Placeholders that had no value.")
 
 
@@ -135,6 +138,10 @@ class ApprovalRequest(ContractModel):
     action_run_id: str
     alert_id: str
     team: ConfigId
+    runbook_id: ConfigId
+    step_index: int = Field(ge=0)
+    action_id: ConfigId
+    params: dict[str, str] = Field(default_factory=dict, description="Rendered params that will run.")
     summary: str = Field(description="Rendered step text shown to the approver.")
     approval_code: str = Field(pattern=r"^[0-9]{4}$", description="Reply 'APPROVE <code>' or 'REJECT <code>'.")
     requested_at: datetime

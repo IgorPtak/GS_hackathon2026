@@ -19,9 +19,17 @@
       "type": "string"
     },
     "idempotency_key": {
-      "description": "Idempotency-Key header, else sha256 of source_id + canonical payload JSON.",
-      "title": "Idempotency Key",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Idempotency-Key header, else the value at the source's idempotency_key_path, else None. Never a payload hash: identical events must reach dedup to be counted.",
+      "title": "Idempotency Key"
     },
     "source_id": {
       "examples": [
@@ -61,7 +69,6 @@
   },
   "required": [
     "event_id",
-    "idempotency_key",
     "source_id",
     "source_type",
     "received_at",

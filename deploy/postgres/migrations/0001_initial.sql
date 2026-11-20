@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS alerts (
     resolved_by        jsonb,
     resolved_at        timestamptz,
     resolution_reason  text
-        CHECK (resolution_reason IN ('manual', 'source_resolved', 'silence'))
+        CHECK (resolution_reason IN ('manual', 'source_resolved', 'silence')),
+    updated_at         timestamptz NOT NULL DEFAULT now()
 );
 -- Live feed: one team, filtered by status, newest activity first.
 CREATE INDEX IF NOT EXISTS alerts_team_status_last_seen_idx
@@ -129,6 +130,10 @@ CREATE TABLE IF NOT EXISTS approval_requests (
     action_run_id  uuid        NOT NULL,
     alert_id       uuid        NOT NULL,
     team           text        NOT NULL,
+    runbook_id     text        NOT NULL,
+    step_index     int         NOT NULL CHECK (step_index >= 0),
+    action_id      text        NOT NULL,
+    params         jsonb       NOT NULL DEFAULT '{}'::jsonb,
     summary        text        NOT NULL,
     approval_code  char(4)     NOT NULL CHECK (approval_code ~ '^[0-9]{4}$'),
     requested_at   timestamptz NOT NULL DEFAULT now(),

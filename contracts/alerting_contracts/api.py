@@ -149,6 +149,8 @@ class PreviewAlert(ContractModel):
     severity: Severity
     fingerprint: str
     group_key: str | None = None
+    is_group_summary: bool = False
+    member_count: int = Field(default=0, ge=0, description="Distinct fingerprints in a group summary.")
     count: int
     first_seen: datetime
 
@@ -214,6 +216,13 @@ class RunbookWrite(ContractModel):
     actor: Actor
 
 
+class RunbookNormalizeRequest(ContractModel):
+    """Body of POST /runbooks/normalize: preview before the runbook has an id or is saved."""
+
+    format: RunbookFormat
+    source: str = Field(min_length=1)
+
+
 class RunbookSummary(ContractModel):
     id: ConfigId
     title: str
@@ -221,6 +230,7 @@ class RunbookSummary(ContractModel):
     format: RunbookFormat
     step_count: int
     normalized_by: Literal["parser", "llm", "fallback"]
+    llm_model: str | None = None
     version: int
 
 

@@ -23,8 +23,12 @@ class EventEnvelope(ContractModel):
     """
 
     event_id: str = Field(description="ULID assigned by ingest; sortable by time.")
-    idempotency_key: str = Field(
-        description="Idempotency-Key header, else sha256 of source_id + canonical payload JSON."
+    idempotency_key: str | None = Field(
+        default=None,
+        description=(
+            "Idempotency-Key header, else the value at the source's idempotency_key_path, else None. "
+            "Never a payload hash: identical events must reach dedup to be counted."
+        ),
     )
     source_id: ConfigId
     source_type: SourceType

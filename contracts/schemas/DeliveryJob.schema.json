@@ -18,6 +18,17 @@
       "title": "AlertField",
       "type": "object"
     },
+    "ChannelType": {
+      "enum": [
+        "ui",
+        "email",
+        "sms",
+        "phone",
+        "webhook"
+      ],
+      "title": "ChannelType",
+      "type": "string"
+    },
     "DeliveryPurpose": {
       "enum": [
         "alert",
@@ -141,11 +152,36 @@
       "title": "Channel Id",
       "type": "string"
     },
+    "channel_type": {
+      "$ref": "#/$defs/ChannelType",
+      "description": "Selects the channel plugin; no config lookup needed."
+    },
     "purpose": {
       "$ref": "#/$defs/DeliveryPurpose"
     },
     "content": {
       "$ref": "#/$defs/NotificationContent"
+    },
+    "attempt": {
+      "default": 0,
+      "description": "Failed attempts so far; travels with retries.",
+      "minimum": 0,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "not_before": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Earliest time of the next attempt.",
+      "title": "Not Before"
     },
     "approval_request_id": {
       "anyOf": [
@@ -184,6 +220,7 @@
     "alert_id",
     "team",
     "channel_id",
+    "channel_type",
     "purpose",
     "content"
   ],

@@ -47,6 +47,16 @@
           "title": "Is Automatic",
           "type": "boolean"
         },
+        "run_if": {
+          "$ref": "#/$defs/RunIf",
+          "default": "always"
+        },
+        "max_attempts": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
         "missing_fields": {
           "description": "Placeholders that had no value.",
           "items": {
@@ -63,6 +73,15 @@
       ],
       "title": "RenderedRunbookStep",
       "type": "object"
+    },
+    "RunIf": {
+      "enum": [
+        "always",
+        "previous_failed",
+        "previous_succeeded"
+      ],
+      "title": "RunIf",
+      "type": "string"
     },
     "RunbookFormat": {
       "enum": [
