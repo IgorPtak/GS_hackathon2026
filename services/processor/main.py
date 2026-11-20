@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 
 from alerting_core.config.registry import ConfigRegistry
+from alerting_core.config.store import sync_config_files
 from alerting_core.connections import create_database_pool, create_redis_client
 from alerting_core.logging import configure_logging, get_logger
 from alerting_core.metrics import render_metrics
@@ -49,12 +50,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         configure_logging("processor", resolved.log_level)
         pool = await create_database_pool(resolved)
         redis = create_redis_client(resolved)
+        # Atomic per document, so every replica may run it; the api's watcher handles later edits.
+        await sync_config_files(pool, redis, resolved.config_dir)
         registry = ConfigRegistry()
         await registry.start(pool, redis)
         folds = FoldTracker(pool, redis)
         processor = EventProcessor(pool, redis, registry, resolved, folds)
         consumer = StreamConsumer(
-            redis, EVENTS_STREAM, CONSUMER_GROUP, default_consumer_name(), processor.handle_batch
+            redis, EVENTS_STREAM, CONSUMER_GROUP, default_consumer_name("processor"), processor.handle_batch
         )
         processor.dead_letter = consumer.dead_letter
         stop = asyncio.Event()
