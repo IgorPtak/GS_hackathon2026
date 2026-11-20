@@ -2,7 +2,7 @@ import json
 import logging
 
 import pytest
-from alerting_core.logging import JsonFormatter
+from alerting_core.logging import JsonFormatter, configure_logging
 from alerting_core.settings import Settings
 
 
@@ -24,3 +24,22 @@ def test_json_formatter_emits_event_service_and_ids() -> None:
     assert entry["alert_id"] == "a-1"
     assert entry["rule_id"] is None
     assert entry["count"] == 3
+
+
+def test_configure_logging_keeps_a_disabled_access_log() -> None:
+    access = logging.getLogger("uvicorn.access")
+    error = logging.getLogger("uvicorn.error")
+    root_handlers = logging.getLogger().handlers[:]
+    try:
+        access.handlers[:] = []
+        access.propagate = False  # what `uvicorn --no-access-log` leaves behind
+        error.addHandler(logging.NullHandler())
+        configure_logging("test")
+        assert access.propagate is False
+        assert error.propagate is True and not error.handlers
+
+        access.addHandler(logging.NullHandler())  # access log on: route it through ours
+        configure_logging("test")
+        assert access.propagate is True and not access.handlers
+    finally:
+        logging.getLogger().handlers[:] = root_handlers

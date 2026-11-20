@@ -42,6 +42,7 @@ class Ctx:
     pool: asyncpg.Pool
     redis: Redis
     base_url: str
+    concurrency: int = 16
 
 
 def percentile(values: list[float], pct: float) -> float:
@@ -80,6 +81,7 @@ async def run_step(
             rate,
             lambda seq: build_event(run_id, seq, evt),
             batch_size=batch_size,
+            concurrency=ctx.concurrency,
         )
         if side:
             await side
@@ -264,6 +266,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--rate", type=float, help="msg/s (default depends on the scenario)")
     p.add_argument("--duration", type=float, help="seconds of load")
     p.add_argument("--base-url", default=os.environ.get("INGEST_URL", "http://localhost:8001"))
+    # 16 keeps Docker Desktop port forwarding error-free; inside the network more is fine.
+    p.add_argument("--concurrency", type=int, default=16, help="HTTP connections to ingest")
     p.add_argument("--total", type=int, default=5000, help="dup-storm: identical events")
     p.add_argument("--down-after", type=float, default=10.0, help="gateway-down: stop at t=")
     p.add_argument("--down-for", type=float, default=60.0, help="gateway-down: outage seconds")
@@ -300,7 +304,7 @@ async def main_async(args: argparse.Namespace) -> int:
         os.environ.get("LOADTEST_REDIS_URL", "redis://localhost:6379/0"), decode_responses=True
     )
     pool = await asyncpg.create_pool(dsn, min_size=1, max_size=4, init=_init_connection)
-    ctx = Ctx(pool, redis, args.base_url)
+    ctx = Ctx(pool, redis, args.base_url, args.concurrency)
     started = datetime.now(UTC)
     runners = {
         "steady": steady, "saturation": saturation, "dup-storm": dup_storm,

@@ -107,7 +107,9 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./data/logs:/var/log/pricing:ro
-    command: ["uvicorn", "services.ingest.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "${INGEST_WORKERS:-2}", "--loop", "uvloop"]
+    command: ["uvicorn", "services.ingest.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "${INGEST_WORKERS:-2}", "--loop", "uvloop", "--no-access-log"]
+    # No access log: one line per request cost ~9 % of ingest CPU (py-spy); errors are logged
+    # by the handler and request counts are in Prometheus.
     # Several uvicorn workers: metrics are aggregated across them (a fresh tmpfs per start).
     environment:
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
