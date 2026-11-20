@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { RecentEventsPanel } from "../events/RecentEventsPanel";
 import { PlaceholderPage } from "../../pages/PlaceholderPage";
 import { readStoredTeamId, writeStoredTeamId } from "../../lib/teamStorage";
 import { TABS, type TabId } from "../../lib/tabs";
@@ -24,7 +25,14 @@ export function AppLayout() {
       </header>
       <TabNav tabs={TABS} activeTabId={activeTabId} onSelect={setActiveTabId} />
       <main className="flex-1 p-6">
-        {activeTab ? <PlaceholderPage title={activeTab.label} teamId={selectedTeamId} /> : null}
+        {activeTab && activeTabId !== "schemas" ? (
+          <PlaceholderPage title={activeTab.label} teamId={selectedTeamId} />
+        ) : null}
+        {activeTabId === "alerts" || activeTabId === "schemas" ? (
+          <div className="mt-6">
+            <RecentEventsPanel />
+          </div>
+        ) : null}
       </main>
     </div>
   );
