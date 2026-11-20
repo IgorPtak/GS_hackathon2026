@@ -12,3 +12,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-00 Python workspace, compose stack, Makefile: uv workspace (alerting_contracts, alerting_core), one Python image, compose services with /healthz stubs, Prometheus and Grafana config, Makefile targets.
 - A-02 alerting_core foundation: Settings, JSON logging, parse_duration, asyncpg/Redis factories, Prometheus helpers, StreamConsumer (ack after success, XAUTOCLAIM > 30 s idle, <stream>-dlq after 5 deliveries)
 - A-04 ingest: ingest service with POST /api/v1/ingest/{source_id} and /batch, idempotency via SET NX, source plugin registry and webhook source, /metrics.
+- A-01 smoke test: cumulative per-gate end-to-end checks (3h/7h/11h/14h) in scripts/smoke_test.py.
