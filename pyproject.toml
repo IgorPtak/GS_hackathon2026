@@ -55,7 +55,10 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 # Integration tests need the running compose stack; `make test-integration` selects them.
 addopts = "-m 'not integration'"
-markers = ["integration: needs the running compose stack (Postgres, Redis, Mailpit)"]
+markers = [
+    "integration: needs the running compose stack (Postgres, Redis, Mailpit)",
+    "slow: benchmarks and timing-sensitive tests",
+]
 testpaths = ["packages", "services", "plugins", "tests"]
 pythonpath = [".", "contracts", "packages/alerting_core"]
 
