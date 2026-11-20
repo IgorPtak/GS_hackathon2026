@@ -10,6 +10,7 @@ import { useTeams } from "../team/useTeams";
 import { ToastProvider } from "../ui/ToastProvider";
 import { AppRail } from "./AppRail";
 import { AppWindow } from "./AppWindow";
+import { DemoSheet } from "../../screens/DemoScreen";
 import { DemoPlaceholder, ShellPage } from "./ShellPage";
 
 /** Routes between the shell (rail + page), the full-screen phone and the reserved demo panel. */
@@ -64,6 +65,11 @@ export function AppLayout() {
                 }}
               />
             </div>
+            <DemoSheet
+              onNavigate={(tab) => {
+                navigate(pathForTab(tab));
+              }}
+            />
           </>
         )}
       </AppWindow>
