@@ -312,8 +312,13 @@ async def main_async(args: argparse.Namespace) -> int:
         result = await runners[args.scenario](ctx, args)
         result["hardware"] = await stack.hardware(
             {
-                "processor": len(await stack.running_containers("processor")),
-                "delivery": len(await stack.running_containers("delivery")),
+                # None when generated inside the compose network (no docker CLI to count with).
+                "processor": len(await stack.running_containers("processor"))
+                if stack.has_docker()
+                else None,
+                "delivery": len(await stack.running_containers("delivery"))
+                if stack.has_docker()
+                else None,
                 "ingest_workers": int(os.environ.get("INGEST_WORKERS", "2")),
             }
         )

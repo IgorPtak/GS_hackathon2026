@@ -52,3 +52,17 @@ scenario restores the stack in a `finally` block (processor=1, delivery=1, mock-
 Method and results: `docs/load-test-results.md`.
 Modules: `scenario_send.py` (events, sender, lag sampler), `scenario_measure.py` (Postgres
 measurement), `scenario_stack.py` (docker scale/kill/restore, hardware).
+
+## Generator inside the compose network
+
+From the host, Docker Desktop port forwarding caps the generator around 420–460 msg/s and the
+queueing shows up as seconds of latency. Run steady load from inside the network instead:
+
+    docker run --rm --network alerting_default -v "$PWD":/work -w /work \
+      -e INGEST_URL=http://ingest:8001 \
+      -e LOADTEST_DATABASE_URL=postgresql://alerting:change-me-local-only@postgres:5432/alerting \
+      -e LOADTEST_REDIS_URL=redis://redis:6379/0 \
+      alerting-python:dev python loadtest/scenarios.py steady --rate 500 --duration 30
+
+There is no docker CLI in that container, so scenarios that scale, stop or kill services
+(saturation, gateway-down, kill-processor) still run on the host.

@@ -178,3 +178,17 @@ Max sustainable rate (p99 < 2 s, lag drained): **≥ 350 msg/s, below ~460 msg/s
 
 `loadtest/lost_jobs_test.sh <log>`: steady 100 msg/s for 60 s; at t = 15 s delivery is stopped for 3 s and the `deliveries` stream is trimmed to 0, wiping 717 unread jobs.
 Result (`steady-9b6d7c12`): 12 000 / 12 000 delivered, lost = 0, 755 re-published by the reconciler (717 wiped + jobs in flight at the stop, absorbed by `delivery-done`), p50 40 ms, p99 37.7 s = 30 s stale threshold + up to 10 s tick.
+
+## Host vs in-network generator
+
+Same stack (processor 1, delivery 2, AOF on), steady 30 s:
+
+| Generator | Target | Achieved msg/s | p50 | p99 | Lost |
+|---|---|---|---|---|---|
+| host (Docker Desktop port forwarding) | 500 | 423 | 3 972 ms | 5 601 ms | 0 |
+| inside compose network | 500 | 500 | **81 ms** | **482 ms** | 0 |
+| inside compose network | 1000 | 670 | 8 800 ms | 17 388 ms | 0 |
+
+The earlier "~460 msg/s limit" was the host-to-VM path, not the pipeline. At a 1000 msg/s target,
+CPU at t = 20 s: postgres 130 %, each delivery replica 86 %, ingest 59 % (2 workers), processor 53 %,
+mock-gateway 34 %, redis 32 %, outbox-relay 10 %.
