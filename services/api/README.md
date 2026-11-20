@@ -22,3 +22,14 @@ Postgres that is down at startup is logged and `app.state.pool` stays `None` (ro
    source through `dependencies.py` (`RedisDep`, `PoolDep`, `ConfigSourceDep`) so tests can override them.
 3. Raise `HTTPException` for errors; handlers in `errors.py` turn it into an `ErrorResponse`.
 4. `tests/test_api.py::test_routes_exist_in_openapi_spec` fails if a route is not in the spec.
+
+## Config, alerts and stream
+
+- `/api/v1/config` reads the A-03 `ConfigRegistry` (started in the lifespan). If Postgres is
+  unreachable at startup the api logs `config_source_fallback` and serves YAML straight from
+  `CONFIG_DIR` (`DirectoryConfigSource`).
+- `/api/v1/alerts*`: list (`team` required), detail, acknowledge, resolve. Errors are
+  `ErrorResponse` (`not_found` 404, `invalid_transition` 409, `bad_request` 400 for a bad cursor).
+  The routes publish `alert.updated` + `audit.appended` after a successful transition (storage
+  does not publish).
+- `/api/v1/stream?team=`: SSE for `alerts.team.<team>` and `broadcast`; `: ping` every 15 s.

@@ -27,3 +27,7 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-06 sources: Alertmanager webhook split with source-scoped idempotency keys; log_tail runner with Redis lock, generation-scoped offsets, rotation/truncation handling and DLQ for bad lines.
 - B-01 api service skeleton: app factory with lifespan (pool, lazy Redis, config source), one router per tag, /healthz, /api/v1/config, /api/v1/events/recent, ErrorResponse handlers, /metrics, route drift test; DirectoryConfigSource until A-03.
 - B-04 AlertFeed and AlertDetail: live alert feed with SSE merge, ×count badge, group drill-down, detail drawer with audit, deliveries and acknowledge/resolve; useEventStream hook with backoff (B-02 frontend half).
+- B-07 render runbooks: render_runbook fills step text/params via A-08 templating, resolves approval from step or action, lists missing placeholders; runbook_step_texts for notifications.
+- B-06 runbook formats (core): yaml/markdown/text plugins with registry; alerting_core.runbooks normalize_runbook, register_runbook_kind, save_runbook; runbooks load as A-03 config kind `runbook`.
+- B-02 SSE endpoint: GET /api/v1/stream?team= forwards team and broadcast pub/sub as named SSE events with 15 s heartbeat and clean unsubscribe.
+- B-03 alerts API: list, detail, acknowledge, resolve with 404/409/400 ErrorResponses and one alert.updated publish per transition; /config served from ConfigRegistry with config/ fallback while it is empty.

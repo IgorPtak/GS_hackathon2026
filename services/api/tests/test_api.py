@@ -115,3 +115,49 @@ def test_routes_exist_in_openapi_spec(exempt: set[str]) -> None:
             if method in {"HEAD", "OPTIONS"}:
                 continue
             assert method.lower() in spec.get(path, {}), f"{method} {path} not in openapi.yaml"
+
+
+def test_db_less_start_falls_back_to_directory_source() -> None:
+    with make_client() as client:
+        assert type(client.app.state.config_source).__name__ == "DirectoryConfigSource"  # type: ignore[attr-defined]
+        assert client.app.state.registry is None  # type: ignore[attr-defined]
+
+
+def test_config_served_from_registry_source() -> None:
+    from alerting_contracts.config import Team
+
+    from services.api.config_source import DirectoryConfigSource, RegistryConfigSource
+
+    lists = DirectoryConfigSource(str(ROOT / "config")).get_config_lists()
+
+    class FakeRegistry:
+        def teams(self) -> dict[str, Team]:
+            return {t.id: t for t in lists.teams[:2]}
+
+        def recipients(self) -> dict[str, Any]:
+            return {}
+
+        channels = actions = sources = recipients
+
+    app = create_app(Settings(database_url="postgresql://x@127.0.0.1:1/x"))
+    with TestClient(app) as client:
+        client.app.state.config_source = RegistryConfigSource(FakeRegistry())  # type: ignore[arg-type,attr-defined]
+        body = client.get("/api/v1/config").json()
+    assert len(body["teams"]) == 2 and body["channels"] == []
+
+
+def test_empty_registry_falls_back_to_directory() -> None:
+    from services.api.config_source import DirectoryConfigSource, RegistryConfigSource
+
+    class EmptyRegistry:
+        def teams(self) -> dict[str, Any]:
+            return {}
+
+        recipients = channels = actions = sources = teams
+
+    source = RegistryConfigSource(
+        EmptyRegistry(),  # type: ignore[arg-type]
+        fallback=DirectoryConfigSource(str(ROOT / "config")),
+    )
+    assert len(source.get_config_lists().teams) == 4
+    assert RegistryConfigSource(EmptyRegistry()).get_config_lists().teams == []  # type: ignore[arg-type]
