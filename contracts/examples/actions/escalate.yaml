@@ -1,6 +1,6 @@
 id: escalate
 type: webhook
-description: Page the team lead through the incident webhook
+description: Page the team lead through the escalation webhook
 approval: required
 params:
   workflow_id: { description: Affected workflow }

@@ -46,3 +46,7 @@ something from the other track's path, ask its owner, or return `BLOCKED` when y
 | `README.md` | B | D-01; A supplies the results table |
 | `docs/demo.md`, `docs/load-test-results.md` | B, A respectively | |
 | `.env.example`, `.gitignore` | shared | |
+| `plugins/*/README.md`, `config/README.md`, `scripts/README.md`, other directory READMEs | owner of the directory | D-02 runs once per track |
+
+**Hour 0–1 exception:** until the `feat(contracts): freeze v1` commit, tasks S-01–S-03, A-00 and B-00 may create
+stubs in any path (for example A-00 creates the `services/api` and `services/runbook_runner` stubs).
