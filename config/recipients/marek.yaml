@@ -1,0 +1,4 @@
+id: marek
+display_name: Marek Dabrowski
+teams: [platform]
+contacts: { email: marek@example.com, sms: "+48600000003", phone: "+48600000003" }

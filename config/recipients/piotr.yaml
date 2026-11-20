@@ -1,0 +1,4 @@
+id: piotr
+display_name: Piotr Nowak
+teams: [settlements]
+contacts: { email: piotr@example.com, sms: "+48600000001", phone: "+48600000001" }

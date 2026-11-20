@@ -1,0 +1,14 @@
+id: pricing-log
+description: Lines of the pricing engine log file (parsed by the log_tail source)
+priority: 10
+match:
+  all:
+    - { field: service, op: eq, value: pricing-engine }
+    - { field: instrument, op: exists, value: true }
+fields:
+  type: { const: pricing.log }
+  source: { const: pricing-log }
+  severity: { path: level, value_map: { ERROR: error, CRITICAL: critical, WARN: warning, INFO: info, DEBUG: debug }, default: info }
+  occurred_at: { path: timestamp, format: iso8601 }
+  entity: instrument
+fingerprint: [instrument, feed]

@@ -1,0 +1,14 @@
+id: settlements-workflow-failed
+team: settlements
+description: Settlement workflows that failed
+when:
+  all:
+    - { field: eventType, op: eq, value: WORKFLOW_FAILED }
+route: { channels: [ui, email] }
+present:
+  title: "Workflow {{workflowId}} failed — {{error.code}}"
+  body: "{{service}} gave up after {{attempt}} attempts: {{error.message}}"
+  fields: [workflowId, service, error.code]
+  color: red
+dedup: { window: 60s }
+runbook: workflow-failed

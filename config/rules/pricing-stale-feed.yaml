@@ -1,0 +1,17 @@
+id: pricing-stale-feed
+team: pricing
+when:
+  all:
+    - { field: level, op: in, value: [ERROR, CRITICAL] }
+    - { field: msg, op: regex, value: "^Price stale" }
+severity: warning
+route: { channels: [ui, email] }
+present:
+  title: "Stale price {{instrument}} on {{feed}}"
+  fields: [instrument, feed, age_ms]
+  color: yellow
+dedup: { window: 60s }
+group: { by: [instrument], window: 10s }
+throttle: { max_deliveries: 5, per: 10m }
+auto_resolve: { after_silence: 15m }
+runbook: pricing-stale-feed

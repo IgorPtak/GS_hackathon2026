@@ -1,0 +1,28 @@
+id: workflow-failed
+title: Settlement workflow failed
+team: settlements
+steps:
+  - index: 0
+    kind: check
+    text: "Check health of {{service}}"
+    action: http-health-check
+    params: { url: "http://mock-gateway:8090/services/{{service}}/health" }
+    is_automatic: true
+  - index: 1
+    kind: action
+    text: "Retry workflow {{workflowId}}"
+    action: retry-workflow
+    params: { workflow_id: "{{workflowId}}" }
+    is_automatic: true
+    run_if: previous_succeeded
+    max_attempts: 2
+  - index: 2
+    kind: action
+    text: "Escalate {{workflowId}} to the settlements lead"
+    action: escalate
+    params: { workflow_id: "{{workflowId}}", reason: "{{error.code}}" }
+    approval: required
+    run_if: previous_failed
+  - index: 3
+    kind: text
+    text: "Confirm in the back office that workflow {{workflowId}} settled."

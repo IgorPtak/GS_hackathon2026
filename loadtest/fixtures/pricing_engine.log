@@ -1,0 +1,4 @@
+2026-11-20T10:15:02.123Z ERROR pricing-engine instrument=EURUSD feed=reuters age_ms=31000 msg="Price stale for 31s"
+2026-11-20T10:15:03.456Z ERROR pricing-engine instrument=GBPUSD feed=reuters age_ms=30500 msg="Price stale for 30s"
+2026-11-20T10:15:04.001Z INFO pricing-engine instrument=USDJPY feed=bloomberg age_ms=120 msg="Price updated"
+2026-11-20T10:15:05.789Z ERROR pricing-engine instrument=EURUSD feed=reuters age_ms=34000 msg="Price stale for 34s"

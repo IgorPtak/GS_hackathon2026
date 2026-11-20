@@ -1,0 +1,3 @@
+id: generic-webhook
+type: webhook
+description: Unrecognised webhook payloads; they land in the unknown-schema inbox

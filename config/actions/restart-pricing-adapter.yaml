@@ -1,0 +1,13 @@
+id: restart-pricing-adapter
+type: webhook
+description: Restart the pricing adapter for one feed (drops all subscriptions for a few seconds)
+approval: required
+timeout: 15s
+params:
+  feed: { description: Feed whose adapter is restarted }
+  instrument: { description: Instrument with the stale price, is_required: false }
+settings:
+  url: "http://mock-gateway:8090/services/pricing-adapter/restart"
+  method: POST
+  headers: { Content-Type: application/json }
+  body_template: '{"feed": "{{feed}}", "instrument": "{{instrument}}"}'

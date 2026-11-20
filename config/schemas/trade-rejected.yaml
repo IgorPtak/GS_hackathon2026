@@ -1,0 +1,11 @@
+id: trade-rejected
+description: Rejected trades from the order management system
+priority: 10
+match: { field: meta.schema, op: glob, value: "trade.rejected.*" }
+fields:
+  type: meta.schema
+  source: meta.producer
+  severity: { const: error }
+  occurred_at: { path: meta.ts, format: epoch_ms }
+  entity: payload.tradeId
+fingerprint: [meta.schema, payload.desk, payload.reason]

@@ -1,0 +1,9 @@
+id: slack-rates
+type: webhook
+description: Slack incoming webhook (local receiver in the demo)
+runbook_presentation: link
+settings:
+  url: "http://mock-gateway:8090/webhooks/slack-rates"
+  method: POST
+  headers: { Content-Type: application/json }
+  body_template: '{"text": "[{{alert.severity}}] {{alert.title}} {{alert.alert_url}}"}'

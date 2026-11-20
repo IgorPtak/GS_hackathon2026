@@ -1,0 +1,18 @@
+id: rates-large-rejections
+team: rates
+description: Rejected rates trades above 10M notional
+when:
+  all:
+    - { field: normalized.type, op: glob, value: "trade.rejected.*" }
+    - { field: payload.desk, op: eq, value: rates }
+    - { field: payload.notional, op: gt, value: 10000000 }
+route:
+  channels: [email, ui]
+present:
+  title: "Rejected {{payload.currency}} {{payload.notional}} — {{payload.reason}}"
+  body: "Trade {{payload.tradeId}} for {{payload.counterparty}} was rejected."
+  fields: [payload.tradeId, payload.desk]
+  color: orange
+dedup: { window: 60s }
+group: { by: [payload.desk], window: 5m }
+runbook: trade-limit-breach

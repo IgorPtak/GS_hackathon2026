@@ -1,0 +1,7 @@
+id: http-health-check
+type: http_get
+description: GET a health URL and record the HTTP status
+approval: none
+timeout: 5s
+params:
+  url: { description: Health endpoint to check }

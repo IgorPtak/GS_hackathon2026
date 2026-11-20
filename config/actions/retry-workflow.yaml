@@ -1,0 +1,8 @@
+id: retry-workflow
+type: retry_workflow
+description: Ask the settlement engine to retry a workflow
+approval: none
+timeout: 10s
+params:
+  workflow_id: { description: Workflow to retry }
+settings: { base_url: "http://mock-gateway:8090/workflows" }

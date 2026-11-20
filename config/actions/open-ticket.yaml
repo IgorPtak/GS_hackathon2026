@@ -1,0 +1,13 @@
+id: open-ticket
+type: webhook
+description: Open a ticket for the owning team in the mock ticketing system
+approval: none
+timeout: 10s
+params:
+  summary: { description: One-line ticket summary }
+  team: { description: Team that owns the ticket, is_required: false }
+settings:
+  url: "http://mock-gateway:8090/tickets"
+  method: POST
+  headers: { Content-Type: application/json }
+  body_template: '{"summary": "{{summary}}", "team": "{{team}}"}'
