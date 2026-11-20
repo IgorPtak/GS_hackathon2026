@@ -15,9 +15,12 @@ def get_redis(request: Request) -> Redis:
     return request.app.state.redis
 
 
-def get_pool(request: Request) -> asyncpg.Pool:
-    """The Postgres pool; 503 when the database was unreachable at startup."""
+async def get_pool(request: Request) -> asyncpg.Pool:
+    """The Postgres pool; reconnects lazily, 503 while the database is unreachable."""
     pool = request.app.state.pool
+    if pool is None:
+        connect = getattr(request.app.state, "connect_database", None)
+        pool = await connect() if connect is not None else None
     if pool is None:
         raise HTTPException(503, "database unavailable")
     return pool

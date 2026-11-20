@@ -161,3 +161,42 @@ def test_empty_registry_falls_back_to_directory() -> None:
     )
     assert len(source.get_config_lists().teams) == 4
     assert RegistryConfigSource(EmptyRegistry()).get_config_lists().teams == []  # type: ignore[arg-type]
+
+
+def test_pool_reconnects_after_database_comes_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    import services.api.main as api_main
+    from services.api.dependencies import get_pool
+
+    class FakePool:
+        async def close(self) -> None:
+            return None
+
+    attempts: list[int] = []
+
+    async def failing_then_ok(settings: Settings) -> Any:
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise OSError("db down")
+        return FakePool()
+
+    class FakeRegistry:
+        async def start(self, pool: Any, redis: Any) -> None:
+            return None
+
+        async def stop(self) -> None:
+            return None
+
+        def teams(self) -> dict[str, Any]:
+            return {}
+
+    monkeypatch.setattr(api_main, "create_database_pool", failing_then_ok)
+    monkeypatch.setattr(api_main, "ConfigRegistry", FakeRegistry)
+    app = create_app(Settings(database_url="postgresql://x@127.0.0.1:1/x"))
+
+    with TestClient(app) as client:
+        assert client.app.state.pool is None  # type: ignore[attr-defined]
+        client.app.state.next_database_attempt = 0.0  # type: ignore[attr-defined]
+        pool = client.portal.call(get_pool, type("R", (), {"app": client.app})())  # type: ignore[arg-type]
+        assert isinstance(pool, FakePool)
+        assert client.app.state.registry is not None  # type: ignore[attr-defined]
+    assert len(attempts) == 2
