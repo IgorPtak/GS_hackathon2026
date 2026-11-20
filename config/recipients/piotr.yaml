@@ -2,3 +2,9 @@ id: piotr
 display_name: Piotr Nowak
 teams: [settlements]
 contacts: { email: piotr@example.com, sms: "+48600000001", phone: "+48600000001" }
+# Settlements on-call: approvals and failures must reach the phone simulator (demo scene).
+channel_preferences:
+  - when: { severities: [critical], sources: [settlements-engine] }
+    channels: [ui, email, sms, phone]
+  - when: { sources: [settlements-engine] }
+    channels: [ui, email, sms]

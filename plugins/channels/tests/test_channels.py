@@ -61,6 +61,16 @@ async def context() -> AsyncIterator[ChannelContext]:
     await redis.aclose()
 
 
+@pytest.fixture
+async def mailpit() -> None:
+    """Skip tests that read real mail when Mailpit is not published on localhost."""
+    try:
+        _, writer = await asyncio.wait_for(asyncio.open_connection("localhost", 1025), 1)
+    except (OSError, TimeoutError):
+        pytest.skip("Mailpit on localhost:1025 is not reachable")
+    writer.close()
+
+
 def email_config(presentation: str = "full", port: int = 1025) -> ChannelConfig:
     return ChannelConfig.model_validate(
         {
@@ -117,7 +127,7 @@ async def test_ui_publishes_notification_to_team_channel(context: ChannelContext
     assert json.loads(message["data"])["type"] == "notification"
 
 
-async def test_email_full_includes_runbook_steps(context: ChannelContext) -> None:
+async def test_email_full_includes_runbook_steps(context: ChannelContext, mailpit: None) -> None:
     token = uuid.uuid4().hex
     job = make_job(ChannelType.email, token, fields=[{"path": "host", "value": "web-1"}])
     await plugin(ChannelType.email).send(job, ALICE, email_config("full"), context)
@@ -130,6 +140,7 @@ async def test_email_full_includes_runbook_steps(context: ChannelContext) -> Non
 
 async def test_email_link_omits_runbook_steps_and_adds_approval_reply(
     context: ChannelContext,
+    mailpit: None,
 ) -> None:
     token = uuid.uuid4().hex
     job = make_job(ChannelType.email, token, approval_code="XY12").model_copy(
