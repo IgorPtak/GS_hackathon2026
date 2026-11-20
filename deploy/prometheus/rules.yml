@@ -1,0 +1,10 @@
+groups:
+  - name: alerting-platform
+    rules:
+      - alert: MockGatewayDown
+        expr: up{job="mock-gateway"} == 0
+        for: 15s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Mock gateway {{ $labels.instance }} is down"
