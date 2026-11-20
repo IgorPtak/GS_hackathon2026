@@ -108,22 +108,43 @@ class StreamConsumer:
 
     async def run(self, stop: asyncio.Event) -> None:
         """Loop until `stop` is set: reclaim idle entries periodically, read and handle new ones."""
-        await self.ensure_group()
         log.info("stream_consumer_started", extra=self._log_fields())
+        is_group_ready = False
         while not stop.is_set():
             try:
+                if not is_group_ready:
+                    # Inside the loop so a Redis that is down at startup, or restarted without
+                    # persistence, is retried instead of killing the worker.
+                    await self.ensure_group()
+                    is_group_ready = True
                 if time.monotonic() >= self._next_claim_at:
-                    await self.reclaim_idle()
-                    self._next_claim_at = time.monotonic() + self._claim_interval
+                    await self._reclaim_safely()
                 await self.read_once()
             except asyncio.CancelledError:
                 raise
+            except ResponseError as error:
+                if "NOGROUP" in str(error):
+                    is_group_ready = False
+                log.exception("stream_consumer_error", extra=self._log_fields())
+                await asyncio.sleep(1.0)
             except Exception:
                 # Redis hiccup or a bug outside the handler: nothing was acked, so nothing is
                 # lost; back off briefly instead of spinning.
                 log.exception("stream_consumer_error", extra=self._log_fields())
                 await asyncio.sleep(1.0)
         log.info("stream_consumer_stopped", extra=self._log_fields())
+
+    async def _reclaim_safely(self) -> None:
+        # Scheduled before running so a reclaim that keeps failing never starves new reads.
+        self._next_claim_at = time.monotonic() + self._claim_interval
+        try:
+            # A full batch means more idle entries may wait (e.g. after a crash): keep going.
+            while await self.reclaim_idle() >= self._batch_size:
+                pass
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("stream_reclaim_failed", extra=self._log_fields())
 
     async def read_once(self) -> int:
         """Read one batch of new entries for this consumer and handle it; returns its size."""
@@ -163,7 +184,13 @@ class StreamConsumer:
             entry_id for entry_id, count in delivery_counts.items() if count >= self._max_deliveries
         ]
         for entry_id in poison_ids:
-            await self._dead_letter_pending(entry_id, delivery_counts[entry_id])
+            try:
+                await self._dead_letter_pending(entry_id, delivery_counts[entry_id])
+            except Exception:
+                # One entry that cannot be moved must not block the others; retried next pass.
+                log.exception(
+                    "stream_dead_letter_failed", extra={**self._log_fields(), "entry_id": entry_id}
+                )
 
         if len(poison_ids) == len(delivery_counts):
             return 0
@@ -248,9 +275,11 @@ class StreamConsumer:
                 )
             pipeline.xack(self.stream, self.group, entry_id)
             await pipeline.execute()
-        STREAM_MESSAGES.labels(self.stream, self.group, "dead_lettered").inc()
+        # Without fields the entry was already trimmed from the stream: nothing could be copied.
+        outcome = "dead_lettered" if fields else "dropped_trimmed"
+        STREAM_MESSAGES.labels(self.stream, self.group, outcome).inc()
         log.warning(
-            "stream_entry_dead_lettered",
+            "stream_entry_dead_lettered" if fields else "stream_entry_dropped_trimmed",
             extra={**self._log_fields(), "entry_id": entry_id, "attempts": attempts}
             | {"error": error},
         )

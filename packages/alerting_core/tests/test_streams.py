@@ -194,3 +194,69 @@ def test_default_consumer_name_contains_service_and_pid() -> None:
     name = default_consumer_name("processor")
     assert name.startswith("processor-")
     assert name.rsplit("-", 1)[1].isdigit()
+
+
+async def test_missing_group_is_recreated_by_run(redis: Redis) -> None:
+    handler = RecordingHandler()
+    consumer = make_consumer(redis, handler)
+    stop = asyncio.Event()
+    task = asyncio.create_task(consumer.run(stop))
+    await add_entries(redis, b"before")
+    for _ in range(100):
+        if handler.seen:
+            break
+        await asyncio.sleep(0.01)
+
+    # Redis restarted without persistence: stream and group are gone.
+    await redis.delete(STREAM)
+    await add_entries(redis, b"after")
+    for _ in range(300):
+        if len(handler.seen) == 2:
+            break
+        await asyncio.sleep(0.01)
+    stop.set()
+    await asyncio.wait_for(task, timeout=3)
+
+    assert [m.fields[b"kind"] for m in handler.seen] == [b"before", b"after"]
+
+
+async def test_failing_reclaim_does_not_block_new_reads(
+    redis: Redis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    handler = RecordingHandler()
+    consumer = make_consumer(redis, handler)
+
+    async def broken_reclaim() -> int:
+        raise ConnectionError("XPENDING failed")
+
+    monkeypatch.setattr(consumer, "reclaim_idle", broken_reclaim)
+    stop = asyncio.Event()
+    task = asyncio.create_task(consumer.run(stop))
+    await add_entries(redis, b"a")
+    for _ in range(100):
+        if handler.seen:
+            break
+        await asyncio.sleep(0.01)
+    stop.set()
+    await asyncio.wait_for(task, timeout=2)
+
+    assert len(handler.seen) == 1
+
+
+async def test_trimmed_poison_entry_is_acknowledged_without_dead_letter_copy(
+    redis: Redis,
+) -> None:
+    consumer = make_consumer(redis, RecordingHandler(failing_kinds={b"poison"}))
+    await consumer.ensure_group()
+    [poison_id] = await add_entries(redis, b"poison")
+    await consumer.read_once()
+    await redis.xdel(STREAM, poison_id)
+
+    for _ in range(10):
+        await asyncio.sleep(IDLE_SECONDS * 2)
+        await consumer.reclaim_idle()
+        if await pending_count(redis) == 0:
+            break
+
+    assert await pending_count(redis) == 0
+    assert await redis.xlen(dead_letter_stream(STREAM)) == 0

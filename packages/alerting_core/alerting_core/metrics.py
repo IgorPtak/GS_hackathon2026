@@ -11,10 +11,11 @@ LATENCY_BUCKETS: tuple[float, ...] = (
     0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0,
 )  # fmt: skip
 
+# outcome: acked | failed | claimed | dead_lettered | dropped_trimmed
 STREAM_MESSAGES = Counter(
     "stream_messages_total",
     "Stream entries handled by a consumer group, by outcome.",
-    ["stream", "group", "outcome"],  # outcome: acked | failed | claimed | dead_lettered
+    ["stream", "group", "outcome"],
 )
 STREAM_BATCH_SECONDS = Histogram(
     "stream_batch_seconds",

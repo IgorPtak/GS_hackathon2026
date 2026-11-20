@@ -24,7 +24,11 @@ async def _init_connection(connection: asyncpg.Connection) -> None:
 
 
 async def create_database_pool(settings: Settings) -> asyncpg.Pool:
-    """Create the asyncpg pool with jsonb <-> Python codecs installed on every connection."""
+    """Create the asyncpg pool with jsonb <-> Python codecs installed on every connection.
+
+    Pass jsonb parameters as plain data (`model.model_dump(mode="json")`), never as a JSON string
+    or a Pydantic model: the codec serializes them itself.
+    """
     return await asyncpg.create_pool(
         dsn=settings.database_url,
         min_size=settings.database_pool_min_size,
