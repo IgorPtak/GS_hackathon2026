@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     config_dir: str = "config"
     public_base_url: str = "http://localhost:5173"
 
+    channel_allowed_hosts: list[str] = Field(
+        default=["mock-gateway", "mailpit", "localhost", "127.0.0.1"],
+        description="Hosts channel plugins may contact (env CHANNEL_ALLOWED_HOSTS, JSON list).",
+    )
+
     smtp_host: str = "localhost"
     smtp_port: int = 1025
     mock_gateway_url: str = "http://localhost:8090"

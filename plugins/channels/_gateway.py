@@ -5,6 +5,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Literal
 
+import asyncpg
 import httpx
 from alerting_contracts.alerts import DeliveryJob, DeliveryPurpose
 from alerting_contracts.api import PhoneMessage
@@ -17,6 +18,8 @@ from .base import (
     ChannelPlugin,
     ChannelRejectedError,
     ChannelUnavailableError,
+    check_host_allowed,
+    classify_http_status,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,7 +44,12 @@ def build_text(job: DeliveryJob, config: ChannelConfig, prefix: str = "") -> str
 
 
 class GatewayChannel(ChannelPlugin):
-    """Posts to the mock gateway, then records the message for the phone simulator."""
+    """Posts to the mock gateway, then records the message for the phone simulator.
+
+    Delivery to the gateway is at-least-once: if the store fails after a 2xx the worker retries
+    and the gateway sees the message again (the `delivery_id` lets it deduplicate). The store is
+    skipped (logged) when no database is configured, and the broadcast is best-effort.
+    """
 
     channel_type: Literal[ChannelType.sms, ChannelType.phone]
     text_prefix = ""
@@ -60,6 +68,7 @@ class GatewayChannel(ChannelPlugin):
         url = config.settings.get("gateway_url") or (
             f"{context.settings.mock_gateway_url}/{self.channel_type.value}"
         )
+        check_host_allowed(str(url), context)
         await self._post(url, address, text, job, context)
         message = PhoneMessage(
             id=str(uuid.uuid4()),
@@ -73,7 +82,7 @@ class GatewayChannel(ChannelPlugin):
             at=datetime.now(UTC),
         )
         if await self._store(message, context):
-            await self._publish(message, context)
+            await self._publish(message, context, job)
 
     async def _post(
         self, url: str, address: str, text: str, job: DeliveryJob, context: ChannelContext
@@ -83,10 +92,7 @@ class GatewayChannel(ChannelPlugin):
             response = await context.http.post(url, json=body, timeout=TIMEOUT_SECONDS)
         except httpx.HTTPError as error:  # timeout, connection refused
             raise ChannelUnavailableError(f"gateway unreachable: {error!r}") from error
-        if response.status_code >= 500:
-            raise ChannelUnavailableError(f"gateway http {response.status_code}")
-        if response.status_code >= 400:
-            raise ChannelRejectedError(f"gateway http {response.status_code}")
+        classify_http_status(response.status_code)
 
     async def _store(self, message: PhoneMessage, context: ChannelContext) -> bool:
         """Insert once per delivery; False when a redelivery already stored it."""
@@ -95,6 +101,10 @@ class GatewayChannel(ChannelPlugin):
                 "phone_messages insert skipped: no database", extra={"event": "phone_store_skipped"}
             )
             return True
+        try:
+            alert_uuid = uuid.UUID(message.alert_id)
+        except ValueError as error:
+            raise ChannelRejectedError(f"alert_id is not a uuid: {message.alert_id!r}") from error
         try:
             inserted = await context.database.fetchval(
                 'INSERT INTO phone_messages (id, recipient_id, channel_type, "to", text, alert_id,'
@@ -105,18 +115,29 @@ class GatewayChannel(ChannelPlugin):
                 message.channel_type.value,
                 message.to,
                 message.text,
-                uuid.UUID(message.alert_id),
+                alert_uuid,
                 message.delivery_id,
                 message.approval_code,
                 message.at,
             )
-        except OSError as error:
+        except (OSError, asyncpg.PostgresError, asyncpg.InterfaceError) as error:
             raise ChannelUnavailableError(f"database unavailable: {error}") from error
         return inserted is not None
 
-    async def _publish(self, message: PhoneMessage, context: ChannelContext) -> None:
+    async def _publish(
+        self, message: PhoneMessage, context: ChannelContext, job: DeliveryJob
+    ) -> None:
+        """Best-effort: the gateway already accepted the message, so a retry would resend it."""
         event = PhoneMessageEvent(at=message.at, message=message)
         try:
             await context.redis.publish("broadcast", event.model_dump_json())
         except RedisError as error:
-            raise ChannelUnavailableError(f"redis publish failed: {error}") from error
+            logger.warning(
+                "phone.message publish failed: %s",
+                error,
+                extra={
+                    "event": "phone_publish_failed",
+                    "alert_id": job.alert_id,
+                    "delivery_id": job.delivery_id,
+                },
+            )

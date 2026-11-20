@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import smtplib
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
@@ -154,3 +155,76 @@ async def test_email_missing_address_is_rejected(context: ChannelContext) -> Non
         await plugin(ChannelType.email).send(
             make_job(ChannelType.email), nobody, email_config(), context
         )
+
+
+class FakeSmtp:
+    """Stands in for smtplib.SMTP; `failure` is raised by send_message."""
+
+    failure: Exception | None = None
+    sent: list[Any] = []
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def __enter__(self) -> "FakeSmtp":
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        return None
+
+    def send_message(self, message: Any) -> None:
+        if FakeSmtp.failure:
+            raise FakeSmtp.failure
+        FakeSmtp.sent.append(message)
+
+
+@pytest.fixture
+def fake_smtp(monkeypatch: pytest.MonkeyPatch) -> type[FakeSmtp]:
+    monkeypatch.setattr(smtplib, "SMTP", FakeSmtp)
+    FakeSmtp.failure = None
+    FakeSmtp.sent = []
+    return FakeSmtp
+
+
+@pytest.mark.parametrize(
+    ("failure", "error"),
+    [
+        (smtplib.SMTPRecipientsRefused({"a@x": (450, b"mailbox busy")}), ChannelUnavailableError),
+        (
+            smtplib.SMTPRecipientsRefused({"a@x": (450, b"busy"), "b@x": (550, b"no")}),
+            ChannelRejectedError,
+        ),
+        (smtplib.SMTPResponseException(421, b"try later"), ChannelUnavailableError),
+        (smtplib.SMTPResponseException(554, b"rejected"), ChannelRejectedError),
+    ],
+)
+async def test_email_smtp_error_classification(
+    context: ChannelContext, fake_smtp: type[FakeSmtp], failure: Exception, error: type[Exception]
+) -> None:
+    fake_smtp.failure = failure
+    with pytest.raises(error):
+        await plugin(ChannelType.email).send(
+            make_job(ChannelType.email), ALICE, email_config(), context
+        )
+
+
+async def test_email_header_injection_is_neutralised(
+    context: ChannelContext, fake_smtp: type[FakeSmtp]
+) -> None:
+    job = make_job(ChannelType.email, title="x\r\nBcc: evil@x")
+    await plugin(ChannelType.email).send(job, ALICE, email_config(), context)
+    message = fake_smtp.sent[0]
+    assert message["Bcc"] is None
+    assert "\n" not in message["Subject"] and "\r" not in message["Subject"]
+    assert message["Message-ID"] == "<delivery-42@alerting.local>"
+
+
+async def test_email_bad_config_and_host_are_rejected(context: ChannelContext) -> None:
+    bad_port = email_config()
+    bad_port.settings["smtp_port"] = "abc"
+    with pytest.raises(ChannelRejectedError):
+        await plugin(ChannelType.email).send(make_job(ChannelType.email), ALICE, bad_port, context)
+    bad_host = email_config()
+    bad_host.settings["smtp_host"] = "evil.example.com"
+    with pytest.raises(ChannelRejectedError):
+        await plugin(ChannelType.email).send(make_job(ChannelType.email), ALICE, bad_host, context)
