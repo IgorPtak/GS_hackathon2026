@@ -3,17 +3,15 @@
 Not an HTTP plugin. Ingest starts one `LogTailRunner` per enabled `log_tail` source; the runner
 owns a Redis lock so only one worker process tails a given file, and stores its read offset so a
 restart or lock handover resumes without gaps. Each event gets the key
-`<source_id>:<inode>:<line_start_offset>`, so any re-read line is dropped by ingest's SET NX.
+`<source_id>:<inode>:<generation>:<line_start_offset>`, so a re-read line is dropped by ingest.
 """
 
 import asyncio
-import os
-import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Any, BinaryIO, NamedTuple
+from typing import Any, BinaryIO
 
 import orjson
 from alerting_contracts.config import SourceConfig
@@ -22,6 +20,19 @@ from alerting_core.logging import get_logger
 from redis.asyncio.client import Redis
 from redis.exceptions import RedisError
 from ulid import ULID
+
+from ._log_files import (
+    RELEASE_SCRIPT,
+    RENEW_SCRIPT,
+    FileIdentity,
+    LineParseError,
+    LineSplitter,
+    QueuedLine,
+    compile_pattern,
+    open_file,
+    parse_line,
+    poll_file,
+)
 
 log = get_logger(__name__)
 
@@ -32,75 +43,10 @@ LOCK_RETRY_SECONDS = 5.0
 ERROR_RETRY_SECONDS = 5.0
 BATCH_LINES = 500
 READ_BYTES = 1 << 20
-MAX_LINE_BYTES = 1 << 20
 DLQ_STREAM = "events-dlq"
 DLQ_MAXLEN = 100_000
 
 AppendFn = Callable[[list[EventEnvelope]], Awaitable[Any]]
-
-# Renew/release only while we still own the lock, so a stalled owner cannot touch a successor's.
-RENEW_SCRIPT = (
-    "if redis.call('GET', KEYS[1]) == ARGV[1] then "
-    "return redis.call('PEXPIRE', KEYS[1], ARGV[2]) else return 0 end"
-)
-RELEASE_SCRIPT = (
-    "if redis.call('GET', KEYS[1]) == ARGV[1] then "
-    "return redis.call('DEL', KEYS[1]) else return 0 end"
-)
-
-
-class LineParseError(ValueError):
-    """A log line does not match the configured format."""
-
-
-class QueuedLine(NamedTuple):
-    """One complete line read from the file, waiting to be appended."""
-
-    text: str
-    start: int  # byte offset of the line start in the file
-    size: int  # bytes consumed, including the newline when there was one
-    error: str | None = None  # set for lines that go straight to the DLQ
-
-
-def parse_line(line: str, source: SourceConfig, pattern: re.Pattern[str] | None) -> dict[str, Any]:
-    """Parse one line into a payload (named groups or JSON object) plus `raw_line`.
-
-    Values stay strings for regex: rules coerce types, so ingest must not guess.
-    """
-    if source.settings.get("line_format", "json") == "json":
-        try:
-            parsed = orjson.loads(line)
-        except orjson.JSONDecodeError as error:
-            raise LineParseError(f"line is not valid JSON: {error}") from None
-        if not isinstance(parsed, dict):
-            raise LineParseError("JSON line is not an object")
-        return {**parsed, "raw_line": line}
-    if pattern is None:
-        raise LineParseError("line_pattern is missing or invalid")
-    match = pattern.match(line)
-    if match is None:
-        raise LineParseError("line does not match line_pattern")
-    groups = {key: value for key, value in match.groupdict().items() if value is not None}
-    return {**groups, "raw_line": line}
-
-
-def open_file(path: str) -> tuple[BinaryIO, int, int] | None:
-    """Blocking: open `path`; returns (handle, inode, size) or None when it does not exist."""
-    try:
-        handle = open(path, "rb")  # noqa: SIM115  (kept open across polls)
-    except OSError:
-        return None
-    stat = os.fstat(handle.fileno())
-    return handle, stat.st_ino, stat.st_size
-
-
-def poll_file(handle: BinaryIO, path: str) -> tuple[int, int, int | None]:
-    """Blocking: (size of the open file, our read position, inode now at `path` or None)."""
-    try:
-        path_inode: int | None = os.stat(path).st_ino
-    except OSError:
-        path_inode = None
-    return os.fstat(handle.fileno()).st_size, handle.tell(), path_inode
 
 
 class LogTailRunner:
@@ -114,30 +60,17 @@ class LogTailRunner:
         self._token = uuid.uuid4().hex
         self._lock_key = f"log-tail-lock:{source.id}"
         self._offset_key = f"log-tail-offset:{source.id}"
-        self._pattern = self._compile_pattern()
+        self._pattern = compile_pattern(source)
         self._queue: list[QueuedLine] = []
-        self._partial = b""  # bytes of the current unterminated line
-        self._skip_prefix: str | None = None  # set while discarding an over-long line
-        self._skip_size = 0
-        self._line_start = 0  # file offset where the current line began
+        self._splitter = LineSplitter()
         self._offset = 0  # committed: everything before it has been appended
-        self._inode = 0
+        self._identity: FileIdentity = (0, 0)
+        # Bumped on every truncation or new file so keys never repeat for the same offsets.
+        self._generation = 0
+        self._head = b""  # first bytes of the file, to notice truncate-and-regrow
         self._last_renew = 0.0
         self._was_missing = False  # file was absent when first looked for: start_at=end is moot
         self._warned_missing = False
-
-    def _compile_pattern(self) -> re.Pattern[str] | None:
-        raw = self.source.settings.get("line_pattern")
-        if not raw:
-            return None
-        try:
-            return re.compile(raw)
-        except re.error as error:
-            log.error(
-                "log_tail_pattern_invalid",
-                extra={"source_id": self.source.id, "error": str(error)},
-            )
-            return None
 
     async def run(self) -> None:
         """Acquire the lock, tail while holding it, hand over on loss; runs until cancelled."""
@@ -184,7 +117,7 @@ class LogTailRunner:
 
     async def _tail_while_locked(self) -> None:
         """Follow the file across rotations until the lock is lost."""
-        self._reset_buffers()
+        self._splitter.reset()
         self._queue = []
         handle: BinaryIO | None = None
         try:
@@ -208,11 +141,6 @@ class LogTailRunner:
             if handle is not None:
                 handle.close()
 
-    def _reset_buffers(self) -> None:
-        self._partial = b""
-        self._skip_prefix = None
-        self._skip_size = 0
-
     async def _step(self, handle: BinaryIO | None) -> tuple[BinaryIO | None, bool]:
         """One poll; returns (handle, True when a full read suggests more data is waiting)."""
         if self._queue:
@@ -222,32 +150,36 @@ class LogTailRunner:
             handle = await self._open()
             if handle is None:
                 return None, False
-        size, position, path_inode = await asyncio.to_thread(poll_file, handle, self._path)
-        if size < position:
+        size, position, path_identity, head = await asyncio.to_thread(poll_file, handle, self._path)
+        # A changed head with size >= position is a truncate-and-regrow between two polls.
+        if size < position or head[: len(self._head)] != self._head:
             log.info("log_tail_truncated", extra={"source_id": self.source.id})
             await asyncio.to_thread(handle.seek, 0)
-            self._reset_buffers()
-            self._line_start = self._offset = 0
+            self._generation += 1
+            self._head = head
+            self._splitter.reset(0)
+            self._offset = 0
             await self._store_offset()
             return handle, True
+        if len(head) > len(self._head):
+            self._head = head  # A short file grew: keep comparing against the longer head.
         chunk = await asyncio.to_thread(handle.read, READ_BYTES)
         if chunk:
-            self._split_lines(chunk)
+            self._queue.extend(self._splitter.split(chunk))
             await self._flush()
             return handle, len(chunk) == READ_BYTES
-        if path_inode == self._inode:
+        if path_identity == self._identity:
             return handle, False
         # The path now points at another file (or none): the old one is fully drained.
         log.info("log_tail_rotated", extra={"source_id": self.source.id})
-        if self._partial:
-            # A writer that never ends its last line must not lose it.
-            self._queue.append(
-                QueuedLine(self._decode(self._partial), self._line_start, len(self._partial))
-            )
+        last_line = self._splitter.take_partial()  # A writer that never ends its last line.
+        if last_line is not None:
+            self._queue.append(last_line)
         await self._flush()
         handle.close()
-        self._reset_buffers()
-        self._line_start = self._offset = 0
+        self._generation += 1
+        self._splitter.reset(0)
+        self._offset = 0
         # Reset under the old inode so a restart cannot resume at a stale offset.
         await self._store_offset()
         return None, False
@@ -264,59 +196,27 @@ class LogTailRunner:
                 )
                 self._warned_missing = True
             return None
-        handle, inode, size = opened
+        handle, identity, size, head = opened
         self._warned_missing = False
         stored = await self._load_offset()
-        if stored is not None and stored[0] == inode and stored[1] <= size:
-            start = stored[1]
-        elif stored is not None:
-            start = 0  # Rotated or truncated while we were not running: read the new file fully.
-        elif self.source.settings.get("start_at", "end") == "end" and not self._was_missing:
-            start = size
+        if stored is None:
+            self._generation = 0
+            is_end = self.source.settings.get("start_at", "end") == "end"
+            # A file created after we started waiting is all new.
+            start = size if is_end and not self._was_missing else 0
+        elif stored[0] == identity[0] and stored[2] <= size:
+            self._generation, start = stored[1], stored[2]
         else:
-            start = 0  # A file created after we started waiting is all new.
+            # Rotated or truncated while we were not running: new generation, read it fully.
+            self._generation, start = stored[1] + 1, 0
         await asyncio.to_thread(handle.seek, start)
-        self._inode = inode
-        self._line_start = self._offset = start
-        self._reset_buffers()
+        self._identity = identity
+        self._head = head
+        self._splitter.reset(start)
+        self._offset = start
         # Persist now so a lock handover resumes here instead of re-applying start_at.
         await self._store_offset()
         return handle
-
-    @staticmethod
-    def _decode(raw: bytes) -> str:
-        return raw.decode("utf-8", errors="replace").rstrip("\r")
-
-    def _enqueue(self, text: str, size: int, error: str | None = None) -> None:
-        self._queue.append(QueuedLine(text, self._line_start, size, error))
-        self._line_start += size
-
-    def _split_lines(self, chunk: bytes) -> None:
-        """Split into complete lines; the unterminated tail waits for its newline."""
-        pos = 0
-        while pos < len(chunk):
-            newline = chunk.find(b"\n", pos)
-            end = len(chunk) if newline < 0 else newline
-            if self._skip_prefix is not None:
-                self._skip_size += end - pos + (newline >= 0)
-                if newline >= 0:
-                    self._enqueue(self._skip_prefix, self._skip_size, "line_too_long")
-                    self._skip_prefix = None
-                pos = end + 1
-                continue
-            self._partial += chunk[pos:end]
-            pos = end + 1
-            if len(self._partial) > MAX_LINE_BYTES:
-                # Over-long line: keep only a prefix for the DLQ and skip to the next newline.
-                self._skip_prefix = self._decode(self._partial[:MAX_LINE_BYTES])
-                self._skip_size = len(self._partial) + (newline >= 0)
-                self._partial = b""
-                if newline >= 0:
-                    self._enqueue(self._skip_prefix, self._skip_size, "line_too_long")
-                    self._skip_prefix = None
-            elif newline >= 0:
-                self._enqueue(self._decode(self._partial), len(self._partial) + 1)
-                self._partial = b""
 
     async def _flush(self) -> None:
         """Append queued lines in batches, then persist the offset after each success."""
@@ -333,7 +233,9 @@ class LogTailRunner:
                     except LineParseError as error:
                         await self._send_to_dlq(item.text, str(error), now)
                     else:
-                        key = f"{self.source.id}:{self._inode}:{item.start}"
+                        key = (
+                            f"{self.source.id}:{self._identity[0]}:{self._generation}:{item.start}"
+                        )
                         envelopes.append(self._envelope(payload, now, key))
             if envelopes:
                 await self._append(envelopes)
@@ -366,17 +268,22 @@ class LogTailRunner:
             approximate=True,
         )
 
-    async def _load_offset(self) -> tuple[int, int] | None:
-        """Stored (inode, offset); a corrupt value counts as none."""
+    async def _load_offset(self) -> tuple[int, int, int] | None:
+        """Stored (inode, generation, offset); the old `inode:offset` form is generation 0."""
         raw = await self._redis.get(self._offset_key)
         if raw is None:
             return None
         try:
-            inode, _, offset = raw.decode().partition(":")
-            return int(inode), int(offset)
+            parts = [int(part) for part in raw.decode().split(":")]
+            if len(parts) == 2:
+                return parts[0], 0, parts[1]
+            if len(parts) == 3:
+                return parts[0], parts[1], parts[2]
         except ValueError:
-            log.warning("log_tail_offset_corrupt", extra={"source_id": self.source.id})
-            return None
+            pass
+        log.warning("log_tail_offset_corrupt", extra={"source_id": self.source.id})
+        return None
 
     async def _store_offset(self) -> None:
-        await self._redis.set(self._offset_key, f"{self._inode}:{self._offset}")
+        value = f"{self._identity[0]}:{self._generation}:{self._offset}"
+        await self._redis.set(self._offset_key, value)

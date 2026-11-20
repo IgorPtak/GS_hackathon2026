@@ -13,7 +13,7 @@ import redis.asyncio as aioredis
 from alerting_contracts.config import SourceConfig
 from alerting_contracts.events import EventEnvelope
 
-from plugins.sources import log_tail
+from plugins.sources import _log_files, log_tail
 from plugins.sources.log_tail import LogTailRunner
 
 FIXTURES = Path(__file__).resolve().parents[3] / "contracts" / "fixtures" / "events"
@@ -85,7 +85,7 @@ async def test_fixture_lines_match_expected_payload(client: aioredis.Redis, tmp_
     expected = json.loads((FIXTURES / "pricing_price_stale.json").read_text())
     assert tail.envelopes[0].payload == expected
     assert tail.envelopes[0].source_type == "log_tail"
-    assert tail.envelopes[0].idempotency_key == f"pricing-log:{path.stat().st_ino}:0"
+    assert tail.envelopes[0].idempotency_key == f"pricing-log:{path.stat().st_ino}:0:0"
 
 
 async def test_partial_line_waits_for_newline(client: aioredis.Redis, tmp_path: Path) -> None:
@@ -219,7 +219,7 @@ async def test_start_at_end_skips_existing_content_and_stores_offset(
     await asyncio.sleep(0.15)
     stored = (await client.get("log-tail-offset:pricing-log")).decode()
     await tail.stop()
-    assert stored == f"{path.stat().st_ino}:{path.stat().st_size}"
+    assert stored == f"{path.stat().st_ino}:0:{path.stat().st_size}"
     assert tail.envelopes == []
 
 
@@ -260,7 +260,7 @@ async def test_corrupt_offset_is_treated_as_missing(client: aioredis.Redis, tmp_
 async def test_over_long_line_goes_to_dlq_and_is_skipped(
     client: aioredis.Redis, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(log_tail, "MAX_LINE_BYTES", 50)
+    monkeypatch.setattr(_log_files, "MAX_LINE_BYTES", 50)
     monkeypatch.setattr(log_tail, "READ_BYTES", 16)
     path = tmp_path / "app.log"
     path.write_text("x" * 200 + '\n{"n": 2}\n')
@@ -323,4 +323,60 @@ async def test_envelopes_carry_deterministic_idempotency_keys(
     await tail.stop()
     inode = path.stat().st_ino
     keys = [e.idempotency_key for e in tail.envelopes]
-    assert keys == [f"pricing-log:{inode}:0", f"pricing-log:{inode}:{len(first_line)}"]
+    assert keys == [f"pricing-log:{inode}:0:0", f"pricing-log:{inode}:0:{len(first_line)}"]
+
+
+async def test_copytruncate_and_regrow_bumps_generation_and_keeps_keys_unique(
+    client: aioredis.Redis, tmp_path: Path
+) -> None:
+    path = tmp_path / "app.log"
+    path.write_text("")
+    tail = Tail(make_source(path, line_format="json"), client)
+    tail.start()
+    await asyncio.sleep(0.1)
+    with path.open("a") as handle:
+        handle.write('{"n": 1}\n' * 3)
+    await tail.wait_for(3)
+    # Truncate and regrow past the old position in one write: size never looks smaller.
+    path.write_text('{"n": 7}\n' * 5)
+    await tail.wait_for(8)
+    await tail.stop()
+    keys = [e.idempotency_key for e in tail.envelopes]
+    assert len(set(keys)) == 8
+    assert [e.payload["n"] for e in tail.envelopes[3:]] == [7] * 5
+    assert keys[0].split(":")[2] != keys[3].split(":")[2]
+
+
+async def test_old_offset_format_is_accepted_and_new_format_stored(
+    client: aioredis.Redis, tmp_path: Path
+) -> None:
+    path = tmp_path / "app.log"
+    path.write_text('{"n": 1}\n')
+    await client.set("log-tail-offset:pricing-log", f"{path.stat().st_ino}:0")  # old 2-part form
+    tail = Tail(make_source(path, line_format="json"), client)
+    tail.start()
+    await tail.wait_for(1)
+    await tail.stop()
+    assert tail.envelopes[0].idempotency_key == f"pricing-log:{path.stat().st_ino}:0:0"
+    stored = (await client.get("log-tail-offset:pricing-log")).decode()
+    assert stored == f"{path.stat().st_ino}:0:{path.stat().st_size}"
+
+
+async def test_new_file_after_rotation_gets_a_new_generation(
+    client: aioredis.Redis, tmp_path: Path
+) -> None:
+    path = tmp_path / "app.log"
+    path.write_text("")
+    tail = Tail(make_source(path, line_format="json"), client)
+    tail.start()
+    await asyncio.sleep(0.1)
+    with path.open("a") as handle:
+        handle.write('{"n": 1}\n')
+    await tail.wait_for(1)
+    os.rename(path, tmp_path / "app.log.1")
+    path.write_text('{"n": 2}\n')
+    await tail.wait_for(2)
+    await tail.stop()
+    first, second = (e.idempotency_key.split(":") for e in tail.envelopes)
+    assert first[2] != second[2]
+    assert first[3] == second[3] == "0"
