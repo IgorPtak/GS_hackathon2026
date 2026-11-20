@@ -35,6 +35,8 @@ to `deliveries`.
 | `delivery-retries` | sorted set (job JSON, score = due ms) | — | Delayed retries | A |
 | `circuit:<channel_id>` | hash `{state, opened_at, failures}` | — | Circuit breaker per channel | A |
 | `silence-deadlines` | sorted set, member alert id, score = deadline ms | — | Auto-resolve after silence | A |
+| `log-tail-lock:<source_id>` | string (owner token) `SET NX PX` | 10 s, renewed every 3 s | Exactly one ingest process tails a log file; a crashed owner hands over after the TTL | A |
+| `log-tail-offset:<source_id>` | string `<inode>:<byte offset>` | — | Resume point after the last appended batch; tail-line idempotency key is `<source_id>:<inode>:<line offset>` | A |
 | `llm-cache:<sha256 of model + prompt>` | string JSON | 7 d | LLM result cache | B |
 
 ## Redis pub/sub channels
