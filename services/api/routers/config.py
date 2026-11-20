@@ -10,5 +10,5 @@ router = APIRouter(tags=["config"])
 
 @router.get("/api/v1/config")
 async def get_config_lists(source: ConfigSourceDep) -> ConfigLists:
-    """Read-only config used by UI dropdowns."""
+    """Read-only config used by UI dropdowns (registry-backed; directory fallback without DB)."""
     return source.get_config_lists()
