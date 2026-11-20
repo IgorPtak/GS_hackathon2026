@@ -1,0 +1,12 @@
+route:
+  receiver: alerting-service
+  group_by: ["alertname", "instance"]
+  group_wait: 5s
+  group_interval: 10s
+  repeat_interval: 1h
+
+receivers:
+  - name: alerting-service
+    webhook_configs:
+      - url: http://ingest:8001/api/v1/ingest/alertmanager
+        send_resolved: true
