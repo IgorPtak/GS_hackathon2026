@@ -29,9 +29,12 @@ def decode_cursor(cursor: str) -> tuple[datetime, str]:
     """Inverse of `encode_cursor`; raises InvalidCursorError on garbage."""
     try:
         last_seen_text, alert_id = orjson.loads(base64.urlsafe_b64decode(cursor.encode()))
-        return datetime.fromisoformat(last_seen_text), str(alert_id)
+        last_seen = datetime.fromisoformat(last_seen_text)
     except (ValueError, TypeError, binascii.Error) as error:
         raise InvalidCursorError("invalid cursor") from error
+    if last_seen.tzinfo is None:  # timestamptz comparison needs an aware value
+        raise InvalidCursorError("invalid cursor")
+    return last_seen, str(alert_id)
 
 
 async def list_alerts(

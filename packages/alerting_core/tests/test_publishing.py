@@ -101,3 +101,12 @@ async def test_publish_never_raises_when_redis_is_unreachable() -> None:
     await publish_team_event(dead, "rates", event)
     await publish_broadcast(dead, event)
     await dead.aclose()
+
+
+async def test_publish_swallows_os_errors() -> None:
+    class BrokenRedis:
+        async def publish(self, channel: str, data: bytes) -> int:
+            raise ConnectionResetError("boom")
+
+    event = ConfigChangedEvent(at=datetime.now(UTC), kind="rule", id="r", version=1)
+    await publish_team_event(BrokenRedis(), "rates", event)  # type: ignore[arg-type]
