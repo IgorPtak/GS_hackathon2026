@@ -13,6 +13,7 @@ from alerting_core.connections import create_database_pool
 from alerting_core.settings import Settings
 from redis.asyncio import Redis
 
+from services.outbox_relay.reconcile import republish_stale_deliveries
 from services.outbox_relay.relay import (
     DELIVERIES_STREAM,
     RUNBOOK_JOBS_STREAM,
@@ -226,3 +227,30 @@ async def test_run_relay_picks_up_new_rows_until_stopped(pool: asyncpg.Pool, red
 
     assert await unrelayed_count(pool) == 0
     assert len(await stream_jobs(redis, DELIVERIES_STREAM)) == 1
+
+
+async def test_lost_relayed_job_is_republished_once(pool: asyncpg.Pool, redis: Redis) -> None:
+    outbox_id = await insert_outbox(pool, "delivery", delivery_payload(str(uuid.uuid4())))
+    await relay_batch(pool, redis)
+    await redis.delete("deliveries")  # Redis lost the entry; Postgres still says pending
+    await pool.execute("UPDATE outbox SET relayed_at = now() - interval '1 minute'")
+
+    assert await republish_stale_deliveries(pool, redis) == 1
+    assert await republish_stale_deliveries(pool, redis) == 0  # guard: one copy per window
+
+    [job] = await stream_jobs(redis, "deliveries")
+    assert job["delivery_id"] == outbox_id
+
+
+async def test_recent_or_finished_deliveries_are_left_alone(
+    pool: asyncpg.Pool, redis: Redis
+) -> None:
+    await insert_outbox(pool, "delivery", delivery_payload(str(uuid.uuid4())))
+    finished = await insert_outbox(pool, "delivery", delivery_payload(str(uuid.uuid4())))
+    await relay_batch(pool, redis)
+    await redis.delete("deliveries")
+    await pool.execute("UPDATE deliveries SET status = 'delivered' WHERE id = $1", finished)
+
+    assert await republish_stale_deliveries(pool, redis) == 0  # first one is only seconds old
+    await pool.execute("UPDATE outbox SET relayed_at = now() - interval '1 minute'")
+    assert await republish_stale_deliveries(pool, redis) == 1  # the delivered one stays done

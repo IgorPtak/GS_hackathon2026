@@ -172,4 +172,4 @@ Max sustainable rate (p99 < 2 s, lag drained): **≥ 350 msg/s, below ~460 msg/s
 - Alerts survived even without AOF: the processor had already written them to Postgres; replayed stream entries were absorbed by dedup and `ON CONFLICT`.
 - The loss was relayed-but-undelivered jobs: the outbox row said relayed, the `deliveries` entry vanished with the snapshot rollback.
 - Events not accepted during the outage (~700–900) got an error, not a 202, so the source knows to retry.
-- `everysec` can still lose up to ~1 s on a crash; a relay reconciler for long-`pending` deliveries closes that gap.
+- `everysec` can still lose up to ~1 s on a crash. The relay reconciler (`services/outbox_relay/reconcile.py`) closes that gap from Postgres: every 10 s it re-publishes deliveries still `pending` 30 s after relaying. Started after the RDB-only run above, it found exactly the 378 lost jobs and all 22 236 deliveries of that run ended `delivered`.
