@@ -806,6 +806,12 @@ export interface components {
             resolved_at: string | null;
             /** @default null */
             resolution_reason: components["schemas"]["ResolutionReason"] | null;
+            /**
+             * Updated At
+             * Format: date-time
+             * @description Any change, incl. count flushes; monotonic per alert.
+             */
+            updated_at: string;
         };
         /** AlertAcknowledgeRequest */
         AlertAcknowledgeRequest: {
@@ -968,6 +974,25 @@ export interface components {
              */
             team: string;
             /**
+             * Runbook Id
+             * @example rates-large-rejections
+             */
+            runbook_id: string;
+            /** Step Index */
+            step_index: number;
+            /**
+             * Action Id
+             * @example rates-large-rejections
+             */
+            action_id: string;
+            /**
+             * Params
+             * @description Rendered params that will run.
+             */
+            params?: {
+                [key: string]: string;
+            };
+            /**
              * Summary
              * @description Rendered step text shown to the approver.
              */
@@ -1018,6 +1043,23 @@ export interface components {
          * @enum {string}
          */
         ApprovalVia: "ui" | "sms" | "phone";
+        /**
+         * AuditAppendedEvent
+         * @description Published by every writer of audit_entries so the alert's audit trail updates live.
+         */
+        AuditAppendedEvent: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "audit.appended";
+            entry: components["schemas"]["AuditEntry"];
+        };
         /**
          * AuditEntry
          * @description Table audit_entries. Append-only.
@@ -1402,8 +1444,22 @@ export interface components {
              * @example rates-large-rejections
              */
             channel_id: string;
+            /** @description Selects the channel plugin; no config lookup needed. */
+            channel_type: components["schemas"]["ChannelType"];
             purpose: components["schemas"]["DeliveryPurpose"];
             content: components["schemas"]["NotificationContent"];
+            /**
+             * Attempt
+             * @description Failed attempts so far; travels with retries.
+             * @default 0
+             */
+            attempt: number;
+            /**
+             * Not Before
+             * @description Earliest time of the next attempt.
+             * @default null
+             */
+            not_before: string | null;
             /**
              * Approval Request Id
              * @default null
@@ -1475,9 +1531,10 @@ export interface components {
             event_id: string;
             /**
              * Idempotency Key
-             * @description Idempotency-Key header, else sha256 of source_id + canonical payload JSON.
+             * @description Idempotency-Key header, else the value at the source's idempotency_key_path, else None. Never a payload hash: identical events must reach dedup to be counted.
+             * @default null
              */
-            idempotency_key: string;
+            idempotency_key: string | null;
             /**
              * Source Id
              * @example rates-large-rejections
@@ -1893,7 +1950,10 @@ export interface components {
              */
             at: string;
         };
-        /** PhoneMessageEvent */
+        /**
+         * PhoneMessageEvent
+         * @description Published on `broadcast`: the phone simulator shows every recipient's phone, whatever team is picked.
+         */
         PhoneMessageEvent: {
             /**
              * At
@@ -1979,6 +2039,17 @@ export interface components {
              * @default null
              */
             group_key: string | null;
+            /**
+             * Is Group Summary
+             * @default false
+             */
+            is_group_summary: boolean;
+            /**
+             * Member Count
+             * @description Distinct fingerprints in a group summary.
+             * @default 0
+             */
+            member_count: number;
             /** Count */
             count: number;
             /**
@@ -2065,6 +2136,13 @@ export interface components {
              * @default false
              */
             is_automatic: boolean;
+            /** @default always */
+            run_if: components["schemas"]["RunIf"];
+            /**
+             * Max Attempts
+             * @default 1
+             */
+            max_attempts: number;
             /**
              * Missing Fields
              * @description Placeholders that had no value.
@@ -2278,6 +2356,12 @@ export interface components {
              */
             normalized_by: "parser" | "llm" | "fallback";
             /**
+             * Llm Model
+             * @description Model that normalized it, when normalized_by = llm.
+             * @default null
+             */
+            llm_model: string | null;
+            /**
              * Version
              * @default 1
              */
@@ -2315,6 +2399,15 @@ export interface components {
              * @default null
              */
             action_run_id: string | null;
+        };
+        /**
+         * RunbookNormalizeRequest
+         * @description Body of POST /runbooks/normalize: preview before the runbook has an id or is saved.
+         */
+        RunbookNormalizeRequest: {
+            format: components["schemas"]["RunbookFormat"];
+            /** Source */
+            source: string;
         };
         /**
          * RunbookRevisionProposal
@@ -2403,6 +2496,11 @@ export interface components {
              * @enum {string}
              */
             normalized_by: "parser" | "llm" | "fallback";
+            /**
+             * Llm Model
+             * @default null
+             */
+            llm_model: string | null;
             /** Version */
             version: number;
         };
@@ -2623,7 +2721,7 @@ export interface components {
          * @enum {string}
          */
         SourceType: "webhook" | "alertmanager" | "log_tail";
-        SseEvent: components["schemas"]["AlertCreatedEvent"] | components["schemas"]["AlertUpdatedEvent"] | components["schemas"]["NotificationEvent"] | components["schemas"]["DeliveryUpdatedEvent"] | components["schemas"]["PhoneMessageEvent"] | components["schemas"]["ActionRunUpdatedEvent"] | components["schemas"]["ApprovalRequestedEvent"] | components["schemas"]["ApprovalDecidedEvent"] | components["schemas"]["FixProposalEvent"] | components["schemas"]["UnknownSchemaDetectedEvent"] | components["schemas"]["ConfigChangedEvent"];
+        SseEvent: components["schemas"]["AlertCreatedEvent"] | components["schemas"]["AlertUpdatedEvent"] | components["schemas"]["NotificationEvent"] | components["schemas"]["DeliveryUpdatedEvent"] | components["schemas"]["PhoneMessageEvent"] | components["schemas"]["ActionRunUpdatedEvent"] | components["schemas"]["ApprovalRequestedEvent"] | components["schemas"]["ApprovalDecidedEvent"] | components["schemas"]["FixProposalEvent"] | components["schemas"]["UnknownSchemaDetectedEvent"] | components["schemas"]["AuditAppendedEvent"] | components["schemas"]["ConfigChangedEvent"];
         /**
          * StepKind
          * @enum {string}
@@ -3379,7 +3477,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RunbookWrite"];
+                "application/json": components["schemas"]["RunbookNormalizeRequest"];
             };
         };
         responses: {
