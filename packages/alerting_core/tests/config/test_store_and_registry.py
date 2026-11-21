@@ -249,3 +249,24 @@ async def test_start_failure_leaves_no_tasks(pool: asyncpg.Pool) -> None:
         await registry.start(pool, unreachable)
     assert registry._tasks == []
     await unreachable.aclose()
+
+
+async def test_sync_loads_files_off_the_event_loop_with_llm_opt_in(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import threading
+
+    from alerting_core.config import store as config_store
+    from alerting_core.config.loader import LoadResult
+
+    seen: dict[str, object] = {}
+
+    def fake_load(path: Path | str) -> LoadResult:
+        seen["thread"] = threading.current_thread()
+        seen["llm"] = config_store.NORMALIZE_TEXT_WITH_LLM.get()
+        return LoadResult()
+
+    monkeypatch.setattr(config_store, "load_config_directory", fake_load)
+    await sync_config_files(None, None, tmp_path)  # type: ignore[arg-type]
+    assert seen["thread"] is not threading.main_thread() and seen["llm"] is True
+    assert config_store.NORMALIZE_TEXT_WITH_LLM.get() is False  # caller context untouched

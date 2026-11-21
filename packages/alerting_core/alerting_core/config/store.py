@@ -7,6 +7,8 @@ write happen in one SQL statement, so concurrent workers cannot race. Note that 
 (for example `git checkout`) gives them a fresh mtime, so they then win over UI edits.
 """
 
+import asyncio
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -128,6 +130,16 @@ async def save_config_document(
     return version
 
 
+# Why a ContextVar: file loaders are registered as `loader_fn(path)`, so the opt-in for LLM
+# normalization of free-text runbooks travels with the context (copied into to_thread workers).
+NORMALIZE_TEXT_WITH_LLM: ContextVar[bool] = ContextVar("normalize_text_with_llm", default=False)
+
+
+def _load_with_llm(config_dir: Path | str) -> LoadResult:
+    NORMALIZE_TEXT_WITH_LLM.set(True)  # only affects this worker thread's context copy
+    return load_config_directory(config_dir)
+
+
 def _modified_at(file: Path) -> datetime:
     return datetime.fromtimestamp(file.stat().st_mtime, UTC)
 
@@ -140,7 +152,8 @@ async def sync_config_files(
 ) -> LoadResult:
     """Upsert files that win over the DB (see module docstring); invalid files are logged."""
     actor = actor or Actor(id="system:config-loader")
-    result = load_config_directory(config_dir)
+    # Off the event loop: free-text runbook files may wait on the LLM (only config sync allows it).
+    result = await asyncio.to_thread(_load_with_llm, config_dir)
     for error in result.errors:
         log.error(
             "config_file_invalid",

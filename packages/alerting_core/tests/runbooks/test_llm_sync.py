@@ -96,7 +96,9 @@ def test_slow_llm_does_not_fail_loading_other_documents(config_dir, monkeypatch)
     monkeypatch.setattr(store, "LLM_SYNC_TIMEOUT_SECONDS", 0.05)
     slow = FakeLlm(steps_json(RESTART), delay=1)
     monkeypatch.setattr(store, "create_sync_llm_client", lambda cache: slow)
-    text = load_runbook_file(config_dir / "runbooks" / "pricing-stale-feed.txt")
+    text = load_runbook_file(
+        config_dir / "runbooks" / "pricing-stale-feed.txt", normalize_text_with_llm=True
+    )
     other = load_runbook_file(config_dir / "runbooks" / "workflow-failed.yaml")
     assert text.normalized_by == "fallback" and other.normalized_by == "parser"
 
@@ -113,3 +115,12 @@ def test_cache_hit_makes_no_second_call(actions):
     second = run(actions, client)
     assert route.call_count == 1
     assert first.steps == second.steps and second.normalized_by == "llm"
+
+
+def test_text_file_makes_no_llm_call_by_default(config_dir, monkeypatch):
+    def boom(cache):
+        raise AssertionError("LLM client must not be created")
+
+    monkeypatch.setattr(store, "create_sync_llm_client", boom)
+    runbook = load_runbook_file(config_dir / "runbooks" / "pricing-stale-feed.txt")
+    assert runbook.normalized_by == "fallback"
