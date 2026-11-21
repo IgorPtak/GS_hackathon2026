@@ -1,7 +1,16 @@
 # Load-test results
 
+## Summary
+
+Current max sustainable rate is **≥ 350 msg/s** (p99 < 2 s, lag drained, zero lost; A-24 re-measurement at
+350 msg/s: p99 163 ms). Saturation with the host generator plateaus at **~420 msg/s** regardless of processor count
+(1, 2 or 4 processors all stop at 400–428 msg/s). The in-network generator later reached **500 msg/s** with
+p99 1.9 s and zero lost (see the 500 msg/s row and "Host vs in-network generator"), so the ~420 plateau is the
+host-to-VM path, not the pipeline. Every number here has its raw JSON or CSV committed under `loadtest/results/`.
+
 First measurement (task A-21), 2026-11-20. Scenarios: `loadtest/scenarios.py` (see `loadtest/README.md`).
 Raw data: `loadtest/results/*.json` (one file per run, every step with counters, latency, lag samples).
+Raw cpu-bench output is not committed.
 
 ## Measurement design
 
@@ -46,6 +55,7 @@ processor 1, outbox-relay 1, delivery 1, mock-gateway 1.
 | Scenario | Target msg/s | Processor / delivery | Sent | Delivered | Lost | p50 | p95 | p99 | max | Achieved ingest msg/s | File |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | steady 60 s | 200 | 1 / 1 | 12000 | 24000 / 24000 | **0** | 373 ms | 530 ms | 572 ms | 687 ms | 200.0 | `steady-20261120T205720.json` |
+| steady 30 s, in-network generator | 500 | not recorded in JSON | 15000 | 30000 / 30000 | **0** | 81.8 ms | 1677.9 ms | 1917.9 ms | 2038.7 ms | 500.0 | `steady-20261121T020925.json` |
 | dup-storm | 1000 (5000 events) | 1 / 1 | 5000 | 2 / 2 (1 alert, count 5000) | **0** | n/a | n/a | n/a | n/a | 688 | `dup-storm-20261120T205829.json` |
 | gateway-down (mock-gateway stopped at t=10 s for 60 s) | 100 | 1 / 1 | 9000 | 18000 / 18000 | **0** | 1327 ms | 63.2 s | 69.4 s | 83.0 s | 100.0 | `gateway-down-20261120T205840.json` |
 | kill-processor (`docker kill` at t=20 s) | 200 | 2 / 1 | 12000 | 24000 / 24000 | **0** | 405 ms | 673 ms | 1131 ms | 1468 ms | 200.0 | `kill-processor-20261120T210017.json` |
@@ -202,7 +212,7 @@ mock-gateway 34 %, redis 32 %, outbox-relay 10 %.
 
 To verify these ~8–9 % savings without the ~30 % overload variance seen at 500–1000 msg/s (where Apple M4's 4 P-cores spill onto 6 E-cores and queues build), `loadtest/cpu_bench.py` reads cgroup `/sys/fs/cgroup/cpu.stat` (`usage_usec`) across 3 in-network `steady` runs at 250 msg/s × 30 s (~1.9 cores total, `max_deliveries_lag` 32–54 on the branch, total spread 5.4 %; `delivery` 5.5 %, `ingest` 7.1 %).
 
-Same stack (`processor=1`, `delivery=2`, `ingest` 2 workers, AOF on, identical generator image), `main` (`40be0d1`, `cpu-bench-20261121T002255.json`) vs `perf/in-network-loadgen` (`cpu-bench-20261121T001239.json`):
+Same stack (`processor=1`, `delivery=2`, `ingest` 2 workers, AOF on, identical generator image), `main` (`40be0d1`) vs `perf/in-network-loadgen` (raw cpu-bench output is not committed):
 
 | Service (replicas) | Changed? | `main` median (`µs/evt`) | Branch median (`µs/evt`) | Raw delta | Normalized vs `mock-gateway` |
 |---|---|---|---|---|---|

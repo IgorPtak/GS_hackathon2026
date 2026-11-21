@@ -83,3 +83,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-33 ingest cleanups: idempotency key paths use `alerting_core.rules.field_paths` (temporary `lookup_path` removed), envelopes serialize in one `model_dump_json()` pass
 - A-34 swarm port: per-stage latency (outbox wait, post-relay) + Grafana panel, Postgres-restart and backend-profiler load tools, pg_stat_statements, team events in one pipeline, delivery claim/complete in one Lua call (−11 % total CPU per event, lost 0)
 - S-04 contract v1.1: `severity_gte` and `time_between` condition operators, 404/409/422 on the manual step-run route, 422 on rule preview
+- A-35 loadtest: raw result files committed under loadtest/results (cpu-bench and profile logs excluded), results doc summary and 500 msg/s row added, compose header corrected
