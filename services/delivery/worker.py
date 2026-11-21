@@ -29,7 +29,12 @@ from plugins.channels.registry import get_channel_plugin
 
 from .circuit import CircuitBreaker
 from .dead_letters import dead_letter_job
-from .metrics import DELIVERY_ATTEMPTS, E2E_LATENCY_SECONDS, SEND_SECONDS
+from .metrics import (
+    DELIVERY_ATTEMPTS,
+    DELIVERY_POST_RELAY_SECONDS,
+    E2E_LATENCY_SECONDS,
+    SEND_SECONDS,
+)
 from .records import Outcome, RecordedOutcome, delivery_age_seconds, record_outcome
 from .retries import backoff_ms, schedule_retry
 
@@ -43,10 +48,21 @@ MAX_CONCURRENT_SENDS = 50
 # A channel outage (unreachable, 5xx, open circuit) does not use up max_attempts until the
 # delivery is this old; after that the job dead-letters so the fallback channel takes over.
 MAX_OUTAGE_SECONDS = 600.0
+# Ignore synthetic test entry IDs (e.g. "1-0"); real Redis stream IDs are >= 2001 epoch ms.
+_MIN_EPOCH_MS = 1_000_000_000_000
 
 
 def done_key(delivery_id: int) -> str:
     return f"delivery-done:{delivery_id}"
+
+
+def _stream_timestamp_seconds(entry_id: str) -> float | None:
+    """Epoch seconds encoded in a stream entry ID, or None for synthetic IDs."""
+    try:
+        ms = int(entry_id.split("-", 1)[0])
+    except ValueError:
+        return None
+    return ms / 1000.0 if ms >= _MIN_EPOCH_MS else None
 
 
 class InFlightError(Exception):
@@ -81,9 +97,10 @@ class DeliveryWorker:
         except (KeyError, ValidationError, ValueError) as error:
             await dead_letter_job(self._redis, message.fields.get(b"job", b""), str(error), 0)
             return None
+        relayed_at_s = _stream_timestamp_seconds(message.id)
         async with self._limit:
             try:
-                await self.attempt(job)
+                await self.attempt(job, relayed_at_s=relayed_at_s)
             except InFlightError:
                 return "in_flight"
             except Exception as error:
@@ -95,7 +112,7 @@ class DeliveryWorker:
                 return f"{type(error).__name__}: {error}"
         return None
 
-    async def attempt(self, job: DeliveryJob) -> None:
+    async def attempt(self, job: DeliveryJob, *, relayed_at_s: float | None = None) -> None:
         """Run one attempt of `job` and record what happened."""
         channel = self._registry.snapshot.of_kind("channel").get(job.channel_id)
         if channel is None or not channel.enabled:
@@ -134,7 +151,7 @@ class DeliveryWorker:
             return
         await self._redis.set(key, "done", ex=DONE_TTL_SECONDS)
         await self._circuit.record_success(channel.id)
-        await self._delivered(job)
+        await self._delivered(job, relayed_at_s=relayed_at_s)
 
     async def _is_within_outage_budget(self, job: DeliveryJob) -> bool:
         """An unreachable channel keeps retrying (at max_backoff) for MAX_OUTAGE_SECONDS, so a
@@ -174,7 +191,9 @@ class DeliveryWorker:
         finally:
             SEND_SECONDS.labels(channel.type.value).observe(time.perf_counter() - started)
 
-    async def _delivered(self, job: DeliveryJob, *, observe_latency: bool = True) -> None:
+    async def _delivered(
+        self, job: DeliveryJob, *, observe_latency: bool = True, relayed_at_s: float | None = None
+    ) -> None:
         now = datetime.now(UTC)
         outcome = Outcome(
             DeliveryStatus.delivered, AuditVerb.delivery_delivered, job.attempt + 1, None, now
@@ -184,9 +203,16 @@ class DeliveryWorker:
             return  # already recorded as delivered
         DELIVERY_ATTEMPTS.labels(job.channel_type.value, "delivered").inc()
         DELIVERIES.labels(job.channel_type.value, "delivered").inc()
-        if observe_latency and job.event_sent_at is not None and not job.is_fallback:
-            latency = (now - job.event_sent_at).total_seconds()
-            E2E_LATENCY_SECONDS.labels(job.channel_type.value).observe(max(latency, 0.0))
+        if observe_latency and not job.is_fallback:
+            if job.event_sent_at is not None:
+                latency = (now - job.event_sent_at).total_seconds()
+                E2E_LATENCY_SECONDS.labels(job.channel_type.value).observe(max(latency, 0.0))
+            # Retried jobs re-enter the stream, so only attempt 0 measures relay-to-delivered.
+            if relayed_at_s is not None and job.attempt == 0:
+                post_relay = now.timestamp() - relayed_at_s
+                DELIVERY_POST_RELAY_SECONDS.labels(job.channel_type.value).observe(
+                    max(post_relay, 0.0)
+                )
         await self._publish(job, recorded)
 
     async def _retry_or_give_up(

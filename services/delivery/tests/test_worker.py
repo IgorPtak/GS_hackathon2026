@@ -3,6 +3,7 @@
 import time
 
 from alerting_contracts.alerts import DeliveryJob
+from prometheus_client import REGISTRY
 
 from plugins.channels.base import ChannelRejectedError, ChannelUnavailableError
 from services.delivery.circuit import FAILURE_THRESHOLD, CircuitBreaker, circuit_key
@@ -229,3 +230,33 @@ async def test_outage_longer_than_the_budget_dead_letters_to_fallback(
 
     assert await status_of(pool, job.delivery_id) == "dead_lettered"
     assert await pool.fetchval("SELECT count(*) FROM outbox") == 1
+
+
+async def test_delivery_post_relay_seconds_observes_primary_and_ignores_synthetic(
+    pool, redis, plugin, worker
+) -> None:
+    def metric_count_sum() -> tuple[float, float]:
+        labels = {"channel_type": "email"}
+        count = REGISTRY.get_sample_value("delivery_post_relay_seconds_count", labels)
+        total = REGISTRY.get_sample_value("delivery_post_relay_seconds_sum", labels)
+        return float(count or 0.0), float(total or 0.0)
+
+    c0, s0 = metric_count_sum()
+    await worker.handle_batch([stream_message(email_job(delivery_id=1), entry_id="1-0")])
+    assert metric_count_sum() == (c0, s0)
+
+    real_id = f"{int((time.time() - 0.05) * 1000)}-0"
+    await worker.handle_batch([stream_message(email_job(delivery_id=2), entry_id=real_id)])
+    c1, s1 = metric_count_sum()
+    assert c1 == c0 + 1 and s1 > s0
+
+    await worker.handle_batch([stream_message(email_job(delivery_id=2), entry_id=real_id)])
+    assert metric_count_sum() == (c1, s1)  # duplicate done ignores latency
+
+    retried = email_job(delivery_id=3, attempt=1)
+    await worker.handle_batch([stream_message(retried, entry_id=real_id)])
+    assert metric_count_sum() == (c1, s1)  # retried jobs re-enter the stream and are excluded
+
+    fallback = email_job(delivery_id=4, is_fallback=True)
+    await worker.handle_batch([stream_message(fallback, entry_id=real_id)])
+    assert metric_count_sum() == (c1, s1)  # fallback deliveries are excluded

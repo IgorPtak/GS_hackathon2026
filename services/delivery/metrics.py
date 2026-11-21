@@ -18,3 +18,9 @@ E2E_LATENCY_SECONDS = Histogram(
     ["channel_type"],
     buckets=E2E_LATENCY_BUCKETS,
 )
+DELIVERY_POST_RELAY_SECONDS = Histogram(
+    "delivery_post_relay_seconds",
+    "From relay XADD (stream entry timestamp) to delivered; first attempts, non-fallback only.",
+    ["channel_type"],
+    buckets=E2E_LATENCY_BUCKETS,
+)
