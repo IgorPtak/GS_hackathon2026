@@ -212,7 +212,7 @@ The guides are in `~/.claude/design-refs/mwg-guides/` (ui-components, visual-des
 
 1. **First run.**
    - **Sign in.** Pick who you are; Beacon opens that person's team. There is no password.
-   - **Welcome.** Shown once per browser, and Settings can reopen it. Three pages: what Beacon is (Inbox, Rules, Approvals), how an alert reaches you (event → rule → one alert → the right person), and "Try it now", whose primary button sends a test alert and opens the Inbox.
+   - **Welcome.** Shown once per person after signing in. Sign-in is kept for the tab session only, so a fresh visit starts on the account picker. Settings can reopen it. Three pages: what Beacon is (Inbox, Rules, Approvals), how an alert reaches you (event → rule → one alert → the right person), and "Try it now", whose primary button sends a test alert and opens the Inbox.
    - **Setup checklist on Home.** Shows "Set up <team>": connect a system, write a rule, choose who is told, send a test alert. Every tick comes from live data (schema profiles, team rules, recipients with channel preferences, any team alert), so it cannot claim a step that does not work. The next step is highlighted and carries the primary button. A team that is fully set up gets one quiet line with "Show steps". Hiding is stored per team.
 2. **Inbox.** The pulse card, then the alert list and the detail pane.
    - **Row:** team avatar, title (17/600), a two-line preview of the body, a `×N` badge when count > 1, a severity dot, relative time, and a status chip when not open.
