@@ -38,6 +38,7 @@ uv run python scripts/reset_demo.py --seed   # clean slate plus a few demo alert
 uv run python scripts/smoke_test.py --gate 14h   # end-to-end check: ingest, dedup, email, SMS, runbooks, approvals
 docker compose up -d --scale processor=4 --scale delivery=4 --scale ingest=3 --scale api=2  # scale stateless services behind proxy
 docker compose --profile local-llm up -d --build  # also start a local Ollama for the AI features
+docker compose exec ollama ollama pull qwen2.5:7b-instruct  # once: Ollama starts empty, the model is ~4.7 GB
 ```
 
 For the scene-by-scene demo walkthrough, see [docs/demo.md](docs/demo.md).
