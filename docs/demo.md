@@ -1,5 +1,7 @@
 # 5-minute demo video: script, shot list and editing notes
 
+The finished video: https://youtu.be/n91bGamdULA
+
 The video is the main thing the judges score, across every category. Everything happens in the
 UI. The heart of it is Scene 2: a team sets up alerting from nothing (a new system, a runbook, a
 rule) and gets its first alert, with no code and no restart. Every click below is a label the UI
