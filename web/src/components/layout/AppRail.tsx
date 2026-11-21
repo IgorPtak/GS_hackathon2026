@@ -1,16 +1,18 @@
 import type { Team } from "../../api/types";
 import { PRODUCT_NAME } from "../../lib/brand";
-import { GROUP_STARTS, TABS, type TabDefinition, type TabId } from "../../lib/tabs";
-import type { ThemePreference } from "../../lib/theme";
+import { EXTRA_PAGES, GROUP_STARTS, TABS, type TabDefinition, type TabId } from "../../lib/tabs";
 import { TeamSwitcher } from "../team/TeamSwitcher";
 import { BeaconLogo } from "../ui/BeaconLogo";
 import type { IconName } from "../ui/icons";
 import { Rail, RailDivider } from "../ui/Rail";
 import { RailItem } from "../ui/RailItem";
 import { ApprovalsRailItem } from "./ApprovalsRailItem";
-import { ThemeToggle } from "./ThemeToggle";
+
+const [HOME, SETTINGS] = EXTRA_PAGES as readonly [TabDefinition, TabDefinition];
 
 const TAB_ICONS: Record<TabId, IconName> = {
+  home: "home",
+  settings: "settings",
   inbox: "inbox",
   approvals: "approval",
   phone: "phone",
@@ -25,35 +27,40 @@ interface AppRailProps {
   readonly activeTabId: TabId;
   readonly teams: readonly Team[];
   readonly teamId: string;
-  readonly theme: ThemePreference;
   readonly onNavigate: (tab: TabDefinition) => void;
-  readonly onCycleTheme: () => void;
   readonly onSelectTeam: (teamId: string) => void;
 }
 
 /** The shell rail: logo tile, page links, then appearance toggle and team switcher. */
-export function AppRail({
-  activeTabId,
-  teams,
-  teamId,
-  theme,
-  onNavigate,
-  onCycleTheme,
-  onSelectTeam,
-}: AppRailProps) {
+export function AppRail({ activeTabId, teams, teamId, onNavigate, onSelectTeam }: AppRailProps) {
   return (
     <Rail
       logo={
-        <span
-          title={PRODUCT_NAME}
-          className="flex size-11 shrink-0 items-center justify-center rounded-tile bg-ink text-window"
+        <a
+          href="/home"
+          aria-label={`${PRODUCT_NAME} home`}
+          aria-current={activeTabId === "home" ? "page" : undefined}
+          onClick={(event) => {
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+            event.preventDefault();
+            onNavigate(HOME);
+          }}
+          className="flex size-11 shrink-0 items-center justify-center rounded-tile bg-ink text-window transition-transform hover:scale-[1.04]"
         >
           <BeaconLogo size={24} />
-        </span>
+        </a>
       }
       footer={
         <>
-          <ThemeToggle theme={theme} onCycle={onCycleTheme} />
+          <RailItem
+            label="Settings"
+            icon="settings"
+            href={SETTINGS.path}
+            isActive={activeTabId === "settings"}
+            onSelect={() => {
+              onNavigate(SETTINGS);
+            }}
+          />
           <TeamSwitcher teams={teams} selectedTeamId={teamId} onSelect={onSelectTeam} />
         </>
       }

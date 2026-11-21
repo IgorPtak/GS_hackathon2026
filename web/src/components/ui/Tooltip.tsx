@@ -1,16 +1,37 @@
-import type { ReactNode } from "react";
+import { useRef, useState, type FocusEvent, type ReactNode } from "react";
 
-import { cx } from "../../lib/cx";
+const GAP = 10;
 
-const SIDES = {
-  right: "left-full top-1/2 ml-3 -translate-y-1/2",
-  top: "bottom-full left-1/2 mb-2 -translate-x-1/2",
-  bottom: "top-full left-1/2 mt-2 -translate-x-1/2",
-} as const;
+type Side = "right" | "top" | "bottom";
+
+interface Position {
+  readonly left: number;
+  readonly top: number;
+  readonly transform: string;
+}
+
+function place(rect: DOMRect, side: Side): Position {
+  if (side === "top") {
+    return {
+      left: rect.left + rect.width / 2,
+      top: rect.top - GAP,
+      transform: "translate(-50%, -100%)",
+    };
+  }
+  if (side === "bottom") {
+    return {
+      left: rect.left + rect.width / 2,
+      top: rect.bottom + GAP,
+      transform: "translateX(-50%)",
+    };
+  }
+  return { left: rect.right + GAP, top: rect.top + rect.height / 2, transform: "translateY(-50%)" };
+}
 
 /**
- * CSS-only tooltip shown on hover and keyboard focus. The trigger keeps its own accessible
- * name, so the bubble is aria-hidden and never the only source of a label.
+ * Small label on hover or keyboard focus (not after a mouse click). It is positioned `fixed`
+ * from the trigger, so scrolling containers such as the rail never clip it. The trigger keeps
+ * its own accessible name; the bubble is aria-hidden.
  */
 export function Tooltip({
   label,
@@ -18,21 +39,43 @@ export function Tooltip({
   children,
 }: {
   label: string;
-  side?: keyof typeof SIDES;
+  side?: Side;
   children: ReactNode;
 }) {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [position, setPosition] = useState<Position | null>(null);
+
+  function show() {
+    const rect = anchor.current?.getBoundingClientRect();
+    if (rect) setPosition(place(rect, side));
+  }
+  function hide() {
+    setPosition(null);
+  }
+  function showOnKeyboardFocus(event: FocusEvent) {
+    if (event.target instanceof HTMLElement && event.target.matches(":focus-visible")) show();
+  }
+
   return (
-    <span className="group/tip relative inline-flex">
+    <span
+      ref={anchor}
+      className="relative inline-flex"
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={showOnKeyboardFocus}
+      onBlur={hide}
+      onClick={hide}
+    >
       {children}
-      <span
-        aria-hidden="true"
-        className={cx(
-          "pointer-events-none absolute z-50 rounded-lg bg-ink px-2.5 py-1 text-meta font-medium whitespace-nowrap text-window opacity-0 transition-opacity group-focus-within/tip:opacity-100 group-hover/tip:opacity-100",
-          SIDES[side],
-        )}
-      >
-        {label}
-      </span>
+      {position ? (
+        <span
+          aria-hidden="true"
+          style={{ left: position.left, top: position.top, transform: position.transform }}
+          className="pointer-events-none fixed z-50 rounded-md bg-ink px-2 py-0.5 text-caption font-medium whitespace-nowrap text-window shadow-tile"
+        >
+          {label}
+        </span>
+      ) : null}
     </span>
   );
 }

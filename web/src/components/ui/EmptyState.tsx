@@ -24,8 +24,8 @@ export function EmptyState({ icon, scene, title, children, action }: EmptyStateP
           className="mb-2 aspect-[16/10] w-full max-w-[420px]"
         />
       ) : (
-        <span className="flex size-12 items-center justify-center rounded-full bg-fill text-ink-2">
-          <Icon name={icon} size={24} />
+        <span className="flex size-20 items-center justify-center rounded-full bg-fill text-ink-3">
+          <Icon name={icon} size={36} />
         </span>
       )}
       {title ? <h2 className="text-card-title font-semibold tracking-tight">{title}</h2> : null}

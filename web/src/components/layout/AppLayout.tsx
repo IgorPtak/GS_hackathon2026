@@ -1,11 +1,17 @@
 import { useState } from "react";
 
 import { PhonePage } from "../../pages/PhonePage";
-import { readStoredTeamId, writeStoredTeamId } from "../../lib/teamStorage";
+import {
+  readStoredPersonId,
+  readStoredTeamId,
+  writeStoredPersonId,
+  writeStoredTeamId,
+} from "../../lib/teamStorage";
 import { teamShortName } from "../../lib/teams";
+import { PageBackContext } from "../../lib/backContext";
+import { ALL_PAGES } from "../../lib/tabs";
 import { pathForTab, useRoute } from "../../lib/useRoute";
-import { useTheme } from "../../lib/useTheme";
-import { FirstRunScreen } from "../team/FirstRunScreen";
+import { LoginScreen } from "../login/LoginScreen";
 import { useTeams } from "../team/useTeams";
 import { ToastProvider } from "../ui/ToastProvider";
 import { AppRail } from "./AppRail";
@@ -16,14 +22,36 @@ import { DemoPlaceholder, ShellPage } from "./ShellPage";
 /** Routes between the shell (rail + page), the full-screen phone and the reserved demo panel. */
 export function AppLayout() {
   const { route, navigate } = useRoute();
-  const { theme, cycleTheme } = useTheme();
-  const { teams, isLoading, error, reload } = useTeams();
+  const { teams, people, isLoading, error, reload } = useTeams();
   const [teamId, setTeamId] = useState<string | null>(() => readStoredTeamId());
+  const [personId, setPersonId] = useState<string | null>(() => readStoredPersonId());
 
   function selectTeam(next: string) {
     setTeamId(next);
     writeStoredTeamId(next);
   }
+  function signIn(nextPerson: string, nextTeam: string) {
+    setPersonId(nextPerson);
+    writeStoredPersonId(nextPerson);
+    selectTeam(nextTeam);
+    navigate("/home");
+  }
+  function signOut() {
+    setPersonId(null);
+    setTeamId(null);
+    writeStoredPersonId(null);
+  }
+  const person = people.find((candidate) => candidate.id === personId) ?? null;
+
+  const pageBack =
+    route.kind === "shell" && route.from !== null
+      ? {
+          onBack: () => {
+            window.history.back();
+          },
+          label: `Back to ${labelForPath(route.from)}`,
+        }
+      : null;
 
   if (route.kind === "phone") {
     return <PhoneFullScreen teamId={teamId} />;
@@ -34,13 +62,14 @@ export function AppLayout() {
       <AppWindow>
         {route.kind === "demo" ? (
           <DemoPlaceholder />
-        ) : teamId === null ? (
-          <FirstRunScreen
+        ) : teamId === null || personId === null ? (
+          <LoginScreen
             teams={teams}
+            people={people}
             isLoading={isLoading}
             error={error}
             onRetry={reload}
-            onSelect={selectTeam}
+            onSignIn={signIn}
           />
         ) : (
           <>
@@ -48,23 +77,27 @@ export function AppLayout() {
               activeTabId={route.tabId}
               teams={teams}
               teamId={teamId}
-              theme={theme}
               onNavigate={(tab) => {
                 navigate(tab.path);
               }}
-              onCycleTheme={cycleTheme}
               onSelectTeam={selectTeam}
             />
-            <div className="main-panel my-3 mr-3 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-hairline bg-panel max-sm:m-0 max-sm:rounded-none max-sm:border-0">
-              <ShellPage
-                tabId={route.tabId}
-                teamId={teamId}
-                teamLabel={teamLabel(teams, teamId)}
-                onNavigate={(tab) => {
-                  navigate(pathForTab(tab));
-                }}
-              />
-            </div>
+            <PageBackContext.Provider value={pageBack}>
+              <div className="main-panel my-3 mr-3 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-hairline bg-panel max-sm:m-0 max-sm:rounded-none max-sm:border-0">
+                <ShellPage
+                  tabId={route.tabId}
+                  teamId={teamId}
+                  teamLabel={teamLabel(teams, teamId)}
+                  onNavigate={(tab) => {
+                    navigate(pathForTab(tab), { isDeepLink: true });
+                  }}
+                  person={person}
+                  teams={teams}
+                  onSelectTeam={selectTeam}
+                  onSignOut={signOut}
+                />
+              </div>
+            </PageBackContext.Provider>
             <DemoSheet
               onNavigate={(tab) => {
                 navigate(pathForTab(tab));
@@ -89,4 +122,8 @@ function PhoneFullScreen({ teamId }: { teamId: string | null }) {
       <PhonePage teamId={teamId} isFullScreen />
     </main>
   );
+}
+
+function labelForPath(path: string): string {
+  return ALL_PAGES.find((page) => page.path === path)?.label.toLowerCase() ?? "the previous page";
 }

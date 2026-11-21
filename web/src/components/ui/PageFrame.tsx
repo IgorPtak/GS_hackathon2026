@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { usePageBack } from "../../lib/backContext";
 import { cx } from "../../lib/cx";
 import { PageHeader } from "./PageHeader";
 
@@ -29,6 +30,8 @@ export function PageFrame({
   isLegacy = false,
   children,
 }: PageFrameProps) {
+  // A page's own sub-view back wins; otherwise offer the way back after an in-page jump.
+  const pageBack = usePageBack();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-b border-hairline bg-card">
@@ -36,8 +39,8 @@ export function PageFrame({
           title={title}
           context={context}
           actions={actions}
-          onBack={onBack}
-          backLabel={backLabel}
+          onBack={onBack ?? pageBack?.onBack}
+          backLabel={onBack ? backLabel : (pageBack?.label ?? backLabel)}
         />
         {toolbar ? <div className="px-10 pb-5 max-sm:px-5">{toolbar}</div> : null}
       </div>

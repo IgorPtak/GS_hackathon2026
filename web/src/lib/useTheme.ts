@@ -9,7 +9,11 @@ import {
 } from "./theme";
 
 /** Appearance preference: system, light or dark; persisted and mirrored on <html data-theme>. */
-export function useTheme(): { theme: ThemePreference; cycleTheme: () => void } {
+export function useTheme(): {
+  theme: ThemePreference;
+  cycleTheme: () => void;
+  chooseTheme: (theme: ThemePreference) => void;
+} {
   const [theme, setTheme] = useState<ThemePreference>(() => readStoredTheme());
 
   const cycleTheme = useCallback(() => {
@@ -19,5 +23,11 @@ export function useTheme(): { theme: ThemePreference; cycleTheme: () => void } {
     setTheme(next);
   }, [theme]);
 
-  return { theme, cycleTheme };
+  const chooseTheme = useCallback((next: ThemePreference) => {
+    applyTheme(next);
+    writeStoredTheme(next);
+    setTheme(next);
+  }, []);
+
+  return { theme, cycleTheme, chooseTheme };
 }

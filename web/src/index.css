@@ -232,3 +232,38 @@ dialog:not([open]) {
     transform: translateY(6px);
   }
 }
+
+/* Login sky: background dust is faint, stars brighter, the big mark brightest. */
+.ascii-sky {
+  color: light-dark(rgb(29 29 31 / 0.16), rgb(245 245 247 / 0.16));
+}
+
+.ascii-sky [data-level="1"] {
+  color: light-dark(rgb(29 29 31 / 0.38), rgb(245 245 247 / 0.55));
+}
+
+.ascii-sky [data-level="2"] {
+  color: light-dark(rgb(29 29 31 / 0.5), rgb(245 245 247 / 0.72));
+}
+
+.ascii-twinkle {
+  animation: twinkle 4.8s ease-in-out infinite;
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.ascii-glow {
+  background: radial-gradient(
+    ellipse 45% 55% at 72% 48%,
+    light-dark(rgb(10 132 255 / 0.08), rgb(120 160 255 / 0.12)),
+    transparent 70%
+  );
+}

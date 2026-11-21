@@ -1,5 +1,14 @@
 export type TabId =
-  "inbox" | "approvals" | "phone" | "rules" | "connect" | "runbooks" | "people" | "insights";
+  | "home"
+  | "inbox"
+  | "approvals"
+  | "phone"
+  | "rules"
+  | "connect"
+  | "runbooks"
+  | "people"
+  | "insights"
+  | "settings";
 
 export interface TabDefinition {
   readonly id: TabId;
@@ -20,6 +29,14 @@ export const TABS: readonly TabDefinition[] = [
   { id: "people", label: "People & channels", path: "/people" },
   { id: "insights", label: "Insights", path: "/insights" },
 ];
+
+/** Pages reached from the logo and the gear, not listed in the rail. */
+export const EXTRA_PAGES: readonly TabDefinition[] = [
+  { id: "home", label: "Home", path: "/home" },
+  { id: "settings", label: "Settings", path: "/settings" },
+];
+
+export const ALL_PAGES: readonly TabDefinition[] = [...EXTRA_PAGES, ...TABS];
 
 /** Tabs that start a new rail group, so a divider is drawn above them. */
 export const GROUP_STARTS: readonly TabId[] = ["rules", "insights"];

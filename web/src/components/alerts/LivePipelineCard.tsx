@@ -6,14 +6,8 @@ import { StatusChip } from "../ui/StatusChip";
 import { describeNumbers, describePipeline } from "./pipelineWords";
 import { usePipelineMetrics } from "./usePipelineMetrics";
 
-/** Same-app navigation without a router: the shell listens to popstate. */
-function openInsights() {
-  window.history.pushState(null, "", "/insights" + window.location.search);
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
-
 /** The one bold spot of the Inbox: is everything flowing, how fast, and nothing lost. */
-export function LivePipelineCard() {
+export function LivePipelineCard({ onOpenDetails }: { onOpenDetails: () => void }) {
   const metrics = usePipelineMetrics();
   const words = describePipeline(metrics);
   return (
@@ -56,7 +50,7 @@ export function LivePipelineCard() {
         </StatusChip>
         <button
           type="button"
-          onClick={openInsights}
+          onClick={onOpenDetails}
           className="inline-flex h-9 items-center rounded-full px-3 text-meta font-medium text-ink-2 transition-colors hover:bg-fill hover:text-ink"
         >
           Details

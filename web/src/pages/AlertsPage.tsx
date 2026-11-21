@@ -35,7 +35,15 @@ function changeWithTransition(change: () => void): void {
 }
 
 /** Inbox body for one team; the single SSE connection fans out to the list, counts and detail. */
-function TeamInbox({ team, teamLabel }: { team: string; teamLabel: string }) {
+function TeamInbox({
+  team,
+  teamLabel,
+  onOpenInsights,
+}: {
+  team: string;
+  teamLabel: string;
+  onOpenInsights: () => void;
+}) {
   const [filter, setFilter] = useState<StatusFilter>("open");
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
   const feed = useAlertFeed(team, filter);
@@ -135,7 +143,7 @@ function TeamInbox({ team, teamLabel }: { team: string; teamLabel: string }) {
       actions={<ConnectionIndicator status={streamStatus} />}
     >
       <div className="flex flex-col gap-6">
-        {isSelected ? null : <LivePipelineCard />}
+        {isSelected ? null : <LivePipelineCard onOpenDetails={onOpenInsights} />}
         {isEmpty ? (
           <InboxEmpty
             canSend={canSend}
@@ -184,7 +192,7 @@ function InboxEmpty({
     <Card>
       <EmptyState
         icon="inbox"
-        scene="inbox"
+
         title={canSend ? "All quiet" : "Nothing here"}
         action={
           canSend ? (
@@ -202,6 +210,16 @@ function InboxEmpty({
   );
 }
 
-export function AlertsPage({ teamId, teamLabel }: { teamId: string; teamLabel: string }) {
-  return <TeamInbox key={teamId} team={teamId} teamLabel={teamLabel} />;
+export function AlertsPage({
+  teamId,
+  teamLabel,
+  onOpenInsights,
+}: {
+  teamId: string;
+  teamLabel: string;
+  onOpenInsights: () => void;
+}) {
+  return (
+    <TeamInbox key={teamId} team={teamId} teamLabel={teamLabel} onOpenInsights={onOpenInsights} />
+  );
 }
