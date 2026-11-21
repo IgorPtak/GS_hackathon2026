@@ -159,6 +159,7 @@ export function PhoneSimulator({
           recipientName={selectedRecipient?.display_name ?? null}
           isAudioUnlocked={isAudioUnlocked}
           initialAnswered={isCallAnswered || devState === "incall"}
+          isSilent={devState === "incall"}
           speech={speech}
           onAnsweredChange={setIsCallAnswered}
           onClose={(answered) => {

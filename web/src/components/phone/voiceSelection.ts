@@ -4,6 +4,59 @@ const PREFERRED_REGIONS = ["en-us", "en-gb"] as const;
 const PREMIUM_MARKERS = ["premium", "siri", "enhanced"] as const;
 const NAMED_FAVORITES = ["samantha", "ava", "zoe", "daniel"] as const;
 
+/**
+ * macOS novelty and robotic "Eloquence" voices: English-tagged, but they sing, whisper or sound
+ * like a 1980s computer. Never offered, never picked.
+ */
+const NOVELTY_VOICES = new Set([
+  "albert",
+  "bad news",
+  "bahh",
+  "bells",
+  "boing",
+  "bubbles",
+  "cellos",
+  "good news",
+  "jester",
+  "organ",
+  "superstar",
+  "trinoids",
+  "whisper",
+  "wobble",
+  "zarvox",
+  "junior",
+  "ralph",
+  "fred",
+  "kathy",
+  "grandma",
+  "grandpa",
+  "rocko",
+  "shelley",
+  "eddy",
+  "flo",
+  "reed",
+  "sandy",
+]);
+
+function isNovelty(voice: SpeechSynthesisVoice): boolean {
+  const base = voice.name
+    .toLowerCase()
+    .replace(/\s*\(.*\)\s*$/, "")
+    .trim();
+  return NOVELTY_VOICES.has(base);
+}
+
+const REGION_NAMES: Record<string, string> = {
+  "en-us": "US English",
+  "en-gb": "British English",
+  "en-au": "Australian English",
+  "en-ie": "Irish English",
+  "en-in": "Indian English",
+  "en-za": "South African English",
+  "en-ca": "Canadian English",
+  "en-nz": "New Zealand English",
+};
+
 function normalizeLang(lang: string): string {
   return lang.toLowerCase().replace("_", "-");
 }
@@ -54,6 +107,7 @@ export function pickBestVoice(
   let best: SpeechSynthesisVoice | null = null;
   let bestScore = -1;
   for (const candidate of voices) {
+    if (isNovelty(candidate)) continue;
     const score = scoreVoice(candidate);
     if (best === null || score > bestScore) {
       best = candidate;
@@ -63,19 +117,35 @@ export function pickBestVoice(
   return best;
 }
 
-/** Filters and sorts voices for the presenter's picker: English voices first, best at top. */
+/** English voices only (Beacon speaks English), novelty voices out, best at the top. */
 export function sortVoicesForPicker(
   voices: readonly SpeechSynthesisVoice[],
 ): readonly SpeechSynthesisVoice[] {
-  const english = voices.filter((voice) => isAnyEnglish(voice.lang));
+  const english = voices.filter((voice) => isAnyEnglish(voice.lang) && !isNovelty(voice));
   const pool = english.length > 0 ? english : voices;
   return [...pool].sort((a, b) => scoreVoice(b) - scoreVoice(a) || a.name.localeCompare(b.name));
 }
 
 /** Human-readable label for a voice option. */
 export function formatVoiceLabel(voice: SpeechSynthesisVoice): string {
-  const lang = voice.lang.replace("_", "-");
-  return `${voice.name} (${lang})`;
+  const region = REGION_NAMES[normalizeLang(voice.lang)] ?? voice.lang.replace("_", "-");
+  const name = voice.name.replace(/^(Microsoft|Google)\s+/, "").replace(/\s*-\s*English.*$/, "");
+  return `${name} · ${region}`;
+}
+
+/* The chosen voice is shared by every phone and the Settings picker in this tab. */
+const voiceListeners = new Set<() => void>();
+
+export function subscribeVoiceChoice(listener: () => void): () => void {
+  voiceListeners.add(listener);
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === VOICE_STORAGE_KEY) listener();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    voiceListeners.delete(listener);
+    window.removeEventListener("storage", onStorage);
+  };
 }
 
 export function readStoredVoiceUri(): string {
@@ -96,4 +166,7 @@ export function writeStoredVoiceUri(uri: string): void {
   } catch {
     // Preference simply will not persist in restricted storage modes.
   }
+  voiceListeners.forEach((listener) => {
+    listener();
+  });
 }

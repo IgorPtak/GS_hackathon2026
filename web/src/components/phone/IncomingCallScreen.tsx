@@ -12,6 +12,8 @@ interface IncomingCallScreenProps {
   readonly recipientName: string | null;
   readonly isAudioUnlocked: boolean;
   readonly initialAnswered?: boolean;
+  /** Do not read the script aloud (deterministic screenshots of an active call). */
+  readonly isSilent?: boolean;
   readonly speech: SpeechController;
   readonly onAnsweredChange?: (answered: boolean) => void;
   /** Called when the call ends; `answered` tells whether it was picked up. */
@@ -24,11 +26,13 @@ export function IncomingCallScreen({
   recipientName,
   isAudioUnlocked,
   initialAnswered = false,
+  isSilent = false,
   speech,
   onAnsweredChange,
   onClose,
 }: IncomingCallScreenProps) {
   const [isAnswered, setIsAnswered] = useState(initialAnswered);
+
   const { isMuted, toggleMute } = useRingTone(!isAnswered);
 
   return (
@@ -45,7 +49,7 @@ export function IncomingCallScreen({
           message={message}
           recipientName={recipientName}
           speech={speech}
-          autoSpeak={!initialAnswered}
+          autoSpeak={!isSilent}
           onHangUp={() => {
             onClose(true);
           }}

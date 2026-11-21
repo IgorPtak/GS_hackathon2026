@@ -1,6 +1,9 @@
 import { Card } from "../ui/Card";
 import { Skeleton } from "../ui/Skeleton";
+import { ChannelHealthList } from "./ChannelHealthList";
 import { MetricTile } from "./MetricTile";
+import { StageTimings } from "./StageTimings";
+import { useChannelHealth } from "./useChannelHealth";
 import type { MetricsHistory, MetricsSummary } from "./useMetricsSummary";
 
 interface MetricsPanelProps {
@@ -52,8 +55,9 @@ function LoadingGrid() {
   );
 }
 
-/** Live pipeline health: three hero numbers above five supporting queue and delivery tiles. */
+/** Live pipeline health: hero numbers, channels, where the time goes, then queue tiles. */
 export function MetricsPanel({ summary, history, error }: MetricsPanelProps) {
+  const channelHealth = useChannelHealth();
   if (summary === null && !error) return <LoadingGrid />;
 
   const throughput = summary
@@ -114,6 +118,10 @@ export function MetricsPanel({ summary, history, error }: MetricsPanelProps) {
               history={history.lost}
             />
           </dl>
+
+          <ChannelHealthList channels={channelHealth.channels} error={channelHealth.error} />
+
+          <StageTimings summary={summary} />
 
           <section aria-labelledby="pipeline-details-heading" className="space-y-3">
             <h2 id="pipeline-details-heading" className="text-row font-semibold text-ink">

@@ -15,7 +15,10 @@ from alerting_core.routing import resolve_deliveries
 log = get_logger(__name__)
 
 # Approvals are answered by text, so these carry the reply: tried when routing yields nothing.
-_FALLBACK_TYPES = (ChannelType.sms, ChannelType.phone)
+# A code is only useful where a person can answer with it: a call reads it out, a text shows it.
+# The call comes first so the on-call person hears the code (demo scene, docs/demo.md).
+_FALLBACK_TYPES = (ChannelType.phone, ChannelType.sms)
+_CODE_TYPES = frozenset({ChannelType.phone, ChannelType.sms})
 
 
 class Clock(Protocol):
@@ -57,7 +60,8 @@ def plan_approval_deliveries(
     """Pure: the delivery jobs for one approval request.
 
     Channels per recipient are the ones routing picks for the alert (preferences, working
-    hours, missing contacts); with none, the recipient's sms then phone channel is used.
+    hours, missing contacts). When none of them can carry a reply code (phone or sms), the
+    recipient's phone, else sms, channel is added, so the code always reaches a person.
     The shared `ui` channel is not used: the approval code goes to a person.
     """
     team = teams.get(alert.team)
@@ -91,15 +95,16 @@ def plan_approval_deliveries(
             log.warning("approval_unknown_recipient", extra={"recipient_id": recipient_id})
             continue
         targets = list(routed.get(recipient_id, []))
-        if not targets:
+        if not any(channel_type in _CODE_TYPES for _, channel_type in targets):
             fallback = _fallback_channel(recipient, channels)
-            if fallback is None:
-                log.warning(
-                    "approval_no_channel",
-                    extra={"alert_id": alert.id, "recipient_id": recipient_id},
-                )
-                continue
-            targets = [(fallback.id, fallback.type)]
+            if fallback is not None:
+                targets.append((fallback.id, fallback.type))
+        if not targets:
+            log.warning(
+                "approval_no_channel",
+                extra={"alert_id": alert.id, "recipient_id": recipient_id},
+            )
+            continue
         for channel_id, channel_type in targets:
             jobs.append(
                 DeliveryJob(

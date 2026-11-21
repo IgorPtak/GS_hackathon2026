@@ -22,6 +22,7 @@ from .errors import install_error_handlers
 from .routers import (
     alerts,
     approvals,
+    channel_health,
     config,
     fix_proposal_drafts,
     fix_proposals,
@@ -46,6 +47,7 @@ LLM_SYNC_LOCK_ID = 4_149_049
 
 ROUTERS = (
     alerts,
+    channel_health,
     runbooks,
     runbook_runs,
     fix_proposals,
@@ -60,6 +62,7 @@ ROUTERS = (
     metrics,
     recipients,
     llm_status,
+    channel_health,
 )
 
 

@@ -529,6 +529,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Circuit breaker state and unfinished deliveries per configured channel. */
+        get: operations["getChannelHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/llm/status": {
         parameters: {
             query?: never;
@@ -1164,6 +1181,36 @@ export interface components {
             };
         };
         /**
+         * ChannelHealth
+         * @description One channel for the Insights screen: is it sending, and how much is waiting for it.
+         */
+        ChannelHealth: {
+            /**
+             * Channel Id
+             * @example rates-large-rejections
+             */
+            channel_id: string;
+            channel_type: components["schemas"]["ChannelType"];
+            /** @description closed when no circuit has been recorded yet. */
+            state: components["schemas"]["CircuitState"];
+            /**
+             * Failures
+             * @description Consecutive failures counted by the breaker.
+             */
+            failures: number;
+            /**
+             * Opened At
+             * @description When the circuit last opened.
+             * @default null
+             */
+            opened_at: string | null;
+            /**
+             * Waiting Deliveries
+             * @description Deliveries not finished yet (status pending, sent or failed).
+             */
+            waiting_deliveries: number;
+        };
+        /**
          * ChannelPreference
          * @description First matching preference wins. Outside working_hours, `otherwise` channels are used.
          */
@@ -1195,6 +1242,12 @@ export interface components {
          * @enum {string}
          */
         ChannelType: "ui" | "email" | "sms" | "phone" | "webhook";
+        /**
+         * CircuitState
+         * @description State of a channel's circuit breaker (`circuit:<channel_id>`, contracts/storage.md).
+         * @enum {string}
+         */
+        CircuitState: "closed" | "open" | "half_open";
         /** ConditionAll */
         ConditionAll: {
             /** All */
@@ -1788,6 +1841,18 @@ export interface components {
             dead_lettered_total: number | null;
             /** Open Alert Count */
             open_alert_count: number;
+            /**
+             * Relay Wait P99 Seconds
+             * @description p99 from commit until the outbox relay hands a job on.
+             * @default null
+             */
+            relay_wait_p99_seconds: number | null;
+            /**
+             * Delivery P99 Seconds
+             * @description p99 from relay to the first delivery attempt's result.
+             * @default null
+             */
+            delivery_p99_seconds: number | null;
         };
         /** NormalizedFieldMappings */
         NormalizedFieldMappings: {
@@ -3739,6 +3804,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MetricsSummary"];
+                };
+            };
+        };
+    };
+    getChannelHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelHealth"][];
                 };
             };
         };

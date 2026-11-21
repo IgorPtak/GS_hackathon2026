@@ -1,6 +1,7 @@
 """HTTP request and response bodies referenced by contracts/openapi.yaml."""
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import Field
@@ -300,6 +301,33 @@ class MetricsSummary(ContractModel):
     retries_total: int | None
     dead_lettered_total: int | None
     open_alert_count: int
+    relay_wait_p99_seconds: float | None = Field(
+        default=None, description="p99 from commit until the outbox relay hands a job on."
+    )
+    delivery_p99_seconds: float | None = Field(
+        default=None, description="p99 from relay to the first delivery attempt's result."
+    )
+
+
+class CircuitState(StrEnum):
+    """State of a channel's circuit breaker (`circuit:<channel_id>`, contracts/storage.md)."""
+
+    closed = "closed"
+    open = "open"
+    half_open = "half_open"
+
+
+class ChannelHealth(ContractModel):
+    """One channel for the Insights screen: is it sending, and how much is waiting for it."""
+
+    channel_id: ConfigId
+    channel_type: ChannelType
+    state: CircuitState = Field(description="closed when no circuit has been recorded yet.")
+    failures: int = Field(ge=0, description="Consecutive failures counted by the breaker.")
+    opened_at: datetime | None = Field(default=None, description="When the circuit last opened.")
+    waiting_deliveries: int = Field(
+        ge=0, description="Deliveries not finished yet (status pending, sent or failed)."
+    )
 
 
 class LlmStatus(ContractModel):

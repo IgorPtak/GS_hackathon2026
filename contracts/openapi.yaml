@@ -750,6 +750,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MetricsSummary'
+  /api/v1/channels/health:
+    get:
+      tags:
+      - ops
+      operationId: getChannelHealth
+      summary: Circuit breaker state and unfinished deliveries per configured channel.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChannelHealth'
   /api/v1/llm/status:
     get:
       tags:
@@ -1654,6 +1669,47 @@ components:
       - type
       title: ChannelConfig
       type: object
+    ChannelHealth:
+      additionalProperties: false
+      description: 'One channel for the Insights screen: is it sending, and how much is waiting for it.'
+      properties:
+        channel_id:
+          examples:
+          - rates-large-rejections
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          title: Channel Id
+          type: string
+        channel_type:
+          $ref: '#/components/schemas/ChannelType'
+        state:
+          $ref: '#/components/schemas/CircuitState'
+          description: closed when no circuit has been recorded yet.
+        failures:
+          description: Consecutive failures counted by the breaker.
+          minimum: 0
+          title: Failures
+          type: integer
+        opened_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: When the circuit last opened.
+          title: Opened At
+        waiting_deliveries:
+          description: Deliveries not finished yet (status pending, sent or failed).
+          minimum: 0
+          title: Waiting Deliveries
+          type: integer
+      required:
+      - channel_id
+      - channel_type
+      - state
+      - failures
+      - waiting_deliveries
+      title: ChannelHealth
+      type: object
     ChannelPreference:
       additionalProperties: false
       description: First matching preference wins. Outside working_hours, `otherwise` channels are used.
@@ -1715,6 +1771,14 @@ components:
       - phone
       - webhook
       title: ChannelType
+      type: string
+    CircuitState:
+      description: State of a channel's circuit breaker (`circuit:<channel_id>`, contracts/storage.md).
+      enum:
+      - closed
+      - open
+      - half_open
+      title: CircuitState
       type: string
     ConditionAll:
       additionalProperties: false
@@ -2667,6 +2731,20 @@ components:
         open_alert_count:
           title: Open Alert Count
           type: integer
+        relay_wait_p99_seconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          description: p99 from commit until the outbox relay hands a job on.
+          title: Relay Wait P99 Seconds
+        delivery_p99_seconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          description: p99 from relay to the first delivery attempt's result.
+          title: Delivery P99 Seconds
       required:
       - ingest_rate_per_second
       - processed_rate_per_second
