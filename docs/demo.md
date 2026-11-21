@@ -36,7 +36,7 @@ Step-by-step commands, UI clicks, and expected outcomes for each scene of the 5-
 Show the quickstart (or run against a fresh clone):
 
 ```bash
-git clone <repo> && cd <repo>
+git clone https://github.com/IgorPtak/GS_hackathon2026.git && cd GS_hackathon2026
 cp .env.example .env
 docker compose up -d --build
 ```

@@ -16,7 +16,7 @@ Raw cpu-bench output is not committed.
 
 - **Unique events.** Each event is a JSON body with `loadtest: true`, `run_id`, `seq`, `evt` (= `run_id-seq`)
   and `sent_ms` (host wall clock at build time). It goes to `POST /api/v1/ingest/generic-webhook`
-  (ingest reads `config/sources/` only at startup, so a new source would need an ingest restart).
+  (since A-37 ingest hot-reloads `config/sources/`; at measurement time it read them only at startup).
   The rule `loadtest-events` (`config/rules/loadtest-events.yaml`, team `platform`, channels `ui` + `sms`,
   `dedup.fingerprint: [evt]`) matches only load events. Each event gives exactly 1 alert and 2 deliveries
   (`ui` team-wide, `sms` to the platform on-call). The script saves this rule through the config save path.

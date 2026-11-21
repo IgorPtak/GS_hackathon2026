@@ -30,9 +30,8 @@ Webhook / Alertmanager / Log tail
 
 ## Quickstart
 
-<!-- TODO: real repo URL -->
 ```bash
-git clone <repo> && cd <repo>
+git clone https://github.com/IgorPtak/GS_hackathon2026.git && cd GS_hackathon2026
 cp .env.example .env
 docker compose up -d --build
 ```

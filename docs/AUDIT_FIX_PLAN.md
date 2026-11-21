@@ -58,6 +58,7 @@ both touch `services/runbook_runner/runner.py`, so A-47 lands first (wave 1) and
 | A-46 | LLM-normalize file free-text runbooks; guard LLM steps | A | sonnet / plugin-author | 1 h | — | keep |
 | A-47 | Refuse approvals and action runs on resolved alerts | A | sonnet / backend-engineer | 30 min | — | keep |
 | A-48 | Update `docs/demo.md` with the new scenes | A | haiku / docs-writer | 20 min | keep tasks | keep |
+| A-49 | Normalize free-text runbooks with the LLM in one service only | A | sonnet / backend-engineer | 30 min | A-46 | cut-2 |
 | B-27 | Wire the alert-detail Run button to the manual step route | B | sonnet / frontend-engineer | 30 min | A-44 | keep |
 | B-28 | Show rule validation errors inline in the rule editor | B | sonnet / frontend-engineer | 30 min | A-43 | keep |
 | B-29 | Rule editor support for `severity_gte` and `time_between` | B | sonnet / frontend-engineer | 30 min | S-04, A-38 | keep |
@@ -227,6 +228,18 @@ tests, `config/runbooks/pricing-stale-feed.txt` (wording only, if needed).
   operators (A-38), email with runbook steps (A-36), a Markdown step Run (A-44/A-45), free text → LLM steps
   with forced approval (A-46), current load numbers.
 - Verify: `uv run python scripts/demo_rehearsal.py` passes.
+
+**A-49 Normalize free-text runbooks with the LLM in one service only** — sonnet, backend-engineer. Files:
+`packages/alerting_core/alerting_core/config/store.py`, `services/api/main.py`, the `main.py` of `ingest`,
+`processor`, `runbook-runner` (only the sync call), their tests.
+- Why: after A-46 every service runs `sync_config_files` at startup with the LLM flag on. Only cache hits reach
+  the LLM, but `llm_cache_hit` lines in the `processor` logs read as "the hot path touches the LLM" in a demo.
+- AC: only `api` syncs with `normalize_text_with_llm=True` and stores the normalized runbook in
+  `config_documents`; `processor`, `ingest` and `runbook-runner` sync with the flag off and read the stored
+  steps from the registry. If `api` is not up yet, the others keep the parser fallback and pick up the LLM steps
+  on the next `config.changed`. No `alerting_core.llm` log line from `processor`/`ingest`/`runbook-runner`.
+- Verify: unit test (flag per service) · `docker compose logs processor ingest runbook-runner | grep -c llm_` = 0
+  after `docker compose up -d --build` · the pricing runbook still shows `normalizer: llm` in the Runbooks tab.
 
 ### Track B: UI only
 
