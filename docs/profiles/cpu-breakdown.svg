@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="410" viewBox="0 0 980 410" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif">
+<rect width="980" height="410" fill="#ffffff" rx="8"/>
+<text x="490" y="30" text-anchor="middle" font-size="17" font-weight="700" fill="#111827">CPU Cost Breakdown: Per-Event Microseconds (250/s) vs Live 800 msg/s Saturation (4:4:3:2)</text>
+<text x="245" y="58" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2937">Cgroup Median CPU / Event @ 250 msg/s (total 6,918.7 µs/evt)</text>
+<text x="735" y="58" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2937">Live Docker CPU% @ 800 msg/s (4:4:3:2, sum across replicas)</text>
+<text x="112" y="100" text-anchor="end" font-size="12" fill="#111827">postgres</text>
+<rect x="120" y="82" width="237.2" height="24" rx="4" fill="#dc2626"/>
+<text x="363.2" y="99" font-size="11" font-weight="600" fill="#111827">2196.0 µs</text>
+<text x="112" y="140" text-anchor="end" font-size="12" fill="#111827">delivery</text>
+<rect x="120" y="122" width="203.1" height="24" rx="4" fill="#2563eb"/>
+<text x="329.1" y="139" font-size="11" font-weight="600" fill="#111827">1880.4 µs</text>
+<text x="112" y="180" text-anchor="end" font-size="12" fill="#111827">processor</text>
+<rect x="120" y="162" width="129.4" height="24" rx="4" fill="#059669"/>
+<text x="255.4" y="179" font-size="11" font-weight="600" fill="#111827">1198.3 µs</text>
+<text x="112" y="220" text-anchor="end" font-size="12" fill="#111827">redis</text>
+<rect x="120" y="202" width="64.1" height="24" rx="4" fill="#d97706"/>
+<text x="190.1" y="219" font-size="11" font-weight="600" fill="#111827">593.6 µs</text>
+<text x="112" y="260" text-anchor="end" font-size="12" fill="#111827">ingest</text>
+<rect x="120" y="242" width="57.0" height="24" rx="4" fill="#7c3aed"/>
+<text x="183.0" y="259" font-size="11" font-weight="600" fill="#111827">528.1 µs</text>
+<text x="112" y="300" text-anchor="end" font-size="12" fill="#111827">mock-gateway</text>
+<rect x="120" y="282" width="42.0" height="24" rx="4" fill="#64748b"/>
+<text x="168.0" y="299" font-size="11" font-weight="600" fill="#111827">389.3 µs</text>
+<text x="112" y="340" text-anchor="end" font-size="12" fill="#111827">outbox-relay</text>
+<rect x="120" y="322" width="21.5" height="24" rx="4" fill="#0891b2"/>
+<text x="147.5" y="339" font-size="11" font-weight="600" fill="#111827">198.9 µs</text>
+<text x="597" y="99" text-anchor="end" font-size="12" fill="#111827">delivery</text>
+<rect x="605" y="82" width="240.1" height="22" rx="4" fill="#2563eb"/>
+<text x="851.1" y="98" font-size="11" font-weight="600" fill="#111827">207.2%</text>
+<text x="597" y="135" text-anchor="end" font-size="12" fill="#111827">processor</text>
+<rect x="605" y="118" width="150.2" height="22" rx="4" fill="#059669"/>
+<text x="761.2" y="134" font-size="11" font-weight="600" fill="#111827">129.6%</text>
+<text x="597" y="171" text-anchor="end" font-size="12" fill="#111827">postgres</text>
+<rect x="605" y="154" width="146.6" height="22" rx="4" fill="#dc2626"/>
+<text x="757.6" y="170" font-size="11" font-weight="600" fill="#111827">126.5%</text>
+<text x="597" y="207" text-anchor="end" font-size="12" fill="#111827">ingest</text>
+<rect x="605" y="190" width="74.2" height="22" rx="4" fill="#7c3aed"/>
+<text x="685.2" y="206" font-size="11" font-weight="600" fill="#111827">64.0%</text>
+<text x="597" y="243" text-anchor="end" font-size="12" fill="#111827">mock-gateway</text>
+<rect x="605" y="226" width="29.8" height="22" rx="4" fill="#64748b"/>
+<text x="640.8" y="242" font-size="11" font-weight="600" fill="#111827">25.8%</text>
+<text x="597" y="279" text-anchor="end" font-size="12" fill="#111827">redis</text>
+<rect x="605" y="262" width="28.3" height="22" rx="4" fill="#d97706"/>
+<text x="639.3" y="278" font-size="11" font-weight="600" fill="#111827">24.4%</text>
+<text x="597" y="315" text-anchor="end" font-size="12" fill="#111827">outbox-relay</text>
+<rect x="605" y="298" width="23.4" height="22" rx="4" fill="#0891b2"/>
+<text x="634.4" y="314" font-size="11" font-weight="600" fill="#111827">20.2%</text>
+<text x="597" y="351" text-anchor="end" font-size="12" fill="#111827">proxy</text>
+<rect x="605" y="334" width="9.9" height="22" rx="4" fill="#db2777"/>
+<text x="620.9" y="350" font-size="11" font-weight="600" fill="#111827">8.6%</text>
+<text x="490" y="390" text-anchor="middle" font-size="11" fill="#4b5563">Note: Redis was 24.4% (down from 94% pre-A-41 SCAN fix); generator container used 81.8% on same 10-vCPU VM.</text>
+</svg>

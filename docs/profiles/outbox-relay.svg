@@ -1,0 +1,491 @@
+<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg version="1.1" width="1200" height="746" onload="init(evt)" viewBox="0 0 1200 746" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:fg="http://github.com/jonhoo/inferno"><!--Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples.--><!--NOTES: --><defs><linearGradient id="background" y1="0" y2="1" x1="0" x2="0"><stop stop-color="#eeeeee" offset="5%"/><stop stop-color="#eeeeb0" offset="95%"/></linearGradient></defs><style type="text/css">
+text { font-family:monospace; font-size:12px }
+#title { text-anchor:middle; font-size:17px; }
+#matched { text-anchor:end; }
+#search { text-anchor:end; opacity:0.1; cursor:pointer; }
+#search:hover, #search.show { opacity:1; }
+#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+#unzoom { cursor:pointer; }
+#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+.hide { display:none; }
+.parent { opacity:0.5; }
+</style><script type="text/ecmascript"><![CDATA[
+        var nametype = 'Function:';
+        var fontsize = 12;
+        var fontwidth = 0.59;
+        var xpad = 10;
+        var inverted = true;
+        var searchcolor = 'rgb(230,0,230)';
+        var fluiddrawing = true;
+        var truncate_text_right = false;
+    ]]><![CDATA["use strict";
+var details, searchbtn, unzoombtn, matchedtxt, svg, searching, frames, known_font_width;
+function init(evt) {
+    details = document.getElementById("details").firstChild;
+    searchbtn = document.getElementById("search");
+    unzoombtn = document.getElementById("unzoom");
+    matchedtxt = document.getElementById("matched");
+    svg = document.getElementsByTagName("svg")[0];
+    frames = document.getElementById("frames");
+    known_font_width = get_monospace_width(frames);
+    total_samples = parseInt(frames.attributes.total_samples.value);
+    searching = 0;
+
+    // Use GET parameters to restore a flamegraph's state.
+    var restore_state = function() {
+        var params = get_params();
+        if (params.x && params.y)
+            zoom(find_group(document.querySelector('[*|x="' + params.x + '"][y="' + params.y + '"]')));
+        if (params.s)
+            search(params.s);
+    };
+
+    if (fluiddrawing) {
+        // Make width dynamic so the SVG fits its parent's width.
+        svg.removeAttribute("width");
+        // Edge requires us to have a viewBox that gets updated with size changes.
+        var isEdge = /Edge\/\d./i.test(navigator.userAgent);
+        if (!isEdge) {
+            svg.removeAttribute("viewBox");
+        }
+        var update_for_width_change = function() {
+            if (isEdge) {
+                svg.attributes.viewBox.value = "0 0 " + svg.width.baseVal.value + " " + svg.height.baseVal.value;
+            }
+
+            // Keep consistent padding on left and right of frames container.
+            frames.attributes.width.value = svg.width.baseVal.value - xpad * 2;
+
+            // Text truncation needs to be adjusted for the current width.
+            update_text_for_elements(frames.children);
+
+            // Keep search elements at a fixed distance from right edge.
+            var svgWidth = svg.width.baseVal.value;
+            searchbtn.attributes.x.value = svgWidth - xpad;
+            matchedtxt.attributes.x.value = svgWidth - xpad;
+        };
+        window.addEventListener('resize', function() {
+            update_for_width_change();
+        });
+        // This needs to be done asynchronously for Safari to work.
+        setTimeout(function() {
+            unzoom();
+            update_for_width_change();
+            restore_state();
+        }, 0);
+    } else {
+        restore_state();
+    }
+}
+// event listeners
+window.addEventListener("click", function(e) {
+    var target = find_group(e.target);
+    if (target) {
+        if (target.nodeName == "a") {
+            if (e.ctrlKey === false) return;
+            e.preventDefault();
+        }
+        if (target.classList.contains("parent")) unzoom();
+        zoom(target);
+
+        // set parameters for zoom state
+        var el = target.querySelector("rect");
+        if (el && el.attributes && el.attributes.y && el.attributes["fg:x"]) {
+            var params = get_params()
+            params.x = el.attributes["fg:x"].value;
+            params.y = el.attributes.y.value;
+            history.replaceState(null, null, parse_params(params));
+        }
+    }
+    else if (e.target.id == "unzoom") {
+        unzoom();
+
+        // remove zoom state
+        var params = get_params();
+        if (params.x) delete params.x;
+        if (params.y) delete params.y;
+        history.replaceState(null, null, parse_params(params));
+    }
+    else if (e.target.id == "search") search_prompt();
+}, false)
+// mouse-over for info
+// show
+window.addEventListener("mouseover", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = nametype + " " + g_to_text(target);
+}, false)
+// clear
+window.addEventListener("mouseout", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = ' ';
+}, false)
+// ctrl-F for search
+window.addEventListener("keydown",function (e) {
+    if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+        e.preventDefault();
+        search_prompt();
+    }
+}, false)
+// functions
+function get_params() {
+    var params = {};
+    var paramsarr = window.location.search.substr(1).split('&');
+    for (var i = 0; i < paramsarr.length; ++i) {
+        var tmp = paramsarr[i].split("=");
+        if (!tmp[0] || !tmp[1]) continue;
+        params[tmp[0]]  = decodeURIComponent(tmp[1]);
+    }
+    return params;
+}
+function parse_params(params) {
+    var uri = "?";
+    for (var key in params) {
+        uri += key + '=' + encodeURIComponent(params[key]) + '&';
+    }
+    if (uri.slice(-1) == "&")
+        uri = uri.substring(0, uri.length - 1);
+    if (uri == '?')
+        uri = window.location.href.split('?')[0];
+    return uri;
+}
+function find_child(node, selector) {
+    var children = node.querySelectorAll(selector);
+    if (children.length) return children[0];
+    return;
+}
+function find_group(node) {
+    var parent = node.parentElement;
+    if (!parent) return;
+    if (parent.id == "frames") return node;
+    return find_group(parent);
+}
+function orig_save(e, attr, val) {
+    if (e.attributes["fg:orig_" + attr] != undefined) return;
+    if (e.attributes[attr] == undefined) return;
+    if (val == undefined) val = e.attributes[attr].value;
+    e.setAttribute("fg:orig_" + attr, val);
+}
+function orig_load(e, attr) {
+    if (e.attributes["fg:orig_"+attr] == undefined) return;
+    e.attributes[attr].value = e.attributes["fg:orig_" + attr].value;
+    e.removeAttribute("fg:orig_" + attr);
+}
+function g_to_text(e) {
+    var text = find_child(e, "title").firstChild.nodeValue;
+    return (text)
+}
+function g_to_func(e) {
+    var func = g_to_text(e);
+    // if there's any manipulation we want to do to the function
+    // name before it's searched, do it here before returning.
+    return (func);
+}
+function get_monospace_width(frames) {
+    // Given the id="frames" element, return the width of text characters if
+    // this is a monospace font, otherwise return 0.
+    text = find_child(frames.children[0], "text");
+    originalContent = text.textContent;
+    text.textContent = "!";
+    bangWidth = text.getComputedTextLength();
+    text.textContent = "W";
+    wWidth = text.getComputedTextLength();
+    text.textContent = originalContent;
+    if (bangWidth === wWidth) {
+        return bangWidth;
+    } else {
+        return 0;
+    }
+}
+function update_text_for_elements(elements) {
+    // In order to render quickly in the browser, you want to do one pass of
+    // reading attributes, and one pass of mutating attributes. See
+    // https://web.dev/avoid-large-complex-layouts-and-layout-thrashing/ for details.
+
+    // Fall back to inefficient calculation, if we're variable-width font.
+    // TODO This should be optimized somehow too.
+    if (known_font_width === 0) {
+        for (var i = 0; i < elements.length; i++) {
+            update_text(elements[i]);
+        }
+        return;
+    }
+
+    var textElemNewAttributes = [];
+    for (var i = 0; i < elements.length; i++) {
+        var e = elements[i];
+        var r = find_child(e, "rect");
+        var t = find_child(e, "text");
+        var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+        var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+        var newX = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+
+        // Smaller than this size won't fit anything
+        if (w < 2 * known_font_width) {
+            textElemNewAttributes.push([newX, ""]);
+            continue;
+        }
+
+        // Fit in full text width
+        if (txt.length * known_font_width < w) {
+            textElemNewAttributes.push([newX, txt]);
+            continue;
+        }
+
+        var substringLength = Math.floor(w / known_font_width) - 2;
+        if (truncate_text_right) {
+            // Truncate the right side of the text.
+            textElemNewAttributes.push([newX, txt.substring(0, substringLength) + ".."]);
+            continue;
+        } else {
+            // Truncate the left side of the text.
+            textElemNewAttributes.push([newX, ".." + txt.substring(txt.length - substringLength, txt.length)]);
+            continue;
+        }
+    }
+
+    console.assert(textElemNewAttributes.length === elements.length, "Resize failed, please file a bug at https://github.com/jonhoo/inferno/");
+
+    // Now that we know new textContent, set it all in one go so we don't refresh a bazillion times.
+    for (var i = 0; i < elements.length; i++) {
+        var e = elements[i];
+        var values = textElemNewAttributes[i];
+        var t = find_child(e, "text");
+        t.attributes.x.value = values[0];
+        t.textContent = values[1];
+    }
+}
+
+function update_text(e) {
+    var r = find_child(e, "rect");
+    var t = find_child(e, "text");
+    var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+    var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+    t.attributes.x.value = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+
+    // Smaller than this size won't fit anything
+    if (w < 2 * fontsize * fontwidth) {
+        t.textContent = "";
+        return;
+    }
+    t.textContent = txt;
+    // Fit in full text width
+    if (t.getComputedTextLength() < w)
+        return;
+    if (truncate_text_right) {
+        // Truncate the right side of the text.
+        for (var x = txt.length - 2; x > 0; x--) {
+            if (t.getSubStringLength(0, x + 2) <= w) {
+                t.textContent = txt.substring(0, x) + "..";
+                return;
+            }
+        }
+    } else {
+        // Truncate the left side of the text.
+        for (var x = 2; x < txt.length; x++) {
+            if (t.getSubStringLength(x - 2, txt.length) <= w) {
+                t.textContent = ".." + txt.substring(x, txt.length);
+                return;
+            }
+        }
+    }
+    t.textContent = "";
+}
+// zoom
+function zoom_reset(e) {
+    if (e.tagName == "rect") {
+        e.attributes.x.value = format_percent(100 * parseInt(e.attributes["fg:x"].value) / total_samples);
+        e.attributes.width.value = format_percent(100 * parseInt(e.attributes["fg:w"].value) / total_samples);
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_reset(c[i]);
+    }
+}
+function zoom_child(e, x, zoomed_width_samples) {
+    if (e.tagName == "text") {
+        var parent_x = parseFloat(find_child(e.parentNode, "rect[x]").attributes.x.value);
+        e.attributes.x.value = format_percent(parent_x + (100 * 3 / frames.attributes.width.value));
+    } else if (e.tagName == "rect") {
+        e.attributes.x.value = format_percent(100 * (parseInt(e.attributes["fg:x"].value) - x) / zoomed_width_samples);
+        e.attributes.width.value = format_percent(100 * parseInt(e.attributes["fg:w"].value) / zoomed_width_samples);
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_child(c[i], x, zoomed_width_samples);
+    }
+}
+function zoom_parent(e) {
+    if (e.attributes) {
+        if (e.attributes.x != undefined) {
+            e.attributes.x.value = "0.0%";
+        }
+        if (e.attributes.width != undefined) {
+            e.attributes.width.value = "100.0%";
+        }
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_parent(c[i]);
+    }
+}
+function zoom(node) {
+    var attr = find_child(node, "rect").attributes;
+    var width = parseInt(attr["fg:w"].value);
+    var xmin = parseInt(attr["fg:x"].value);
+    var xmax = xmin + width;
+    var ymin = parseFloat(attr.y.value);
+    unzoombtn.classList.remove("hide");
+    var el = frames.children;
+    var to_update_text = [];
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        var a = find_child(e, "rect").attributes;
+        var ex = parseInt(a["fg:x"].value);
+        var ew = parseInt(a["fg:w"].value);
+        // Is it an ancestor
+        if (!inverted) {
+            var upstack = parseFloat(a.y.value) > ymin;
+        } else {
+            var upstack = parseFloat(a.y.value) < ymin;
+        }
+        if (upstack) {
+            // Direct ancestor
+            if (ex <= xmin && (ex+ew) >= xmax) {
+                e.classList.add("parent");
+                zoom_parent(e);
+                to_update_text.push(e);
+            }
+            // not in current path
+            else
+                e.classList.add("hide");
+        }
+        // Children maybe
+        else {
+            // no common path
+            if (ex < xmin || ex >= xmax) {
+                e.classList.add("hide");
+            }
+            else {
+                zoom_child(e, xmin, width);
+                to_update_text.push(e);
+            }
+        }
+    }
+    update_text_for_elements(to_update_text);
+}
+function unzoom() {
+    unzoombtn.classList.add("hide");
+    var el = frames.children;
+    for(var i = 0; i < el.length; i++) {
+        el[i].classList.remove("parent");
+        el[i].classList.remove("hide");
+        zoom_reset(el[i]);
+    }
+    update_text_for_elements(el);
+}
+// search
+function reset_search() {
+    var el = document.querySelectorAll("#frames rect");
+    for (var i = 0; i < el.length; i++) {
+        orig_load(el[i], "fill")
+    }
+    var params = get_params();
+    delete params.s;
+    history.replaceState(null, null, parse_params(params));
+}
+function search_prompt() {
+    if (!searching) {
+        var term = prompt("Enter a search term (regexp " +
+            "allowed, eg: ^ext4_)", "");
+        if (term != null) {
+            search(term)
+        }
+    } else {
+        reset_search();
+        searching = 0;
+        searchbtn.classList.remove("show");
+        searchbtn.firstChild.nodeValue = "Search"
+        matchedtxt.classList.add("hide");
+        matchedtxt.firstChild.nodeValue = ""
+    }
+}
+function search(term) {
+    var re = new RegExp(term);
+    var el = frames.children;
+    var matches = new Object();
+    var maxwidth = 0;
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        // Skip over frames which are either not visible, or below the zoomed-to frame
+        if (e.classList.contains("hide") || e.classList.contains("parent")) {
+            continue;
+        }
+        var func = g_to_func(e);
+        var rect = find_child(e, "rect");
+        if (func == null || rect == null)
+            continue;
+        // Save max width. Only works as we have a root frame
+        var w = parseInt(rect.attributes["fg:w"].value);
+        if (w > maxwidth)
+            maxwidth = w;
+        if (func.match(re)) {
+            // highlight
+            var x = parseInt(rect.attributes["fg:x"].value);
+            orig_save(rect, "fill");
+            rect.attributes.fill.value = searchcolor;
+            // remember matches
+            if (matches[x] == undefined) {
+                matches[x] = w;
+            } else {
+                if (w > matches[x]) {
+                    // overwrite with parent
+                    matches[x] = w;
+                }
+            }
+            searching = 1;
+        }
+    }
+    if (!searching)
+        return;
+    var params = get_params();
+    params.s = term;
+    history.replaceState(null, null, parse_params(params));
+
+    searchbtn.classList.add("show");
+    searchbtn.firstChild.nodeValue = "Reset Search";
+    // calculate percent matched, excluding vertical overlap
+    var count = 0;
+    var lastx = -1;
+    var lastw = 0;
+    var keys = Array();
+    for (k in matches) {
+        if (matches.hasOwnProperty(k))
+            keys.push(k);
+    }
+    // sort the matched frames by their x location
+    // ascending, then width descending
+    keys.sort(function(a, b){
+        return a - b;
+    });
+    // Step through frames saving only the biggest bottom-up frames
+    // thanks to the sort order. This relies on the tree property
+    // where children are always smaller than their parents.
+    for (var k in keys) {
+        var x = parseInt(keys[k]);
+        var w = matches[keys[k]];
+        if (x >= lastx + lastw) {
+            count += w;
+            lastx = x;
+            lastw = w;
+        }
+    }
+    // display matched percent
+    matchedtxt.classList.remove("hide");
+    var pct = 100 * count / maxwidth;
+    if (pct != 100) pct = pct.toFixed(1);
+    matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+}
+function format_percent(n) {
+    return n.toFixed(4) + "%";
+}
+]]></script><rect x="0" y="0" width="100%" height="746" fill="url(#background)"/><text id="title" fill="rgb(0,0,0)" x="50.0000%" y="24.00">py-spy record --pid 1 --subprocesses --duration 20 --rate 100 --format flamegraph -o /out/outbox-relay.svg</text><text id="details" fill="rgb(0,0,0)" x="10" y="40.00"> </text><text id="unzoom" class="hide" fill="rgb(0,0,0)" x="10" y="24.00">Reset Zoom</text><text id="search" fill="rgb(0,0,0)" x="1190" y="24.00">Search</text><text id="matched" fill="rgb(0,0,0)" x="1190" y="735.00"> </text><svg id="frames" x="10" width="1180" total_samples="215"><g><title>PoolConnectionHolder.release (asyncpg/pool.py:274) (3 samples, 1.40%)</title><rect x="48.8372%" y="244" width="1.3953%" height="15" fill="rgb(227,0,7)" fg:x="105" fg:w="3"/><text x="49.0872%" y="254.50"></text></g><g><title>Connection.reset (asyncpg/connection.py:1594) (3 samples, 1.40%)</title><rect x="48.8372%" y="260" width="1.3953%" height="15" fill="rgb(217,0,24)" fg:x="105" fg:w="3"/><text x="49.0872%" y="270.50"></text></g><g><title>Connection.execute (asyncpg/connection.py:377) (3 samples, 1.40%)</title><rect x="48.8372%" y="276" width="1.3953%" height="15" fill="rgb(221,193,54)" fg:x="105" fg:w="3"/><text x="49.0872%" y="286.50"></text></g><g><title>APIRouter.app (fastapi/routing.py:2920) (1 samples, 0.47%)</title><rect x="50.6977%" y="420" width="0.4651%" height="15" fill="rgb(248,212,6)" fg:x="109" fg:w="1"/><text x="50.9477%" y="430.50"></text></g><g><title>get_request_handler.&lt;locals&gt;.app (fastapi/routing.py:528) (1 samples, 0.47%)</title><rect x="51.1628%" y="516" width="0.4651%" height="15" fill="rgb(208,68,35)" fg:x="110" fg:w="1"/><text x="51.4128%" y="526.50"></text></g><g><title>solve_dependencies (fastapi/dependencies/utils.py:781) (1 samples, 0.47%)</title><rect x="51.1628%" y="532" width="0.4651%" height="15" fill="rgb(232,128,0)" fg:x="110" fg:w="1"/><text x="51.4128%" y="542.50"></text></g><g><title>HTTPConnection.query_params (starlette/requests.py:142) (1 samples, 0.47%)</title><rect x="51.1628%" y="548" width="0.4651%" height="15" fill="rgb(207,160,47)" fg:x="110" fg:w="1"/><text x="51.4128%" y="558.50"></text></g><g><title>QueryParams.__init__ (starlette/datastructures.py:411) (1 samples, 0.47%)</title><rect x="51.1628%" y="564" width="0.4651%" height="15" fill="rgb(228,23,34)" fg:x="110" fg:w="1"/><text x="51.4128%" y="574.50"></text></g><g><title>generate_latest (prometheus_client/exposition.py:317) (1 samples, 0.47%)</title><rect x="51.6279%" y="580" width="0.4651%" height="15" fill="rgb(218,30,26)" fg:x="111" fg:w="1"/><text x="51.8779%" y="590.50"></text></g><g><title>CollectorRegistry.collect (prometheus_client/registry.py:101) (1 samples, 0.47%)</title><rect x="51.6279%" y="596" width="0.4651%" height="15" fill="rgb(220,122,19)" fg:x="111" fg:w="1"/><text x="51.8779%" y="606.50"></text></g><g><title>copy (copy.py:71) (1 samples, 0.47%)</title><rect x="51.6279%" y="612" width="0.4651%" height="15" fill="rgb(250,228,42)" fg:x="111" fg:w="1"/><text x="51.8779%" y="622.50"></text></g><g><title>request_response.&lt;locals&gt;.app.&lt;locals&gt;.app (fastapi/routing.py:161) (3 samples, 1.40%)</title><rect x="51.1628%" y="500" width="1.3953%" height="15" fill="rgb(240,193,28)" fg:x="110" fg:w="3"/><text x="51.4128%" y="510.50"></text></g><g><title>get_request_handler.&lt;locals&gt;.app (fastapi/routing.py:762) (2 samples, 0.93%)</title><rect x="51.6279%" y="516" width="0.9302%" height="15" fill="rgb(216,20,37)" fg:x="111" fg:w="2"/><text x="51.8779%" y="526.50"></text></g><g><title>run_endpoint_function (fastapi/routing.py:381) (2 samples, 0.93%)</title><rect x="51.6279%" y="532" width="0.9302%" height="15" fill="rgb(206,188,39)" fg:x="111" fg:w="2"/><text x="51.8779%" y="542.50"></text></g><g><title>create_app.&lt;locals&gt;.metrics (services/outbox_relay/main.py:58) (2 samples, 0.93%)</title><rect x="51.6279%" y="548" width="0.9302%" height="15" fill="rgb(217,207,13)" fg:x="111" fg:w="2"/><text x="51.8779%" y="558.50"></text></g><g><title>render_metrics (alerting_core/metrics.py:93) (2 samples, 0.93%)</title><rect x="51.6279%" y="564" width="0.9302%" height="15" fill="rgb(231,73,38)" fg:x="111" fg:w="2"/><text x="51.8779%" y="574.50"></text></g><g><title>generate_latest (prometheus_client/exposition.py:348) (1 samples, 0.47%)</title><rect x="52.0930%" y="580" width="0.4651%" height="15" fill="rgb(225,20,46)" fg:x="112" fg:w="1"/><text x="52.3430%" y="590.50"></text></g><g><title>generate_latest.&lt;locals&gt;.sample_line (prometheus_client/exposition.py:296) (1 samples, 0.47%)</title><rect x="52.0930%" y="596" width="0.4651%" height="15" fill="rgb(210,31,41)" fg:x="112" fg:w="1"/><text x="52.3430%" y="606.50"></text></g><g><title>RequestResponseCycle.run_asgi (uvicorn/protocols/http/httptools_impl.py:422) (6 samples, 2.79%)</title><rect x="50.2326%" y="244" width="2.7907%" height="15" fill="rgb(221,200,47)" fg:x="108" fg:w="6"/><text x="50.4826%" y="254.50">Re..</text></g><g><title>ProxyHeadersMiddleware.__call__ (uvicorn/middleware/proxy_headers.py:63) (6 samples, 2.79%)</title><rect x="50.2326%" y="260" width="2.7907%" height="15" fill="rgb(226,26,5)" fg:x="108" fg:w="6"/><text x="50.4826%" y="270.50">Pr..</text></g><g><title>FastAPI.__call__ (fastapi/applications.py:1224) (6 samples, 2.79%)</title><rect x="50.2326%" y="276" width="2.7907%" height="15" fill="rgb(249,33,26)" fg:x="108" fg:w="6"/><text x="50.4826%" y="286.50">Fa..</text></g><g><title>Starlette.__call__ (starlette/applications.py:96) (6 samples, 2.79%)</title><rect x="50.2326%" y="292" width="2.7907%" height="15" fill="rgb(235,183,28)" fg:x="108" fg:w="6"/><text x="50.4826%" y="302.50">St..</text></g><g><title>ServerErrorMiddleware.__call__ (starlette/middleware/errors.py:164) (6 samples, 2.79%)</title><rect x="50.2326%" y="308" width="2.7907%" height="15" fill="rgb(221,5,38)" fg:x="108" fg:w="6"/><text x="50.4826%" y="318.50">Se..</text></g><g><title>ExceptionTelemetryMiddleware.__call__ (fastapi/telemetry/_asgi.py:151) (6 samples, 2.79%)</title><rect x="50.2326%" y="324" width="2.7907%" height="15" fill="rgb(247,18,42)" fg:x="108" fg:w="6"/><text x="50.4826%" y="334.50">Ex..</text></g><g><title>AppBodyLimitMiddleware.__call__ (fastapi/_body_limit.py:80) (6 samples, 2.79%)</title><rect x="50.2326%" y="340" width="2.7907%" height="15" fill="rgb(241,131,45)" fg:x="108" fg:w="6"/><text x="50.4826%" y="350.50">Ap..</text></g><g><title>ExceptionMiddleware.__call__ (starlette/middleware/exceptions.py:63) (6 samples, 2.79%)</title><rect x="50.2326%" y="356" width="2.7907%" height="15" fill="rgb(249,31,29)" fg:x="108" fg:w="6"/><text x="50.4826%" y="366.50">Ex..</text></g><g><title>wrap_app_handling_exceptions.&lt;locals&gt;.wrapped_app (starlette/_exception_handler.py:42) (6 samples, 2.79%)</title><rect x="50.2326%" y="372" width="2.7907%" height="15" fill="rgb(225,111,53)" fg:x="108" fg:w="6"/><text x="50.4826%" y="382.50">wr..</text></g><g><title>AsyncExitStackMiddleware.__call__ (fastapi/middleware/asyncexitstack.py:18) (6 samples, 2.79%)</title><rect x="50.2326%" y="388" width="2.7907%" height="15" fill="rgb(238,160,17)" fg:x="108" fg:w="6"/><text x="50.4826%" y="398.50">As..</text></g><g><title>Router.__call__ (starlette/routing.py:683) (5 samples, 2.33%)</title><rect x="50.6977%" y="404" width="2.3256%" height="15" fill="rgb(214,148,48)" fg:x="109" fg:w="5"/><text x="50.9477%" y="414.50">R..</text></g><g><title>APIRouter.app (fastapi/routing.py:2929) (4 samples, 1.86%)</title><rect x="51.1628%" y="420" width="1.8605%" height="15" fill="rgb(232,36,49)" fg:x="110" fg:w="4"/><text x="51.4128%" y="430.50">A..</text></g><g><title>APIRoute.handle (fastapi/routing.py:1375) (4 samples, 1.86%)</title><rect x="51.1628%" y="436" width="1.8605%" height="15" fill="rgb(209,103,24)" fg:x="110" fg:w="4"/><text x="51.4128%" y="446.50">A..</text></g><g><title>Route.handle (starlette/routing.py:289) (4 samples, 1.86%)</title><rect x="51.1628%" y="452" width="1.8605%" height="15" fill="rgb(229,88,8)" fg:x="110" fg:w="4"/><text x="51.4128%" y="462.50">R..</text></g><g><title>request_response.&lt;locals&gt;.app (fastapi/routing.py:175) (4 samples, 1.86%)</title><rect x="51.1628%" y="468" width="1.8605%" height="15" fill="rgb(213,181,19)" fg:x="110" fg:w="4"/><text x="51.4128%" y="478.50">r..</text></g><g><title>wrap_app_handling_exceptions.&lt;locals&gt;.wrapped_app (starlette/_exception_handler.py:42) (4 samples, 1.86%)</title><rect x="51.1628%" y="484" width="1.8605%" height="15" fill="rgb(254,191,54)" fg:x="110" fg:w="4"/><text x="51.4128%" y="494.50">w..</text></g><g><title>request_response.&lt;locals&gt;.app.&lt;locals&gt;.app (fastapi/routing.py:162) (1 samples, 0.47%)</title><rect x="52.5581%" y="500" width="0.4651%" height="15" fill="rgb(241,83,37)" fg:x="113" fg:w="1"/><text x="52.8081%" y="510.50"></text></g><g><title>Response.__call__ (starlette/responses.py:171) (1 samples, 0.47%)</title><rect x="52.5581%" y="516" width="0.4651%" height="15" fill="rgb(233,36,39)" fg:x="113" fg:w="1"/><text x="52.8081%" y="526.50"></text></g><g><title>wrap_app_handling_exceptions.&lt;locals&gt;.wrapped_app.&lt;locals&gt;.sender (starlette/_exception_handler.py:39) (1 samples, 0.47%)</title><rect x="52.5581%" y="532" width="0.4651%" height="15" fill="rgb(226,3,54)" fg:x="113" fg:w="1"/><text x="52.8081%" y="542.50"></text></g><g><title>wrap_app_handling_exceptions.&lt;locals&gt;.wrapped_app.&lt;locals&gt;.sender (starlette/_exception_handler.py:39) (1 samples, 0.47%)</title><rect x="52.5581%" y="548" width="0.4651%" height="15" fill="rgb(245,192,40)" fg:x="113" fg:w="1"/><text x="52.8081%" y="558.50"></text></g><g><title>ServerErrorMiddleware.__call__.&lt;locals&gt;._send (starlette/middleware/errors.py:161) (1 samples, 0.47%)</title><rect x="52.5581%" y="564" width="0.4651%" height="15" fill="rgb(238,167,29)" fg:x="113" fg:w="1"/><text x="52.8081%" y="574.50"></text></g><g><title>RequestResponseCycle.send (uvicorn/protocols/http/httptools_impl.py:482) (1 samples, 0.47%)</title><rect x="52.5581%" y="580" width="0.4651%" height="15" fill="rgb(232,182,51)" fg:x="113" fg:w="1"/><text x="52.8081%" y="590.50"></text></g><g><title>Logger.info (logging/__init__.py:1539) (1 samples, 0.47%)</title><rect x="52.5581%" y="596" width="0.4651%" height="15" fill="rgb(231,60,39)" fg:x="113" fg:w="1"/><text x="52.8081%" y="606.50"></text></g><g><title>Logger._log (logging/__init__.py:1684) (1 samples, 0.47%)</title><rect x="52.5581%" y="612" width="0.4651%" height="15" fill="rgb(208,69,12)" fg:x="113" fg:w="1"/><text x="52.8081%" y="622.50"></text></g><g><title>Logger.handle (logging/__init__.py:1700) (1 samples, 0.47%)</title><rect x="52.5581%" y="628" width="0.4651%" height="15" fill="rgb(235,93,37)" fg:x="113" fg:w="1"/><text x="52.8081%" y="638.50"></text></g><g><title>Logger.callHandlers (logging/__init__.py:1762) (1 samples, 0.47%)</title><rect x="52.5581%" y="644" width="0.4651%" height="15" fill="rgb(213,116,39)" fg:x="113" fg:w="1"/><text x="52.8081%" y="654.50"></text></g><g><title>Handler.handle (logging/__init__.py:1028) (1 samples, 0.47%)</title><rect x="52.5581%" y="660" width="0.4651%" height="15" fill="rgb(222,207,29)" fg:x="113" fg:w="1"/><text x="52.8081%" y="670.50"></text></g><g><title>StreamHandler.emit (logging/__init__.py:1160) (1 samples, 0.47%)</title><rect x="52.5581%" y="676" width="0.4651%" height="15" fill="rgb(206,96,30)" fg:x="113" fg:w="1"/><text x="52.8081%" y="686.50"></text></g><g><title>Handler.format (logging/__init__.py:999) (1 samples, 0.47%)</title><rect x="52.5581%" y="692" width="0.4651%" height="15" fill="rgb(218,138,4)" fg:x="113" fg:w="1"/><text x="52.8081%" y="702.50"></text></g><g><title>JsonFormatter.format (alerting_core/logging.py:41) (1 samples, 0.47%)</title><rect x="52.5581%" y="708" width="0.4651%" height="15" fill="rgb(250,191,14)" fg:x="113" fg:w="1"/><text x="52.8081%" y="718.50"></text></g><g><title>Server.main_loop (uvicorn/server.py:248) (1 samples, 0.47%)</title><rect x="53.0233%" y="276" width="0.4651%" height="15" fill="rgb(239,60,40)" fg:x="114" fg:w="1"/><text x="53.2733%" y="286.50"></text></g><g><title>sleep (asyncio/tasks.py:661) (1 samples, 0.47%)</title><rect x="53.0233%" y="292" width="0.4651%" height="15" fill="rgb(206,27,48)" fg:x="114" fg:w="1"/><text x="53.2733%" y="302.50"></text></g><g><title>formatdate (email/utils.py:262) (1 samples, 0.47%)</title><rect x="53.9535%" y="308" width="0.4651%" height="15" fill="rgb(225,35,8)" fg:x="116" fg:w="1"/><text x="54.2035%" y="318.50"></text></g><g><title>Server.serve (uvicorn/server.py:90) (4 samples, 1.86%)</title><rect x="53.0233%" y="244" width="1.8605%" height="15" fill="rgb(250,213,24)" fg:x="114" fg:w="4"/><text x="53.2733%" y="254.50">S..</text></g><g><title>Server._serve (uvicorn/server.py:107) (4 samples, 1.86%)</title><rect x="53.0233%" y="260" width="1.8605%" height="15" fill="rgb(247,123,22)" fg:x="114" fg:w="4"/><text x="53.2733%" y="270.50">S..</text></g><g><title>Server.main_loop (uvicorn/server.py:249) (3 samples, 1.40%)</title><rect x="53.4884%" y="276" width="1.3953%" height="15" fill="rgb(231,138,38)" fg:x="115" fg:w="3"/><text x="53.7384%" y="286.50"></text></g><g><title>Server.on_tick (uvicorn/server.py:255) (2 samples, 0.93%)</title><rect x="53.9535%" y="292" width="0.9302%" height="15" fill="rgb(231,145,46)" fg:x="116" fg:w="2"/><text x="54.2035%" y="302.50"></text></g><g><title>formatdate (email/utils.py:269) (1 samples, 0.47%)</title><rect x="54.4186%" y="308" width="0.4651%" height="15" fill="rgb(251,118,11)" fg:x="117" fg:w="1"/><text x="54.6686%" y="318.50"></text></g><g><title>format_datetime (email/utils.py:278) (1 samples, 0.47%)</title><rect x="54.4186%" y="324" width="0.4651%" height="15" fill="rgb(217,147,25)" fg:x="117" fg:w="1"/><text x="54.6686%" y="334.50"></text></g><g><title>wait_for (asyncio/tasks.py:519) (1 samples, 0.47%)</title><rect x="54.8837%" y="260" width="0.4651%" height="15" fill="rgb(247,81,37)" fg:x="118" fg:w="1"/><text x="55.1337%" y="270.50"></text></g><g><title>timeout (asyncio/timeouts.py:145) (1 samples, 0.47%)</title><rect x="54.8837%" y="276" width="0.4651%" height="15" fill="rgb(209,12,38)" fg:x="118" fg:w="1"/><text x="55.1337%" y="286.50"></text></g><g><title>relay_batch (services/outbox_relay/relay.py:124) (1 samples, 0.47%)</title><rect x="56.2791%" y="276" width="0.4651%" height="15" fill="rgb(227,1,9)" fg:x="121" fg:w="1"/><text x="56.5291%" y="286.50"></text></g><g><title>PoolAcquireContext.__aenter__ (asyncpg/pool.py:1179) (1 samples, 0.47%)</title><rect x="56.7442%" y="292" width="0.4651%" height="15" fill="rgb(248,47,43)" fg:x="122" fg:w="1"/><text x="56.9942%" y="302.50"></text></g><g><title>PoolAcquireContext.__aenter__ (asyncpg/pool.py:1180) (1 samples, 0.47%)</title><rect x="57.2093%" y="292" width="0.4651%" height="15" fill="rgb(221,10,30)" fg:x="123" fg:w="1"/><text x="57.4593%" y="302.50"></text></g><g><title>Pool._acquire.&lt;locals&gt;._acquire_impl (asyncpg/pool.py:996) (2 samples, 0.93%)</title><rect x="57.6744%" y="324" width="0.9302%" height="15" fill="rgb(210,229,1)" fg:x="124" fg:w="2"/><text x="57.9244%" y="334.50"></text></g><g><title>Queue.get (asyncio/queues.py:173) (2 samples, 0.93%)</title><rect x="57.6744%" y="340" width="0.9302%" height="15" fill="rgb(222,148,37)" fg:x="124" fg:w="2"/><text x="57.9244%" y="350.50"></text></g><g><title>Queue.get_nowait (asyncio/queues.py:182) (1 samples, 0.47%)</title><rect x="58.1395%" y="356" width="0.4651%" height="15" fill="rgb(234,67,33)" fg:x="125" fg:w="1"/><text x="58.3895%" y="366.50"></text></g><g><title>_PoolConnectionHolderQueue._get (asyncpg/pool.py:32) (1 samples, 0.47%)</title><rect x="58.1395%" y="372" width="0.4651%" height="15" fill="rgb(247,98,35)" fg:x="125" fg:w="1"/><text x="58.3895%" y="382.50"></text></g><g><title>PoolConnectionHolder.acquire (asyncpg/pool.py:187) (3 samples, 1.40%)</title><rect x="58.6047%" y="340" width="1.3953%" height="15" fill="rgb(247,138,52)" fg:x="126" fg:w="3"/><text x="58.8547%" y="350.50"></text></g><g><title>Pool._acquire (asyncpg/pool.py:1014) (7 samples, 3.26%)</title><rect x="57.6744%" y="308" width="3.2558%" height="15" fill="rgb(213,79,30)" fg:x="124" fg:w="7"/><text x="57.9244%" y="318.50">Poo..</text></g><g><title>Pool._acquire.&lt;locals&gt;._acquire_impl (asyncpg/pool.py:998) (5 samples, 2.33%)</title><rect x="58.6047%" y="324" width="2.3256%" height="15" fill="rgb(246,177,23)" fg:x="126" fg:w="5"/><text x="58.8547%" y="334.50">P..</text></g><g><title>PoolConnectionHolder.acquire (asyncpg/pool.py:219) (2 samples, 0.93%)</title><rect x="60.0000%" y="340" width="0.9302%" height="15" fill="rgb(230,62,27)" fg:x="129" fg:w="2"/><text x="60.2500%" y="350.50"></text></g><g><title>PoolAcquireContext.__aenter__ (asyncpg/pool.py:1182) (8 samples, 3.72%)</title><rect x="57.6744%" y="292" width="3.7209%" height="15" fill="rgb(216,154,8)" fg:x="124" fg:w="8"/><text x="57.9244%" y="302.50">Pool..</text></g><g><title>Pool._acquire (asyncpg/pool.py:994) (1 samples, 0.47%)</title><rect x="60.9302%" y="308" width="0.4651%" height="15" fill="rgb(244,35,45)" fg:x="131" fg:w="1"/><text x="61.1802%" y="318.50"></text></g><g><title>shield (asyncio/tasks.py:898) (1 samples, 0.47%)</title><rect x="61.8605%" y="324" width="0.4651%" height="15" fill="rgb(251,115,12)" fg:x="133" fg:w="1"/><text x="62.1105%" y="334.50"></text></g><g><title>ensure_future (asyncio/tasks.py:695) (1 samples, 0.47%)</title><rect x="61.8605%" y="340" width="0.4651%" height="15" fill="rgb(240,54,50)" fg:x="133" fg:w="1"/><text x="62.1105%" y="350.50"></text></g><g><title>PoolAcquireContext.__aexit__ (asyncpg/pool.py:1194) (3 samples, 1.40%)</title><rect x="61.3953%" y="292" width="1.3953%" height="15" fill="rgb(233,84,52)" fg:x="132" fg:w="3"/><text x="61.6453%" y="302.50"></text></g><g><title>Pool.release (asyncpg/pool.py:1055) (2 samples, 0.93%)</title><rect x="61.8605%" y="308" width="0.9302%" height="15" fill="rgb(207,117,47)" fg:x="133" fg:w="2"/><text x="62.1105%" y="318.50"></text></g><g><title>shield (asyncio/tasks.py:922) (1 samples, 0.47%)</title><rect x="62.3256%" y="324" width="0.4651%" height="15" fill="rgb(249,43,39)" fg:x="134" fg:w="1"/><text x="62.5756%" y="334.50"></text></g><g><title>PoolConnectionProxyMeta._wrap_connection_method.&lt;locals&gt;.call_con_method (asyncpg/pool.py:88) (1 samples, 0.47%)</title><rect x="62.7907%" y="292" width="0.4651%" height="15" fill="rgb(209,38,44)" fg:x="135" fg:w="1"/><text x="63.0407%" y="302.50"></text></g><g><title>Connection.transaction (asyncpg/connection.py:309) (1 samples, 0.47%)</title><rect x="62.7907%" y="308" width="0.4651%" height="15" fill="rgb(236,212,23)" fg:x="135" fg:w="1"/><text x="63.0407%" y="318.50"></text></g><g><title>Transaction.start (asyncpg/transaction.py:146) (11 samples, 5.12%)</title><rect x="63.2558%" y="308" width="5.1163%" height="15" fill="rgb(242,79,21)" fg:x="136" fg:w="11"/><text x="63.5058%" y="318.50">Transa..</text></g><g><title>Connection.execute (asyncpg/connection.py:377) (11 samples, 5.12%)</title><rect x="63.2558%" y="324" width="5.1163%" height="15" fill="rgb(211,96,35)" fg:x="136" fg:w="11"/><text x="63.5058%" y="334.50">Connec..</text></g><g><title>Transaction.__aenter__ (asyncpg/transaction.py:68) (12 samples, 5.58%)</title><rect x="63.2558%" y="292" width="5.5814%" height="15" fill="rgb(253,215,40)" fg:x="136" fg:w="12"/><text x="63.5058%" y="302.50">Transac..</text></g><g><title>Transaction.start (asyncpg/transaction.py:99) (1 samples, 0.47%)</title><rect x="68.3721%" y="308" width="0.4651%" height="15" fill="rgb(211,81,21)" fg:x="147" fg:w="1"/><text x="68.6221%" y="318.50"></text></g><g><title>relay_batch (services/outbox_relay/relay.py:125) (29 samples, 13.49%)</title><rect x="56.7442%" y="276" width="13.4884%" height="15" fill="rgb(208,190,38)" fg:x="122" fg:w="29"/><text x="56.9942%" y="286.50">relay_batch (service..</text></g><g><title>Transaction.__aexit__ (asyncpg/transaction.py:91) (3 samples, 1.40%)</title><rect x="68.8372%" y="292" width="1.3953%" height="15" fill="rgb(235,213,38)" fg:x="148" fg:w="3"/><text x="69.0872%" y="302.50"></text></g><g><title>Transaction.__commit (asyncpg/transaction.py:187) (3 samples, 1.40%)</title><rect x="68.8372%" y="308" width="1.3953%" height="15" fill="rgb(237,122,38)" fg:x="148" fg:w="3"/><text x="69.0872%" y="318.50"></text></g><g><title>Connection.execute (asyncpg/connection.py:377) (3 samples, 1.40%)</title><rect x="68.8372%" y="324" width="1.3953%" height="15" fill="rgb(244,218,35)" fg:x="148" fg:w="3"/><text x="69.0872%" y="334.50"></text></g><g><title>Connection.__execute (asyncpg/connection.py:1984) (1 samples, 0.47%)</title><rect x="70.2326%" y="324" width="0.4651%" height="15" fill="rgb(240,68,47)" fg:x="151" fg:w="1"/><text x="70.4826%" y="334.50"></text></g><g><title>_StatementCache.get (asyncpg/connection.py:2592) (1 samples, 0.47%)</title><rect x="70.6977%" y="372" width="0.4651%" height="15" fill="rgb(210,16,53)" fg:x="152" fg:w="1"/><text x="70.9477%" y="382.50"></text></g><g><title>Connection._do_execute (asyncpg/connection.py:2046) (2 samples, 0.93%)</title><rect x="70.6977%" y="340" width="0.9302%" height="15" fill="rgb(235,124,12)" fg:x="152" fg:w="2"/><text x="70.9477%" y="350.50"></text></g><g><title>Connection._get_statement (asyncpg/connection.py:442) (2 samples, 0.93%)</title><rect x="70.6977%" y="356" width="0.9302%" height="15" fill="rgb(224,169,11)" fg:x="152" fg:w="2"/><text x="70.9477%" y="366.50"></text></g><g><title>_StatementCache.get (asyncpg/connection.py:2596) (1 samples, 0.47%)</title><rect x="71.1628%" y="372" width="0.4651%" height="15" fill="rgb(250,166,2)" fg:x="153" fg:w="1"/><text x="71.4128%" y="382.50"></text></g><g><title>relay_batch (services/outbox_relay/relay.py:126) (12 samples, 5.58%)</title><rect x="70.2326%" y="276" width="5.5814%" height="15" fill="rgb(242,216,29)" fg:x="151" fg:w="12"/><text x="70.4826%" y="286.50">relay_b..</text></g><g><title>Connection.fetch (asyncpg/connection.py:717) (12 samples, 5.58%)</title><rect x="70.2326%" y="292" width="5.5814%" height="15" fill="rgb(230,116,27)" fg:x="151" fg:w="12"/><text x="70.4826%" y="302.50">Connect..</text></g><g><title>Connection._execute (asyncpg/connection.py:1904) (12 samples, 5.58%)</title><rect x="70.2326%" y="308" width="5.5814%" height="15" fill="rgb(228,99,48)" fg:x="151" fg:w="12"/><text x="70.4826%" y="318.50">Connect..</text></g><g><title>Connection.__execute (asyncpg/connection.py:2003) (11 samples, 5.12%)</title><rect x="70.6977%" y="324" width="5.1163%" height="15" fill="rgb(253,11,6)" fg:x="152" fg:w="11"/><text x="70.9477%" y="334.50">Connec..</text></g><g><title>Connection._do_execute (asyncpg/connection.py:2066) (9 samples, 4.19%)</title><rect x="71.6279%" y="340" width="4.1860%" height="15" fill="rgb(247,143,39)" fg:x="154" fg:w="9"/><text x="71.8779%" y="350.50">Conne..</text></g><g><title>Connection.__execute.&lt;locals&gt;.&lt;lambda&gt; (asyncpg/connection.py:1984) (1 samples, 0.47%)</title><rect x="75.3488%" y="356" width="0.4651%" height="15" fill="rgb(236,97,10)" fg:x="162" fg:w="1"/><text x="75.5988%" y="366.50"></text></g><g><title>BaseModel.model_dump_json (pydantic/main.py:587) (3 samples, 1.40%)</title><rect x="75.8140%" y="308" width="1.3953%" height="15" fill="rgb(233,208,19)" fg:x="163" fg:w="3"/><text x="76.0640%" y="318.50"></text></g><g><title>property.__get__ (enum.py:212) (1 samples, 0.47%)</title><rect x="76.7442%" y="324" width="0.4651%" height="15" fill="rgb(216,164,2)" fg:x="165" fg:w="1"/><text x="76.9942%" y="334.50"></text></g><g><title>_parse_row (services/outbox_relay/relay.py:100) (4 samples, 1.86%)</title><rect x="75.8140%" y="292" width="1.8605%" height="15" fill="rgb(220,129,5)" fg:x="163" fg:w="4"/><text x="76.0640%" y="302.50">_..</text></g><g><title>BaseModel.model_dump_json (pydantic/main.py:604) (1 samples, 0.47%)</title><rect x="77.2093%" y="308" width="0.4651%" height="15" fill="rgb(242,17,10)" fg:x="166" fg:w="1"/><text x="77.4593%" y="318.50"></text></g><g><title>BaseModel.model_validate (pydantic/main.py:748) (2 samples, 0.93%)</title><rect x="77.6744%" y="308" width="0.9302%" height="15" fill="rgb(242,107,0)" fg:x="167" fg:w="2"/><text x="77.9244%" y="318.50"></text></g><g><title>relay_batch (services/outbox_relay/relay.py:134) (15 samples, 6.98%)</title><rect x="75.8140%" y="276" width="6.9767%" height="15" fill="rgb(251,28,31)" fg:x="163" fg:w="15"/><text x="76.0640%" y="286.50">relay_bat..</text></g><g><title>_parse_row (services/outbox_relay/relay.py:99) (11 samples, 5.12%)</title><rect x="77.6744%" y="292" width="5.1163%" height="15" fill="rgb(233,223,10)" fg:x="167" fg:w="11"/><text x="77.9244%" y="302.50">_parse..</text></g><g><title>BaseModel.model_validate (pydantic/main.py:792) (9 samples, 4.19%)</title><rect x="78.6047%" y="308" width="4.1860%" height="15" fill="rgb(215,21,27)" fg:x="169" fg:w="9"/><text x="78.8547%" y="318.50">BaseM..</text></g><g><title>Connection.execute (asyncpg/connection.py:380) (2 samples, 0.93%)</title><rect x="82.7907%" y="292" width="0.9302%" height="15" fill="rgb(232,23,21)" fg:x="178" fg:w="2"/><text x="83.0407%" y="302.50"></text></g><g><title>Connection._execute (asyncpg/connection.py:1904) (2 samples, 0.93%)</title><rect x="82.7907%" y="308" width="0.9302%" height="15" fill="rgb(244,5,23)" fg:x="178" fg:w="2"/><text x="83.0407%" y="318.50"></text></g><g><title>Connection.__execute (asyncpg/connection.py:2003) (2 samples, 0.93%)</title><rect x="82.7907%" y="324" width="0.9302%" height="15" fill="rgb(226,81,46)" fg:x="178" fg:w="2"/><text x="83.0407%" y="334.50"></text></g><g><title>Connection._do_execute (asyncpg/connection.py:2066) (2 samples, 0.93%)</title><rect x="82.7907%" y="340" width="0.9302%" height="15" fill="rgb(247,70,30)" fg:x="178" fg:w="2"/><text x="83.0407%" y="350.50"></text></g><g><title>relay_batch (services/outbox_relay/relay.py:139) (3 samples, 1.40%)</title><rect x="82.7907%" y="276" width="1.3953%" height="15" fill="rgb(212,68,19)" fg:x="178" fg:w="3"/><text x="83.0407%" y="286.50"></text></g><g><title>PoolConnectionProxyMeta._wrap_connection_method.&lt;locals&gt;.call_con_method (asyncpg/pool.py:87) (1 samples, 0.47%)</title><rect x="83.7209%" y="292" width="0.4651%" height="15" fill="rgb(240,187,13)" fg:x="180" fg:w="1"/><text x="83.9709%" y="302.50"></text></g><g><title>StreamCommands.xadd (redis/commands/core.py:7056) (1 samples, 0.47%)</title><rect x="84.1860%" y="292" width="0.4651%" height="15" fill="rgb(223,113,26)" fg:x="181" fg:w="1"/><text x="84.4360%" y="302.50"></text></g><g><title>relay_batch (services/outbox_relay/relay.py:142) (2 samples, 0.93%)</title><rect x="84.1860%" y="276" width="0.9302%" height="15" fill="rgb(206,192,2)" fg:x="181" fg:w="2"/><text x="84.4360%" y="286.50"></text></g><g><title>StreamCommands.xadd (redis/commands/core.py:7058) (1 samples, 0.47%)</title><rect x="84.6512%" y="292" width="0.4651%" height="15" fill="rgb(241,108,4)" fg:x="182" fg:w="1"/><text x="84.9012%" y="302.50"></text></g><g><title>Pipeline.execute_command (redis/asyncio/client.py:1906) (1 samples, 0.47%)</title><rect x="84.6512%" y="308" width="0.4651%" height="15" fill="rgb(247,173,49)" fg:x="182" fg:w="1"/><text x="84.9012%" y="318.50"></text></g><g><title>Pipeline._execute_pipeline (redis/asyncio/client.py:2115) (1 samples, 0.47%)</title><rect x="85.1163%" y="324" width="0.4651%" height="15" fill="rgb(224,114,35)" fg:x="183" fg:w="1"/><text x="85.3663%" y="334.50"></text></g><g><title>pipeline_prepares (redis/asyncio/_himport_exec.py:216) (1 samples, 0.47%)</title><rect x="85.1163%" y="340" width="0.4651%" height="15" fill="rgb(245,159,27)" fg:x="183" fg:w="1"/><text x="85.3663%" y="350.50"></text></g><g><title>AbstractConnection.pack_command (redis/asyncio/connection.py:1348) (1 samples, 0.47%)</title><rect x="85.5814%" y="356" width="0.4651%" height="15" fill="rgb(245,172,44)" fg:x="184" fg:w="1"/><text x="85.8314%" y="366.50"></text></g><g><title>AbstractConnection.pack_command (redis/asyncio/connection.py:1357) (1 samples, 0.47%)</title><rect x="86.0465%" y="356" width="0.4651%" height="15" fill="rgb(236,23,11)" fg:x="185" fg:w="1"/><text x="86.2965%" y="366.50"></text></g><g><title>Encoder.encode (redis/_parsers/encoders.py:16) (1 samples, 0.47%)</title><rect x="86.0465%" y="372" width="0.4651%" height="15" fill="rgb(205,117,38)" fg:x="185" fg:w="1"/><text x="86.2965%" y="382.50"></text></g><g><title>Pipeline._execute_pipeline (redis/asyncio/client.py:2120) (4 samples, 1.86%)</title><rect x="85.5814%" y="324" width="1.8605%" height="15" fill="rgb(237,72,25)" fg:x="184" fg:w="4"/><text x="85.8314%" y="334.50">P..</text></g><g><title>AbstractConnection.pack_commands (redis/asyncio/connection.py:1394) (4 samples, 1.86%)</title><rect x="85.5814%" y="340" width="1.8605%" height="15" fill="rgb(244,70,9)" fg:x="184" fg:w="4"/><text x="85.8314%" y="350.50">A..</text></g><g><title>AbstractConnection.pack_command (redis/asyncio/connection.py:1373) (2 samples, 0.93%)</title><rect x="86.5116%" y="356" width="0.9302%" height="15" fill="rgb(217,125,39)" fg:x="186" fg:w="2"/><text x="86.7616%" y="366.50"></text></g><g><title>AbstractConnection.send_packed_command (redis/asyncio/connection.py:1171) (1 samples, 0.47%)</title><rect x="87.4419%" y="340" width="0.4651%" height="15" fill="rgb(235,36,10)" fg:x="188" fg:w="1"/><text x="87.6919%" y="350.50"></text></g><g><title>Pipeline._execute_pipeline (redis/asyncio/client.py:2121) (2 samples, 0.93%)</title><rect x="87.4419%" y="324" width="0.9302%" height="15" fill="rgb(251,123,47)" fg:x="188" fg:w="2"/><text x="87.6919%" y="334.50"></text></g><g><title>AbstractConnection.send_packed_command (redis/asyncio/connection.py:1185) (1 samples, 0.47%)</title><rect x="87.9070%" y="340" width="0.4651%" height="15" fill="rgb(221,13,13)" fg:x="189" fg:w="1"/><text x="88.1570%" y="350.50"></text></g><g><title>wait_for (asyncio/tasks.py:520) (1 samples, 0.47%)</title><rect x="87.9070%" y="356" width="0.4651%" height="15" fill="rgb(238,131,9)" fg:x="189" fg:w="1"/><text x="88.1570%" y="366.50"></text></g><g><title>AbstractConnection._send_packed_command (redis/asyncio/connection.py:1168) (1 samples, 0.47%)</title><rect x="87.9070%" y="372" width="0.4651%" height="15" fill="rgb(211,50,8)" fg:x="189" fg:w="1"/><text x="88.1570%" y="382.50"></text></g><g><title>StreamWriter.writelines (asyncio/streams.py:349) (1 samples, 0.47%)</title><rect x="87.9070%" y="388" width="0.4651%" height="15" fill="rgb(245,182,24)" fg:x="189" fg:w="1"/><text x="88.1570%" y="398.50"></text></g><g><title>Redis.parse_response (redis/asyncio/client.py:1005) (1 samples, 0.47%)</title><rect x="88.8372%" y="356" width="0.4651%" height="15" fill="rgb(242,14,37)" fg:x="191" fg:w="1"/><text x="89.0872%" y="366.50"></text></g><g><title>CaseInsensitiveDict.__contains__ (redis/client.py:133) (1 samples, 0.47%)</title><rect x="88.8372%" y="372" width="0.4651%" height="15" fill="rgb(246,228,12)" fg:x="191" fg:w="1"/><text x="89.0872%" y="382.50"></text></g><g><title>AbstractConnection.read_response (redis/asyncio/connection.py:1278) (1 samples, 0.47%)</title><rect x="89.3023%" y="372" width="0.4651%" height="15" fill="rgb(213,55,15)" fg:x="192" fg:w="1"/><text x="89.5523%" y="382.50"></text></g><g><title>Connection._host_error (redis/asyncio/connection.py:1509) (1 samples, 0.47%)</title><rect x="89.3023%" y="388" width="0.4651%" height="15" fill="rgb(209,9,3)" fg:x="192" fg:w="1"/><text x="89.5523%" y="398.50"></text></g><g><title>AbstractConnection.read_response (redis/asyncio/connection.py:1283) (4 samples, 1.86%)</title><rect x="89.7674%" y="372" width="1.8605%" height="15" fill="rgb(230,59,30)" fg:x="193" fg:w="4"/><text x="90.0174%" y="382.50">A..</text></g><g><title>Timeout.__aenter__ (asyncio/timeouts.py:94) (2 samples, 0.93%)</title><rect x="90.6977%" y="388" width="0.9302%" height="15" fill="rgb(209,121,21)" fg:x="195" fg:w="2"/><text x="90.9477%" y="398.50"></text></g><g><title>Timeout.reschedule (asyncio/timeouts.py:71) (2 samples, 0.93%)</title><rect x="90.6977%" y="404" width="0.9302%" height="15" fill="rgb(220,109,13)" fg:x="195" fg:w="2"/><text x="90.9477%" y="414.50"></text></g><g><title>_AsyncRESP3Parser._read_response (redis/_parsers/resp3.py:195) (1 samples, 0.47%)</title><rect x="91.6279%" y="420" width="0.4651%" height="15" fill="rgb(232,18,1)" fg:x="197" fg:w="1"/><text x="91.8779%" y="430.50"></text></g><g><title>_AsyncRESPBase._readline (redis/_parsers/base.py:588) (1 samples, 0.47%)</title><rect x="92.0930%" y="436" width="0.4651%" height="15" fill="rgb(215,41,42)" fg:x="198" fg:w="1"/><text x="92.3430%" y="446.50"></text></g><g><title>relay_batch (services/outbox_relay/relay.py:156) (17 samples, 7.91%)</title><rect x="85.1163%" y="276" width="7.9070%" height="15" fill="rgb(224,123,36)" fg:x="183" fg:w="17"/><text x="85.3663%" y="286.50">relay_batch..</text></g><g><title>Pipeline.execute (redis/asyncio/client.py:2262) (17 samples, 7.91%)</title><rect x="85.1163%" y="292" width="7.9070%" height="15" fill="rgb(240,125,3)" fg:x="183" fg:w="17"/><text x="85.3663%" y="302.50">Pipeline.ex..</text></g><g><title>Retry.call_with_retry (redis/asyncio/retry.py:69) (17 samples, 7.91%)</title><rect x="85.1163%" y="308" width="7.9070%" height="15" fill="rgb(205,98,50)" fg:x="183" fg:w="17"/><text x="85.3663%" y="318.50">Retry.call_..</text></g><g><title>Pipeline._execute_pipeline (redis/asyncio/client.py:2134) (10 samples, 4.65%)</title><rect x="88.3721%" y="324" width="4.6512%" height="15" fill="rgb(205,185,37)" fg:x="190" fg:w="10"/><text x="88.6221%" y="334.50">Pipel..</text></g><g><title>Pipeline.parse_response (redis/asyncio/client.py:2167) (10 samples, 4.65%)</title><rect x="88.3721%" y="340" width="4.6512%" height="15" fill="rgb(238,207,15)" fg:x="190" fg:w="10"/><text x="88.6221%" y="350.50">Pipel..</text></g><g><title>Redis.parse_response (redis/asyncio/client.py:993) (8 samples, 3.72%)</title><rect x="89.3023%" y="356" width="3.7209%" height="15" fill="rgb(213,199,42)" fg:x="192" fg:w="8"/><text x="89.5523%" y="366.50">Redi..</text></g><g><title>AbstractConnection.read_response (redis/asyncio/connection.py:1286) (3 samples, 1.40%)</title><rect x="91.6279%" y="372" width="1.3953%" height="15" fill="rgb(235,201,11)" fg:x="197" fg:w="3"/><text x="91.8779%" y="382.50"></text></g><g><title>AbstractConnection._read_response_from_parser (redis/asyncio/connection.py:1335) (3 samples, 1.40%)</title><rect x="91.6279%" y="388" width="1.3953%" height="15" fill="rgb(207,46,11)" fg:x="197" fg:w="3"/><text x="91.8779%" y="398.50"></text></g><g><title>_AsyncRESP3Parser.read_response (redis/_parsers/resp3.py:185) (3 samples, 1.40%)</title><rect x="91.6279%" y="404" width="1.3953%" height="15" fill="rgb(241,35,35)" fg:x="197" fg:w="3"/><text x="91.8779%" y="414.50"></text></g><g><title>_AsyncRESP3Parser._read_response (redis/_parsers/resp3.py:197) (2 samples, 0.93%)</title><rect x="92.0930%" y="420" width="0.9302%" height="15" fill="rgb(243,32,47)" fg:x="198" fg:w="2"/><text x="92.3430%" y="430.50"></text></g><g><title>_AsyncRESPBase._readline (redis/_parsers/base.py:590) (1 samples, 0.47%)</title><rect x="92.5581%" y="436" width="0.4651%" height="15" fill="rgb(247,202,23)" fg:x="199" fg:w="1"/><text x="92.8081%" y="446.50"></text></g><g><title>relay_batch (services/outbox_relay/relay.py:157) (2 samples, 0.93%)</title><rect x="93.0233%" y="276" width="0.9302%" height="15" fill="rgb(219,102,11)" fg:x="200" fg:w="2"/><text x="93.2733%" y="286.50"></text></g><g><title>Connection.execute (asyncpg/connection.py:387) (1 samples, 0.47%)</title><rect x="93.4884%" y="292" width="0.4651%" height="15" fill="rgb(243,110,44)" fg:x="201" fg:w="1"/><text x="93.7384%" y="302.50"></text></g><g><title>Counter.inc (prometheus_client/metrics.py:340) (1 samples, 0.47%)</title><rect x="94.4186%" y="308" width="0.4651%" height="15" fill="rgb(222,74,54)" fg:x="203" fg:w="1"/><text x="94.6686%" y="318.50"></text></g><g><title>_record_batch_metrics (services/outbox_relay/relay.py:177) (3 samples, 1.40%)</title><rect x="93.9535%" y="292" width="1.3953%" height="15" fill="rgb(216,99,12)" fg:x="202" fg:w="3"/><text x="94.2035%" y="302.50"></text></g><g><title>Counter.inc (prometheus_client/metrics.py:342) (1 samples, 0.47%)</title><rect x="94.8837%" y="308" width="0.4651%" height="15" fill="rgb(226,22,26)" fg:x="204" fg:w="1"/><text x="95.1337%" y="318.50"></text></g><g><title>MutexValue.inc (prometheus_client/values.py:28) (1 samples, 0.47%)</title><rect x="94.8837%" y="324" width="0.4651%" height="15" fill="rgb(217,163,10)" fg:x="204" fg:w="1"/><text x="95.1337%" y="334.50"></text></g><g><title>run_relay (services/outbox_relay/relay.py:201) (88 samples, 40.93%)</title><rect x="54.8837%" y="244" width="40.9302%" height="15" fill="rgb(213,25,53)" fg:x="118" fg:w="88"/><text x="55.1337%" y="254.50">run_relay (services/outbox_relay/relay.py:201)</text></g><g><title>wait_for (asyncio/tasks.py:520) (87 samples, 40.47%)</title><rect x="55.3488%" y="260" width="40.4651%" height="15" fill="rgb(252,105,26)" fg:x="119" fg:w="87"/><text x="55.5988%" y="270.50">wait_for (asyncio/tasks.py:520)</text></g><g><title>relay_batch (services/outbox_relay/relay.py:159) (4 samples, 1.86%)</title><rect x="93.9535%" y="276" width="1.8605%" height="15" fill="rgb(220,39,43)" fg:x="202" fg:w="4"/><text x="94.2035%" y="286.50">r..</text></g><g><title>_record_batch_metrics (services/outbox_relay/relay.py:180) (1 samples, 0.47%)</title><rect x="95.3488%" y="292" width="0.4651%" height="15" fill="rgb(229,68,48)" fg:x="205" fg:w="1"/><text x="95.5988%" y="302.50"></text></g><g><title>Histogram.observe (prometheus_client/metrics.py:679) (1 samples, 0.47%)</title><rect x="95.3488%" y="308" width="0.4651%" height="15" fill="rgb(252,8,32)" fg:x="205" fg:w="1"/><text x="95.5988%" y="318.50"></text></g><g><title>Redis.execute_command (redis/asyncio/client.py:926) (2 samples, 0.93%)</title><rect x="95.8140%" y="276" width="0.9302%" height="15" fill="rgb(223,20,43)" fg:x="206" fg:w="2"/><text x="96.0640%" y="286.50"></text></g><g><title>Redis.initialize (redis/asyncio/client.py:526) (2 samples, 0.93%)</title><rect x="95.8140%" y="292" width="0.9302%" height="15" fill="rgb(229,81,49)" fg:x="206" fg:w="2"/><text x="96.0640%" y="302.50"></text></g><g><title>ConnectionPool.get_connection (redis/asyncio/connection.py:2788) (1 samples, 0.47%)</title><rect x="96.7442%" y="308" width="0.4651%" height="15" fill="rgb(236,28,36)" fg:x="208" fg:w="1"/><text x="96.9942%" y="318.50"></text></g><g><title>_ContextManagerMixin.__aenter__ (asyncio/locks.py:14) (1 samples, 0.47%)</title><rect x="96.7442%" y="324" width="0.4651%" height="15" fill="rgb(249,185,26)" fg:x="208" fg:w="1"/><text x="96.9942%" y="334.50"></text></g><g><title>Redis.execute_command (redis/asyncio/client.py:929) (2 samples, 0.93%)</title><rect x="96.7442%" y="276" width="0.9302%" height="15" fill="rgb(249,174,33)" fg:x="208" fg:w="2"/><text x="96.9942%" y="286.50"></text></g><g><title>deprecated_args.&lt;locals&gt;.decorator.&lt;locals&gt;.async_wrapper (redis/utils.py:249) (2 samples, 0.93%)</title><rect x="96.7442%" y="292" width="0.9302%" height="15" fill="rgb(233,201,37)" fg:x="208" fg:w="2"/><text x="96.9942%" y="302.50"></text></g><g><title>ConnectionPool.get_connection (redis/asyncio/connection.py:2811) (1 samples, 0.47%)</title><rect x="97.2093%" y="308" width="0.4651%" height="15" fill="rgb(221,78,26)" fg:x="209" fg:w="1"/><text x="97.4593%" y="318.50"></text></g><g><title>record_connection_count (redis/asyncio/observability/recorder.py:185) (1 samples, 0.47%)</title><rect x="97.2093%" y="324" width="0.4651%" height="15" fill="rgb(250,127,30)" fg:x="209" fg:w="1"/><text x="97.4593%" y="334.50"></text></g><g><title>_get_or_create_collector (redis/asyncio/observability/recorder.py:60) (1 samples, 0.47%)</title><rect x="97.2093%" y="340" width="0.4651%" height="15" fill="rgb(230,49,44)" fg:x="209" fg:w="1"/><text x="97.4593%" y="350.50"></text></g><g><title>Redis.execute_command (redis/asyncio/client.py:936) (1 samples, 0.47%)</title><rect x="97.6744%" y="276" width="0.4651%" height="15" fill="rgb(229,67,23)" fg:x="210" fg:w="1"/><text x="97.9244%" y="286.50"></text></g><g><title>Redis._send_command_parse_response (redis/asyncio/client.py:861) (1 samples, 0.47%)</title><rect x="98.1395%" y="308" width="0.4651%" height="15" fill="rgb(249,83,47)" fg:x="211" fg:w="1"/><text x="98.3895%" y="318.50"></text></g><g><title>parse_himport_set_args (redis/himport.py:140) (1 samples, 0.47%)</title><rect x="98.1395%" y="324" width="0.4651%" height="15" fill="rgb(215,43,3)" fg:x="211" fg:w="1"/><text x="98.3895%" y="334.50"></text></g><g><title>AbstractConnection.send_packed_command (redis/asyncio/connection.py:1177) (1 samples, 0.47%)</title><rect x="98.6047%" y="340" width="0.4651%" height="15" fill="rgb(238,154,13)" fg:x="212" fg:w="1"/><text x="98.8547%" y="350.50"></text></g><g><title>AbstractConnection.check_health (redis/asyncio/connection.py:1161) (1 samples, 0.47%)</title><rect x="98.6047%" y="356" width="0.4651%" height="15" fill="rgb(219,56,2)" fg:x="212" fg:w="1"/><text x="98.8547%" y="366.50"></text></g><g><title>run_stream_lag_collector (alerting_core/metrics.py:128) (8 samples, 3.72%)</title><rect x="95.8140%" y="244" width="3.7209%" height="15" fill="rgb(233,0,4)" fg:x="206" fg:w="8"/><text x="96.0640%" y="254.50">run_..</text></g><g><title>update_stream_lag (alerting_core/metrics.py:117) (8 samples, 3.72%)</title><rect x="95.8140%" y="260" width="3.7209%" height="15" fill="rgb(235,30,7)" fg:x="206" fg:w="8"/><text x="96.0640%" y="270.50">upda..</text></g><g><title>Redis.execute_command (redis/asyncio/client.py:946) (3 samples, 1.40%)</title><rect x="98.1395%" y="276" width="1.3953%" height="15" fill="rgb(250,79,13)" fg:x="211" fg:w="3"/><text x="98.3895%" y="286.50"></text></g><g><title>Retry.call_with_retry (redis/asyncio/retry.py:69) (3 samples, 1.40%)</title><rect x="98.1395%" y="292" width="1.3953%" height="15" fill="rgb(211,146,34)" fg:x="211" fg:w="3"/><text x="98.3895%" y="302.50"></text></g><g><title>Redis._send_command_parse_response (redis/asyncio/client.py:870) (2 samples, 0.93%)</title><rect x="98.6047%" y="308" width="0.9302%" height="15" fill="rgb(228,22,38)" fg:x="212" fg:w="2"/><text x="98.8547%" y="318.50"></text></g><g><title>AbstractConnection.send_command (redis/asyncio/connection.py:1214) (2 samples, 0.93%)</title><rect x="98.6047%" y="324" width="0.9302%" height="15" fill="rgb(235,168,5)" fg:x="212" fg:w="2"/><text x="98.8547%" y="334.50"></text></g><g><title>AbstractConnection.send_packed_command (redis/asyncio/connection.py:1185) (1 samples, 0.47%)</title><rect x="99.0698%" y="340" width="0.4651%" height="15" fill="rgb(221,155,16)" fg:x="213" fg:w="1"/><text x="99.3198%" y="350.50"></text></g><g><title>wait_for (asyncio/tasks.py:520) (1 samples, 0.47%)</title><rect x="99.0698%" y="356" width="0.4651%" height="15" fill="rgb(215,215,53)" fg:x="213" fg:w="1"/><text x="99.3198%" y="366.50"></text></g><g><title>AbstractConnection._send_packed_command (redis/asyncio/connection.py:1168) (1 samples, 0.47%)</title><rect x="99.0698%" y="372" width="0.4651%" height="15" fill="rgb(223,4,10)" fg:x="213" fg:w="1"/><text x="99.3198%" y="382.50"></text></g><g><title>StreamWriter.writelines (asyncio/streams.py:349) (1 samples, 0.47%)</title><rect x="99.0698%" y="388" width="0.4651%" height="15" fill="rgb(234,103,6)" fg:x="213" fg:w="1"/><text x="99.3198%" y="398.50"></text></g><g><title>all (215 samples, 100%)</title><rect x="0.0000%" y="52" width="100.0000%" height="15" fill="rgb(227,97,0)" fg:x="0" fg:w="215"/><text x="0.2500%" y="62.50"></text></g><g><title>process 1:&quot;/app/.venv/bin/python /app/.venv/bin/uvicorn services.outbox_relay.main:app --host 0.0.0.0 --port 9102&quot; (215 samples, 100.00%)</title><rect x="0.0000%" y="68" width="100.0000%" height="15" fill="rgb(234,150,53)" fg:x="0" fg:w="215"/><text x="0.2500%" y="78.50">process 1:&quot;/app/.venv/bin/python /app/.venv/bin/uvicorn services.outbox_relay.main:app --host 0.0.0.0 --port 9102&quot;</text></g><g><title>&lt;module&gt; (uvicorn:10) (215 samples, 100.00%)</title><rect x="0.0000%" y="84" width="100.0000%" height="15" fill="rgb(228,201,54)" fg:x="0" fg:w="215"/><text x="0.2500%" y="94.50">&lt;module&gt; (uvicorn:10)</text></g><g><title>Command.__call__ (click/core.py:1653) (215 samples, 100.00%)</title><rect x="0.0000%" y="100" width="100.0000%" height="15" fill="rgb(222,22,37)" fg:x="0" fg:w="215"/><text x="0.2500%" y="110.50">Command.__call__ (click/core.py:1653)</text></g><g><title>Command.main (click/core.py:1560) (215 samples, 100.00%)</title><rect x="0.0000%" y="116" width="100.0000%" height="15" fill="rgb(237,53,32)" fg:x="0" fg:w="215"/><text x="0.2500%" y="126.50">Command.main (click/core.py:1560)</text></g><g><title>Command.invoke (click/core.py:1414) (215 samples, 100.00%)</title><rect x="0.0000%" y="132" width="100.0000%" height="15" fill="rgb(233,25,53)" fg:x="0" fg:w="215"/><text x="0.2500%" y="142.50">Command.invoke (click/core.py:1414)</text></g><g><title>Context.invoke (click/core.py:911) (215 samples, 100.00%)</title><rect x="0.0000%" y="148" width="100.0000%" height="15" fill="rgb(210,40,34)" fg:x="0" fg:w="215"/><text x="0.2500%" y="158.50">Context.invoke (click/core.py:911)</text></g><g><title>main (uvicorn/main.py:448) (215 samples, 100.00%)</title><rect x="0.0000%" y="164" width="100.0000%" height="15" fill="rgb(241,220,44)" fg:x="0" fg:w="215"/><text x="0.2500%" y="174.50">main (uvicorn/main.py:448)</text></g><g><title>run (uvicorn/main.py:632) (215 samples, 100.00%)</title><rect x="0.0000%" y="180" width="100.0000%" height="15" fill="rgb(235,28,35)" fg:x="0" fg:w="215"/><text x="0.2500%" y="190.50">run (uvicorn/main.py:632)</text></g><g><title>Server.run (uvicorn/server.py:86) (215 samples, 100.00%)</title><rect x="0.0000%" y="196" width="100.0000%" height="15" fill="rgb(210,56,17)" fg:x="0" fg:w="215"/><text x="0.2500%" y="206.50">Server.run (uvicorn/server.py:86)</text></g><g><title>run (asyncio/runners.py:195) (215 samples, 100.00%)</title><rect x="0.0000%" y="212" width="100.0000%" height="15" fill="rgb(224,130,29)" fg:x="0" fg:w="215"/><text x="0.2500%" y="222.50">run (asyncio/runners.py:195)</text></g><g><title>Runner.run (asyncio/runners.py:118) (215 samples, 100.00%)</title><rect x="0.0000%" y="228" width="100.0000%" height="15" fill="rgb(235,212,8)" fg:x="0" fg:w="215"/><text x="0.2500%" y="238.50">Runner.run (asyncio/runners.py:118)</text></g><g><title>run_stream_lag_collector (alerting_core/metrics.py:131) (1 samples, 0.47%)</title><rect x="99.5349%" y="244" width="0.4651%" height="15" fill="rgb(223,33,50)" fg:x="214" fg:w="1"/><text x="99.7849%" y="254.50"></text></g></svg></svg>

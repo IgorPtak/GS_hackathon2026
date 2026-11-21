@@ -8,6 +8,9 @@ Flexible Alerting & Notification Service ingests events from HTTP webhooks (incl
 Webhook / Alertmanager / Log tail
         │
         ▼
+  proxy (nginx :8000 / :8001 ──▶ api / ingest replicas)
+        │
+        ▼
   ingest (FastAPI) ──▶ Redis Streams: events
                               │
                               ▼
@@ -36,6 +39,12 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+Scale stateless HTTP and worker services behind `proxy` (`nginx`):
+
+```bash
+docker compose up -d --scale processor=4 --scale delivery=4 --scale ingest=3 --scale api=2
+```
+
 To also start a local Ollama container (optional, off by default):
 
 ```bash
@@ -55,9 +64,9 @@ Cumulative gates `{3h,7h,11h,14h}` are supported (`make smoke GATE=14h`). For th
 | Service | URL | Purpose |
 |---|---|---|
 | Web UI | http://localhost:5173 | Alerting console (live feed, rules, runbooks, approvals, schemas, phone simulator, metrics) |
-| API | http://localhost:8000 | REST + SSE API for the UI |
+| API (`proxy`) | http://localhost:8000 | REST + SSE API served by `proxy` (nginx) across `api` replicas |
 | API docs | http://localhost:8000/docs | Interactive OpenAPI (Swagger) reference |
-| Ingest | http://localhost:8001 | HTTP event ingestion (`POST /api/v1/ingest/{source_id}` and `/batch`) |
+| Ingest (`proxy`) | http://localhost:8001 | HTTP event ingestion (`POST /api/v1/ingest/{source_id}` and `/batch`) served by `proxy` across `ingest` replicas |
 | Mailpit | http://localhost:8025 | Local SMTP inbox capturing all `email` channel deliveries |
 | Grafana | http://localhost:3000 | Provisioned **Alerting** dashboard (msg/s, stream lag, p50/p95/p99 latency, retries, DLQ) |
 | Prometheus | http://localhost:9090 | Metrics store scraping all service replicas via Compose DNS |
@@ -89,35 +98,27 @@ There is no authentication; pick a team (`Team Rates`, `Team Settlements`, `Team
 
 ## Load-test results
 
-Full methodology, raw result files, and observations are in [docs/load-test-results.md](docs/load-test-results.md).
+Full methodology, historical baselines, and raw result references are in [docs/load-test-results.md](docs/load-test-results.md); detailed per-benchmark tables, Postgres per-stage latency, backend query profiles, and interactive `py-spy` CPU flame graphs are in [docs/benchmarks.md](docs/benchmarks.md).
 
-Headline (after the A-24 fixes: relay polls every 50 ms, 2 delivery replicas): **≥ 350 msg/s
-sustained with p50 56 ms / p99 163 ms end to end, and 0 lost alerts in every scenario**, including
-a 60 s gateway outage and killing workers mid-load. The limit on this laptop is now ingest, not the
-pipeline.
+Headline (measured **2026-11-21**, commit `15dbce7`, Apple M4 10 cores / 16 GB RAM, Docker Desktop VM 10 CPUs / 7.75 GiB RAM): **800.0 msg/s sustained (1,600 deliveries/s) with p50 416.9 ms / p99 1,000.7 ms (`2:2:2:1` behind `proxy`), peak 983.8 msg/s (`1:2:1:1`), steady 200 msg/s at p50 41.1 ms / p99 83.8 ms, and 0 lost alerts across every scenario**, including a 60 s gateway outage, `docker kill` of a processor mid-load, and a 120 s soak test.
 
-Measured on Apple M4 (10 cores, 16 GB RAM, Docker Desktop VM: 10 CPUs, 7.7 GB RAM), `ingest` with 2
-uvicorn workers:
+| Scenario | Target msg/s | Config (`p:d:i:r`) | Sent | Delivered | Lost | p50 | p99 | Achieved msg/s |
+|---|---:|---|---:|---:|---:|---:|---:|---:|
+| Steady 60 s (host → `proxy:8001`) | 200 | `1:2:1:1` | 12,000 | 24,000 / 24,000 | **0** | **41.1 ms** | **83.8 ms** | 200.0 |
+| Soak 120 s (in-network) | 250 | `1:2:1:1` | 30,000 | 60,000 / 60,000 | **0** | **43.2 ms** | **461.3 ms** | 250.0 |
+| Dup storm | 1,000 | `1:2:1:1` | 5,000 | 2 / 2 (1 alert, count 5,000) | **0** | n/a | n/a | 781.7 |
+| Gateway down (60 s SMS outage) | 100 | `1:2:1:1` | 9,000 | 18,000 / 18,000 | **0** | 57.2 ms (`ui` 38.5 ms) | 68.6 s (`sms` 69.4 s) | 100.0 |
+| Kill processor (`docker kill`) | 200 | `2:2:1:1` → `1` | 12,000 | 24,000 / 24,000 | **0** | **40.6 ms** | **134.9 ms** | 200.0 |
 
-| Scenario | Target msg/s | Processor / delivery | Sent | Delivered | Lost | p50 | p99 |
-|---|---|---|---|---|---|---|---|
-| Steady 30 s (after A-24) | 350 | 1 / 2 | — | — | **0** | **56 ms** | **163 ms** |
-| Steady 60 s (before A-24) | 200 | 1 / 1 | 12,000 | 24,000 / 24,000 | **0** | 373 ms | 572 ms |
-| Dup storm | 1,000 (5,000 events) | 1 / 1 | 5,000 | 2 / 2 (1 alert, count 5,000) | **0** | n/a | n/a |
-| Gateway down (60 s outage) | 100 | 1 / 1 | 9,000 | 18,000 / 18,000 | **0** | 1,327 ms | 69.4 s |
-| Kill processor (`docker kill`) | 200 | 2 / 1 | 12,000 | 24,000 / 24,000 | **0** | 405 ms | 1,131 ms |
+Horizontal scale sweep behind `proxy:8001` (`final-r500`, `final-r800`, `final-r1100`, 30 s/step, 0 lost in every cell): `2:2:2:1` sustains **500.0 msg/s** (p99 **353.2 ms**) and **800.0 msg/s** (p99 **1,000.7 ms**, max `events` lag `9`), while `4:4:3:2` eliminates delivery-stage lag (360.7 ms delivery p99) before saturating the shared 10-vCPU VM at ingest (628.2 msg/s at target 800, 608.7 msg/s at target 1,100); `1:2:1:1` peaks at **983.8 msg/s** under a 1,100 msg/s target. Replacing Redis `SCAN` in the orphan fold sweeper with `dedup-count-index` eliminated `SCAN` (**0** calls across the 72k-event 800 msg/s sweep vs 9.6 s/30 s before, dropping Redis CPU from 94% to 24.4%).
 
-Saturation sweep (1/2/4 processors, 20 s per step, `delivery=1`, sustainable = `events` drained within 5 s, p99 < 2 s, lost = 0), measured **before the A-24 fixes**: max sustainable throughput is **250 msg/s** with p99 dropping from **1276 ms** (1 processor) to **858 ms** (2 processors) to **621 ms** (4 processors), with **0 lost** in every run.
-
-After the A-24 fixes (`outbox-relay` polls every 50 ms, `delivery` runs 2 replicas), the max sustainable rate is **≥ 350 msg/s**: at 350 msg/s p50 was **56 ms**, p99 **163 ms**, lost **0**. An in-network generator run at **500 msg/s** reached p50 **81.8 ms**, p99 **1917.9 ms** (about 1.9 s), lost **0**. The ~420 msg/s plateau seen with the host generator is the host-to-VM path, not the pipeline.
-
-Recovery integration tests (A-23): 200 SMS sent through a gateway outage are all delivered, and
-`docker kill` of one of two delivery workers loses and duplicates nothing.
+Recovery integration tests (`uv run pytest -m integration tests/integration -q`): 200 SMS sent through a gateway outage are all delivered, and `docker kill` of one of two delivery workers loses and duplicates nothing.
 
 Reproduce with:
 
 ```bash
 uv run python loadtest/scenarios.py steady --duration 60
+uv run python loadtest/soak_and_scale.py --mode scale --rate 800 --duration 30 --pairs "1:2:1:1,2:2:2:1,4:4:3:2" --label final-r800
 ```
 
 ## How we used AI
@@ -129,8 +130,7 @@ uv run python loadtest/scenarios.py steady --duration 60
 ## Known limitations
 
 - **Redis is a single point of failure** in this single-node Compose deployment (it holds the `events` / `deliveries` / `runbook-jobs` streams, dedup keys, group buffers, and pub/sub). In production, run Redis Sentinel or Redis Cluster, or replace the stream transport with Kafka or Redpanda partitioned by alert `fingerprint` (so dedup for a given alert stays on one processor partition), and add a Postgres standby replica.
-- **At-least-once plugin side effects on a crash:** Delivery workers guard sends with `delivery-done:<id>` and the runbook runner records `(alert_id, step_index, attempt)` in Postgres, so normal retries are idempotent; however, if a worker crashes after an external channel or action call succeeds but before its completion is recorded, the redelivered job can repeat the side effect.
-- **Fixed host ports on `api` and `ingest`:** both publish fixed ports (8000 and 8001), so `--scale` applies only to `processor`, `outbox-relay` and `delivery`.
+- **At-least-once plugin side effects on a crash:** Delivery workers guard sends with `delivery-done:<id>` (24 h TTL) and the runbook runner records `(alert_id, step_index, attempt)` in Postgres, so normal retries are idempotent; however, if a worker crashes after an external channel or action call succeeds but before its completion is recorded, the redelivered job can repeat the side effect.
 - **`events` retention waits for the slowest group:** `events` is trimmed only below the oldest position any consumer group still needs, so an abandoned consumer group makes the stream grow without bound.
 - **No authentication:** Team selection is a UI dropdown by design for the demo.
 
@@ -139,8 +139,8 @@ uv run python loadtest/scenarios.py steady --duration 60
 ```text
 config/         Runtime YAML configuration (sources, schemas, rules, recipients, teams, channels, runbooks, actions)
 contracts/      Shared Pydantic models, OpenAPI spec, generated JSON Schemas, and event fixtures
-deploy/         Dockerfiles, Postgres migrations, Prometheus config, and provisioned Grafana dashboard
-docs/           Architecture plan, domain glossary, implementation plan, demo script, and load-test results
+deploy/         Dockerfiles, nginx proxy config, Postgres migrations, Prometheus config, and Grafana dashboard
+docs/           Architecture plan, domain glossary, demo script, load-test results, benchmarks, and flame graphs (`docs/profiles/`)
 loadtest/       Synthetic event generator and end-to-end load-test scenarios
 packages/       Shared Python library (`alerting_core`: config, events, rules, dedup, grouping, routing, runbooks, llm)
 plugins/        Pluggable sources, channels, actions, and runbook format normalizers

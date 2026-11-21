@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="470" viewBox="0 0 920 470" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif">
+<rect width="920" height="470" fill="#ffffff" rx="8"/>
+<text x="460" y="32" text-anchor="middle" font-size="18" font-weight="700" fill="#111827">Horizontal Scaling Sweep (proc:del:ing:relay behind nginx proxy)</text>
+<text x="460" y="53" text-anchor="middle" font-size="12" fill="#4b5563">In-network open-loop load, 30 s per step, Apple M4 10 vCPU / 7.7 GiB Docker VM — zero lost alerts in every cell</text>
+<line x1="80" y1="365.0" x2="870" y2="365.0" stroke="#e5e7eb" stroke-width="1"/>
+<text x="70" y="369.0" text-anchor="end" font-size="11" fill="#4b5563">0</text>
+<line x1="80" y1="304.6" x2="870" y2="304.6" stroke="#e5e7eb" stroke-width="1"/>
+<text x="70" y="308.6" text-anchor="end" font-size="11" fill="#4b5563">250</text>
+<line x1="80" y1="244.2" x2="870" y2="244.2" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4,4"/>
+<text x="70" y="248.2" text-anchor="end" font-size="11" fill="#4b5563">500</text>
+<line x1="80" y1="171.7" x2="870" y2="171.7" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4,4"/>
+<text x="70" y="175.7" text-anchor="end" font-size="11" fill="#4b5563">800</text>
+<line x1="80" y1="99.2" x2="870" y2="99.2" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4,4"/>
+<text x="70" y="103.2" text-anchor="end" font-size="11" fill="#4b5563">1100</text>
+<line x1="80" y1="75" x2="80" y2="365" stroke="#9ca3af" stroke-width="1.2"/>
+<line x1="80" y1="365" x2="870" y2="365" stroke="#9ca3af" stroke-width="1.2"/>
+<text x="24" y="220.0" text-anchor="middle" font-size="12" fill="#374151" transform="rotate(-90 24 220.0)">Achieved Ingest (msg/s)</text>
+<text x="211.7" y="389" text-anchor="middle" font-size="13" font-weight="700" fill="#111827">Target 500 msg/s</text>
+<rect x="111.7" y="244.2" width="56" height="120.8" rx="4" fill="#2563eb"/>
+<text x="139.7" y="224.2" text-anchor="middle" font-size="11" font-weight="700" fill="#111827">500.0/s</text>
+<text x="139.7" y="237.2" text-anchor="middle" font-size="10" fill="#4b5563">p99 406ms</text>
+<text x="139.7" y="405" text-anchor="middle" font-size="10" fill="#6b7280">p50 59ms</text>
+<rect x="183.7" y="244.2" width="56" height="120.8" rx="4" fill="#059669"/>
+<text x="211.7" y="224.2" text-anchor="middle" font-size="11" font-weight="700" fill="#111827">500.0/s</text>
+<text x="211.7" y="237.2" text-anchor="middle" font-size="10" fill="#4b5563">p99 353ms</text>
+<text x="211.7" y="405" text-anchor="middle" font-size="10" fill="#6b7280">p50 62ms</text>
+<rect x="255.7" y="244.2" width="56" height="120.8" rx="4" fill="#d97706"/>
+<text x="283.7" y="224.2" text-anchor="middle" font-size="11" font-weight="700" fill="#111827">500.0/s</text>
+<text x="283.7" y="237.2" text-anchor="middle" font-size="10" fill="#4b5563">p99 413ms</text>
+<text x="283.7" y="405" text-anchor="middle" font-size="10" fill="#6b7280">p50 83ms</text>
+<text x="475.0" y="389" text-anchor="middle" font-size="13" font-weight="700" fill="#111827">Target 800 msg/s</text>
+<rect x="375.0" y="171.7" width="56" height="193.3" rx="4" fill="#2563eb"/>
+<text x="403.0" y="151.7" text-anchor="middle" font-size="11" font-weight="700" fill="#111827">800.0/s</text>
+<text x="403.0" y="164.7" text-anchor="middle" font-size="10" fill="#4b5563">p99 1.66s</text>
+<text x="403.0" y="405" text-anchor="middle" font-size="10" fill="#6b7280">p50 659ms</text>
+<rect x="447.0" y="171.7" width="56" height="193.3" rx="4" fill="#059669"/>
+<text x="475.0" y="151.7" text-anchor="middle" font-size="11" font-weight="700" fill="#111827">800.0/s</text>
+<text x="475.0" y="164.7" text-anchor="middle" font-size="10" fill="#4b5563">p99 1.00s</text>
+<text x="475.0" y="405" text-anchor="middle" font-size="10" fill="#6b7280">p50 417ms</text>
+<rect x="519.0" y="213.2" width="56" height="151.8" rx="4" fill="#d97706"/>
+<text x="547.0" y="193.2" text-anchor="middle" font-size="11" font-weight="700" fill="#111827">628.2/s</text>
+<text x="547.0" y="206.2" text-anchor="middle" font-size="10" fill="#4b5563">p99 8.16s</text>
+<text x="547.0" y="405" text-anchor="middle" font-size="10" fill="#6b7280">p50 3.82s</text>
+<text x="738.3" y="389" text-anchor="middle" font-size="13" font-weight="700" fill="#111827">Target 1100 msg/s</text>
+<rect x="638.3" y="127.2" width="56" height="237.8" rx="4" fill="#2563eb"/>
+<text x="666.3" y="107.2" text-anchor="middle" font-size="11" font-weight="700" fill="#111827">983.8/s</text>
+<text x="666.3" y="120.2" text-anchor="middle" font-size="10" fill="#4b5563">p99 10.85s</text>
+<text x="666.3" y="405" text-anchor="middle" font-size="10" fill="#6b7280">p50 6.06s</text>
+<rect x="710.3" y="158.4" width="56" height="206.6" rx="4" fill="#059669"/>
+<text x="738.3" y="138.4" text-anchor="middle" font-size="11" font-weight="700" fill="#111827">854.9/s</text>
+<text x="738.3" y="151.4" text-anchor="middle" font-size="10" fill="#4b5563">p99 15.20s</text>
+<text x="738.3" y="405" text-anchor="middle" font-size="10" fill="#6b7280">p50 7.60s</text>
+<rect x="782.3" y="217.9" width="56" height="147.1" rx="4" fill="#d97706"/>
+<text x="810.3" y="197.9" text-anchor="middle" font-size="11" font-weight="700" fill="#111827">608.7/s</text>
+<text x="810.3" y="210.9" text-anchor="middle" font-size="10" fill="#4b5563">p99 24.04s</text>
+<text x="810.3" y="405" text-anchor="middle" font-size="10" fill="#6b7280">p50 10.46s</text>
+<rect x="230" y="429" width="14" height="14" rx="3" fill="#2563eb"/>
+<text x="250" y="440" font-size="12" font-weight="600" fill="#111827">1:2:1:1 (proc:del:ing:relay)</text>
+<rect x="420" y="429" width="14" height="14" rx="3" fill="#059669"/>
+<text x="440" y="440" font-size="12" font-weight="600" fill="#111827">2:2:2:1 (proc:del:ing:relay)</text>
+<rect x="610" y="429" width="14" height="14" rx="3" fill="#d97706"/>
+<text x="630" y="440" font-size="12" font-weight="600" fill="#111827">4:4:3:2 (proc:del:ing:relay)</text>
+</svg>

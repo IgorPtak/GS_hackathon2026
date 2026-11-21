@@ -1,6 +1,79 @@
 # Load-test results
 
-## Summary
+For the full benchmark analysis, per-stage Postgres latency breakdown, `pg_stat_statements`, and interactive `py-spy` CPU flame graphs, see [benchmarks.md](benchmarks.md).
+
+## Final measurement (A-41)
+
+Measured **2026-11-21** on commit `15dbce7` (based on `main` `d03de0f` with the `/tmp/prometheus` tmpfs permission fix in `compose.yaml`), with only the `alerting` stack running (`nginx` `proxy` in front of `api:8000` and `ingest:8001`; `dedup-count-index` replacing `SCAN`; `delivery-done` TTL 24 h; `api` LLM sync advisory lock).
+
+### Hardware
+
+- **Host:** Apple M4, 10 cores, 16 GB RAM (`17,179,869,184` bytes), macOS 27.0.1 (Build `26A434`, `arm64`).
+- **Docker VM (`docker info`):** Docker 29.9.2 (`desktop-linux`), **10 CPUs**, **7.75 GiB RAM** (`8,319,438,848` bytes). Everything (in-network generator, `proxy`, workers, `postgres`, `redis`, `mock-gateway`) shares this VM.
+- **Default replicas (`1:2:1:1`):** `processor` 1, `delivery` 2, `ingest` 1 (2 uvicorn `--loop uvloop --no-access-log` workers), `outbox-relay` 1, `proxy` 1, `mock-gateway` 1, `postgres` 16.13, `redis` 7.4.12 (AOF `everysec`).
+
+### Horizontal scale table (`proc:del:ing:relay` behind `proxy:8001`)
+
+Run with `uv run python loadtest/soak_and_scale.py --mode scale --rate $r --duration 30 --pairs "1:2:1:1,2:2:2:1,4:4:3:2" --label final-r$r` (in-network open-loop generator, 30 s per step). **Zero lost alerts** in every cell:
+
+| Rate (target) | Config (`p:d:i:r`) | Achieved msg/s | p50 | p99 | Max `events` lag | Max `deliveries` lag | Drain | Lost | Run label & file |
+|---:|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 500 msg/s | `1:2:1:1` | **500.0** | 59.2 ms | 406.2 ms | 15 | 176 | 0.06 s | **0** | `final-r500` (`scale-20261121T045320.json`) |
+| 500 msg/s | `2:2:2:1` | **500.0** | 61.7 ms | **353.2 ms** | 20 | 194 | 0.09 s | **0** | `final-r500` (`scale-20261121T045320.json`) |
+| 500 msg/s | `4:4:3:2` | **500.0** | 83.3 ms | 413.4 ms | 10 | 85 | 0.16 s | **0** | `final-r500` (`scale-20261121T045320.json`) |
+| 800 msg/s | `1:2:1:1` | **800.0** | 659.1 ms | 1,658.0 ms | 969 | 2,446 | 0.19 s | **0** | `final-r800` (`scale-20261121T045704.json`) |
+| 800 msg/s | `2:2:2:1` | **800.0** | **416.9 ms** | **1,000.7 ms** | 9 | 1,483 | 0.08 s | **0** | `final-r800` (`scale-20261121T045704.json`) |
+| 800 msg/s | `4:4:3:2` | 628.2 | 3,815.4 ms | 8,159.1 ms | 66 | 393 | 0.20 s | **0** | `final-r800` (`scale-20261121T045704.json`) |
+| 1,100 msg/s | `1:2:1:1` | **983.8** | 6,063.5 ms | 10,852.0 ms | 183 | 13,388 | 0.06 s | **0** | `final-r1100` (`scale-20261121T050027.json`) |
+| 1,100 msg/s | `2:2:2:1` | 854.9 | 7,599.1 ms | 15,195.3 ms | 210 | 11,594 | 0.22 s | **0** | `final-r1100` (`scale-20261121T050027.json`) |
+| 1,100 msg/s | `4:4:3:2` | 608.7 | 10,455.1 ms | 24,044.2 ms | 212 | 664 | 0.10 s | **0** | `final-r1100` (`scale-20261121T050027.json`) |
+
+- **Max sustainable throughput on this 10-vCPU VM:** **800.0 msg/s** (1,600 deliveries/s) with `2:2:2:1` (`p50 416.9 ms`, `p99 1,000.7 ms`, `lost = 0`, `events` drained in `0.08 s`). Peak achieved throughput is **983.8 msg/s** on `1:2:1:1` under a 1,100 msg/s target.
+
+### Scenario & stability runs (`2026-11-21`, default `1:2:1:1` unless noted)
+
+| Scenario | Target msg/s | Config | Sent | Delivered | Lost | p50 | p99 | Achieved msg/s | File |
+|---|---:|---|---:|---:|---:|---:|---:|---:|---|
+| Steady 60 s (host → `proxy:8001`) | 200 | `1:2:1:1` | 12,000 | 24,000 / 24,000 | **0** | **41.1 ms** | **83.8 ms** | 200.0 | `steady-20261121T043841.json` |
+| Dup storm (5,000 identical events) | 1,000 | `1:2:1:1` | 5,000 | 2 / 2 (1 alert, count 5,000) | **0** | n/a | n/a | 781.7 | `dup-storm-20261121T044008.json` |
+| Gateway down (`mock-gateway` stopped 60 s) | 100 | `1:2:1:1` | 9,000 | 18,000 / 18,000 | **0** | 57.2 ms (`ui` 38.5 ms) | 68.6 s (`sms` 69.4 s) | 100.0 | `gateway-down-20261121T044047.json` |
+| Kill processor (`docker kill` at `t=20 s`) | 200 | `2:2:1:1` → `1` | 12,000 | 24,000 / 24,000 | **0** | **40.6 ms** | **134.9 ms** | 200.0 | `kill-processor-20261121T045142.json` |
+| Soak 120 s (in-network) | 250 | `1:2:1:1` | 30,000 | 60,000 / 60,000 | **0** | **43.2 ms** | **461.3 ms** | 250.0 | `soak-20261121T050406.json` |
+
+- During the 120 s soak (`soak-20261121T050406.json`), Python worker memory growth stayed flat (`delivery` +4.51 MiB, `ingest` -2.48 MiB, `processor` +4.89 MiB, `outbox-relay` +4.47 MiB, `mock-gateway` -0.02 MiB; `redis` +64.50 MiB, `postgres` +355.68 MiB) and max stream lag stayed bounded (`events = 7`, `deliveries = 21`).
+- In `kill-processor-20261121T045142.json`, `max` latency was **31,541.1 ms**, matching the 30 s `XAUTOCLAIM` idle takeover for entries held by the killed processor. (An earlier run `kill-processor-20261121T044243.json` experienced two macOS host idle-sleep pauses of 282.4 s and 112.1 s, dropping wall-clock rate to 26.4/s while still ending with `lost = 0`.)
+
+### CPU breakdown (`docker stats` @ 800 msg/s & `cpu_bench` @ 250 msg/s)
+
+Live `docker stats --no-stream` snapshot during `final-r800` (`4:4:3:2` step) and median cgroup CPU per accepted event (`uv run python loadtest/cpu_bench.py --rate 250 --duration 30 --runs 3 --label final-cpu-250`, `cpu-bench-20261121T050809.json`, `all_zero_lost = true`):
+
+| Service | `cpu_bench` @ 250/s (replicas) | Median µs/evt @ 250/s | Median CPU% @ 250/s | Live CPU% @ 800/s (`4:4:3:2`) |
+|---|---:|---:|---:|---|
+| `postgres` | 1 | 2,196.0 µs | 51.1% | **126.48%** |
+| `delivery` | 2 (4 @ 800/s) | 1,880.4 µs | 43.5% | **207.17%** (`55.56% + 40.61% + 54.36% + 56.64%`) |
+| `processor` | 1 (4 @ 800/s) | 1,198.3 µs | 28.0% | **129.56%** (`24.83% + 25.74% + 40.57% + 38.42%`) |
+| `redis` | 1 | 593.6 µs | 13.6% | **24.42%** *(down from 94% pre-A-41)* |
+| `ingest` | 1 (3 @ 800/s) | 528.1 µs | 12.3% | **64.03%** (`17.36% + 17.67% + 29.00%`) |
+| `mock-gateway` | 1 | 389.3 µs | 8.8% | **25.75%** |
+| `outbox-relay` | 1 (2 @ 800/s) | 198.9 µs | 4.7% | **20.22%** (`5.10% + 15.12%`) |
+| `proxy` (nginx) | 1 | — | — | **8.56%** |
+| **Pipeline Total** | **8 (18 @ 800/s)** | **6,918.7 µs** | **158.8%** | **606.19%** *(plus 81.81% generator container)* |
+
+### Bottlenecks & `SCAN` → `dedup-count-index` fix (before/after)
+
+1. **`SCAN` → `dedup-count-index` fix:**
+   - **Before (A-41 baseline on noisy VM):** `services/processor/folds.py` ran Redis `SCAN` across ~2.5 M keys (mostly `delivery-done:*` retained for 7 days) every 30 s per processor replica. At `4:4:3:2` @ 800 msg/s, `SCAN` consumed **9.6 s** of single-threaded Redis time per 30 s run, pinning Redis at **94% CPU** and capping throughput at **~490 msg/s** (p99 **19 s**).
+   - **After (`dedup-count-index` + 24 h `delivery-done` TTL):** Fold counters are indexed in the `dedup-count-index` sorted set (`ZADD`, scored by last write) and adopted via a single Lua `ZRANGEBYSCORE` + `EXISTS`/`ZREM` script. Across the entire 3-step `final-r800` sweep (72,000 events, `CONFIG RESETSTAT` before run), `redis-cli INFO commandstats` recorded **0 `SCAN` calls** (`0.0 ms`, `total_calls = 2,011,769`, `total_usec = 8.190 s`), Redis CPU during `4:4:3:2` fell from **94% → 24.42%**, and `2:2:2:1` sustained **800.0 msg/s** with **p99 1,000.7 ms**.
+2. **Current bottleneck — shared 10-vCPU VM & Postgres autocommit writes:**
+   - Postgres timestamp decomposition confirms that at 800 msg/s, scaling `1:2:1:1` → `2:2:2:1` cuts Stage 3 (`delivered_at - relayed_at`) p99 from `1,322.0 ms` → `901.4 ms` and total e2e p99 from `1,658.0 ms` → `1,000.7 ms`.
+   - Further scaling to `4:4:3:2` cuts Stage 3 p99 down to **360.7 ms** (at 800 msg/s) and **562.3 ms** (at 1,100 msg/s), completely draining the `deliveries` stream lag (`393` vs `2,446`), yet running 18 pipeline containers + the 81.8% CPU load generator on 10 shared vCPUs overschedules Stage 1 (`sent_ms → alerts.first_seen` p99 rises to 8.06 s at 800 msg/s and 23.80 s at 1,100 msg/s).
+   - On the database side, `postgres` is the single largest per-event CPU consumer (**2,196.0 µs/evt** at 250/s, **126.48% CPU** at 800/s) because `delivery` writes `deliveries`, `audit_entries`, and `phone_messages` per delivery rather than batched. Redis itself takes **121.52 µs/evt** (`backend-profile-20261121T050653.json`) and still has headroom.
+
+---
+
+## Summary (historical A-21 / A-24 measurements)
+
+*(Historical baseline preserved below; current A-41 measurements are in [Final measurement (A-41)](#final-measurement-a-41) above.)*
 
 Current max sustainable rate is **≥ 350 msg/s** (p99 < 2 s, lag drained, zero lost; A-24 re-measurement at
 350 msg/s: p99 163 ms). Saturation with the host generator plateaus at **~420 msg/s** regardless of processor count
