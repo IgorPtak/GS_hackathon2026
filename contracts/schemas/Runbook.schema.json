@@ -96,6 +96,8 @@
         },
         "max_attempts": {
           "default": 1,
+          "description": "Capped so a runbook (or an LLM proposal) cannot retry an action without bound.",
+          "maximum": 10,
           "minimum": 1,
           "title": "Max Attempts",
           "type": "integer"

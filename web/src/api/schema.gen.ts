@@ -2140,6 +2140,7 @@ export interface components {
             run_if: components["schemas"]["RunIf"];
             /**
              * Max Attempts
+             * @description Capped so a runbook (or an LLM proposal) cannot retry an action without bound.
              * @default 1
              */
             max_attempts: number;
@@ -2473,6 +2474,7 @@ export interface components {
             run_if: components["schemas"]["RunIf"];
             /**
              * Max Attempts
+             * @description Capped so a runbook (or an LLM proposal) cannot retry an action without bound.
              * @default 1
              */
             max_attempts: number;
