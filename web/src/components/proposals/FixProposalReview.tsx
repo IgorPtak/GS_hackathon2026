@@ -1,4 +1,7 @@
+import { useState } from "react";
+
 import type { FixProposal } from "../../api/types";
+import { useLingeringItems, type Outcome } from "../approvals/useLingeringItems";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Pill } from "../ui/Pill";
@@ -37,18 +40,25 @@ export function FixProposalReview({
 }: FixProposalReviewProps) {
   const toast = useToast();
   const decision = useFixDecision(team, onApply);
+  // Decided here: known right away. Decided elsewhere: the list only says it left, so it reads
+  // as done without a verdict we cannot see; "approve" keeps the quiet, positive veil.
+  const [localOutcomes] = useState(() => new Map<string, Outcome>());
+  const shown = useLingeringItems(items, (id) => localOutcomes.get(id) ?? "approve");
 
   async function handleDecide(id: string, kind: FixDecisionKind, comment: string) {
+    localOutcomes.set(id, kind === "accept" ? "approve" : "reject");
     const ok = await decision.decide(id, kind, comment);
     if (ok) {
       toast.show(
-        kind === "accept" ? "Accepted" : "Rejected",
+        kind === "accept" ? "Accepted. The change is live." : "Rejected. Nothing changes.",
         kind === "accept" ? "success" : "info",
       );
+    } else {
+      localOutcomes.delete(id);
     }
   }
 
-  const isEmpty = !isLoading && !error && items.length === 0;
+  const isEmpty = !isLoading && !error && shown.length === 0;
   if (isEmpty && isHidingEmpty && !isShowingDecided) {
     return (
       <div className="flex justify-end">
@@ -101,11 +111,13 @@ export function FixProposalReview({
         </Card>
       ) : null}
 
-      {items.length > 0 ? (
-        <ul className="space-y-4">
-          {items.map((proposal) => (
+      {shown.length > 0 ? (
+        <ul className="flex flex-col">
+          {shown.map(({ item: proposal, outcome, isFolding }) => (
             <FixProposalCard
               key={proposal.id}
+              outcome={outcome}
+              isFolding={isFolding}
               proposal={proposal}
               alertTitle={getAlertTitle(proposal.alert_id)}
               busyKind={decision.busyId === proposal.id ? decision.busyKind : null}

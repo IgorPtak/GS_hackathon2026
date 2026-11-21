@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="420" viewBox="0 0 1060 420" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif">
+<rect width="1060" height="420" fill="#ffffff" rx="8"/>
+<text x="530" y="30" text-anchor="middle" font-size="17" font-weight="700" fill="#111827">Per-Stage p99 Latency Breakdown (Postgres Timestamps, Steady → 800 msg/s)</text>
+<text x="530" y="50" text-anchor="middle" font-size="12" fill="#4b5563">Stage 1: sent_ms → alerts.first_seen · Stage 2: outbox relay wait · Stage 3: delivery worker (delivered_at − relayed_at)</text>
+<line x1="205.0" y1="74" x2="205.0" y2="362" stroke="#e5e7eb" stroke-width="1"/>
+<text x="205.0" y="378" text-anchor="middle" font-size="11" fill="#4b5563">0 ms</text>
+<line x1="283.3" y1="74" x2="283.3" y2="362" stroke="#e5e7eb" stroke-width="1"/>
+<text x="283.3" y="378" text-anchor="middle" font-size="11" fill="#4b5563">300 ms</text>
+<line x1="361.7" y1="74" x2="361.7" y2="362" stroke="#e5e7eb" stroke-width="1"/>
+<text x="361.7" y="378" text-anchor="middle" font-size="11" fill="#4b5563">600 ms</text>
+<line x1="440.0" y1="74" x2="440.0" y2="362" stroke="#e5e7eb" stroke-width="1"/>
+<text x="440.0" y="378" text-anchor="middle" font-size="11" fill="#4b5563">900 ms</text>
+<line x1="518.3" y1="74" x2="518.3" y2="362" stroke="#e5e7eb" stroke-width="1"/>
+<text x="518.3" y="378" text-anchor="middle" font-size="11" fill="#4b5563">1200 ms</text>
+<line x1="596.7" y1="74" x2="596.7" y2="362" stroke="#e5e7eb" stroke-width="1"/>
+<text x="596.7" y="378" text-anchor="middle" font-size="11" fill="#4b5563">1500 ms</text>
+<line x1="675.0" y1="74" x2="675.0" y2="362" stroke="#e5e7eb" stroke-width="1"/>
+<text x="675.0" y="378" text-anchor="middle" font-size="11" fill="#4b5563">1800 ms</text>
+<text x="195" y="99" text-anchor="end" font-size="12" font-weight="600" fill="#111827">steady_200</text>
+<rect x="205" y="85" width="0.8" height="20" fill="#7c3aed"/>
+<rect x="205.8" y="85" width="14.0" height="20" fill="#0891b2"/>
+<rect x="219.9" y="85" width="10.3" height="20" fill="#2563eb"/>
+<text x="238.2" y="99" font-size="11" fill="#111827">e2e p99 82.9 ms (S1 3 / S2 54 / S3 40)</text>
+<text x="195" y="134" text-anchor="end" font-size="12" font-weight="600" fill="#111827">soak_250</text>
+<rect x="205" y="120" width="2.2" height="20" fill="#7c3aed"/>
+<rect x="207.2" y="120" width="34.0" height="20" fill="#0891b2"/>
+<rect x="241.3" y="120" width="51.4" height="20" fill="#2563eb"/>
+<text x="300.7" y="134" font-size="11" fill="#111827">e2e p99 462.5 ms (S1 8 / S2 130 / S3 197)</text>
+<text x="195" y="169" text-anchor="end" font-size="12" font-weight="600" fill="#111827">scale_r500 (1:2:1:1)</text>
+<rect x="205" y="155" width="49.9" height="20" fill="#7c3aed"/>
+<rect x="254.9" y="155" width="26.8" height="20" fill="#0891b2"/>
+<rect x="281.7" y="155" width="52.7" height="20" fill="#2563eb"/>
+<text x="342.5" y="169" font-size="11" fill="#111827">e2e p99 406.7 ms (S1 191 / S2 103 / S3 202)</text>
+<text x="195" y="204" text-anchor="end" font-size="12" font-weight="600" fill="#111827">scale_r500 (2:2:2:1)</text>
+<rect x="205" y="190" width="39.1" height="20" fill="#7c3aed"/>
+<rect x="244.1" y="190" width="18.1" height="20" fill="#0891b2"/>
+<rect x="262.3" y="190" width="63.6" height="20" fill="#2563eb"/>
+<text x="333.9" y="204" font-size="11" fill="#111827">e2e p99 353.4 ms (S1 150 / S2 70 / S3 244)</text>
+<text x="195" y="239" text-anchor="end" font-size="12" font-weight="600" fill="#111827">scale_r500 (4:4:3:2)</text>
+<rect x="205" y="225" width="73.2" height="20" fill="#7c3aed"/>
+<rect x="278.2" y="225" width="17.1" height="20" fill="#0891b2"/>
+<rect x="295.3" y="225" width="52.2" height="20" fill="#2563eb"/>
+<text x="355.5" y="239" font-size="11" fill="#111827">e2e p99 415.0 ms (S1 280 / S2 66 / S3 200)</text>
+<text x="195" y="274" text-anchor="end" font-size="12" font-weight="600" fill="#111827">scale_r800 (1:2:1:1)</text>
+<rect x="205" y="260" width="69.0" height="20" fill="#7c3aed"/>
+<rect x="274.0" y="260" width="23.6" height="20" fill="#0891b2"/>
+<rect x="297.6" y="260" width="345.2" height="20" fill="#2563eb"/>
+<text x="650.8" y="274" font-size="11" fill="#111827">e2e p99 1659.7 ms (S1 264 / S2 90 / S3 1322)</text>
+<text x="195" y="309" text-anchor="end" font-size="12" font-weight="600" fill="#111827">scale_r800 (2:2:2:1)</text>
+<rect x="205" y="295" width="82.6" height="20" fill="#7c3aed"/>
+<rect x="287.6" y="295" width="18.5" height="20" fill="#0891b2"/>
+<rect x="306.1" y="295" width="235.4" height="20" fill="#2563eb"/>
+<text x="549.5" y="309" font-size="11" fill="#111827">e2e p99 1000.9 ms (S1 316 / S2 71 / S3 901)</text>
+<text x="195" y="344" text-anchor="end" font-size="12" font-weight="600" fill="#111827">scale_r800 (4:4:3:2)</text>
+<rect x="205" y="330" width="445.4" height="20" fill="#7c3aed"/>
+<rect x="650.4" y="330" width="4.6" height="20" fill="#0891b2"/>
+<rect x="655.1" y="330" width="19.9" height="20" fill="#2563eb"/>
+<text x="683.0" y="344" font-size="11" fill="#111827">e2e p99 8161 ms (S1 8056 ms client/VM CPU queue, S3 361 ms)</text>
+<rect x="190" y="387" width="13" height="13" rx="2" fill="#7c3aed"/>
+<text x="208" y="398" font-size="11" fill="#111827">Stage 1: Ingest + Processor (sent_ms → alert)</text>
+<rect x="505" y="387" width="13" height="13" rx="2" fill="#0891b2"/>
+<text x="523" y="398" font-size="11" fill="#111827">Stage 2: Outbox Relay Wait</text>
+<rect x="715" y="387" width="13" height="13" rx="2" fill="#2563eb"/>
+<text x="733" y="398" font-size="11" fill="#111827">Stage 3: Delivery Worker</text>
+</svg>

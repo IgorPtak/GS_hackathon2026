@@ -116,7 +116,7 @@ services:
     # Several uvicorn workers: metrics are aggregated across them (a fresh tmpfs per start).
     environment:
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
-    tmpfs: [/tmp/prometheus]
+    tmpfs: ["/tmp/prometheus:uid=10001,gid=10001"]
     # No host port: `proxy` owns 8001, so `--scale ingest=N` works.
     expose:
       - "8001"

@@ -18,6 +18,7 @@ import { ToastProvider } from "../ui/ToastProvider";
 import { AppRail } from "./AppRail";
 import { AppWindow } from "./AppWindow";
 import { TestConsole } from "../console/TestConsole";
+import { WelcomeDialog } from "../onboarding/WelcomeDialog";
 import { DemoPlaceholder, ShellPage } from "./ShellPage";
 
 /** Routes between the shell (rail + page), the full-screen phone and the reserved demo panel. */
@@ -102,6 +103,14 @@ export function AppLayout() {
                 </div>
               </div>
             </PageBackContext.Provider>
+            <WelcomeDialog
+              personId={personId}
+              teamId={teamId}
+              teamLabel={teamLabel(teams, teamId)}
+              onNavigate={(tab) => {
+                navigate(pathForTab(tab));
+              }}
+            />
             <TestConsole
               teamId={teamId}
               teamLabel={teamLabel(teams, teamId)}

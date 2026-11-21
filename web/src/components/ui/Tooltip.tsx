@@ -1,6 +1,8 @@
-import { useRef, useState, type FocusEvent, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type FocusEvent, type ReactNode } from "react";
 
 const GAP = 10;
+/** Keeps the bubble this far from the window edges. */
+const EDGE = 8;
 
 type Side = "right" | "top" | "bottom";
 
@@ -29,9 +31,10 @@ function place(rect: DOMRect, side: Side): Position {
 }
 
 /**
- * Small label on hover or keyboard focus (not after a mouse click). It is positioned `fixed`
- * from the trigger, so scrolling containers such as the rail never clip it. The trigger keeps
- * its own accessible name; the bubble is aria-hidden.
+ * Small label on hover or keyboard focus (not after a mouse click). The bubble is a manual
+ * popover, so it lives in the top layer: a transformed or scrolling ancestor (page transitions,
+ * the rail) can neither move it nor clip it, and it never adds a scrollbar. It is clamped to the
+ * window. The trigger keeps its own accessible name; the bubble is aria-hidden.
  */
 export function Tooltip({
   label,
@@ -43,7 +46,23 @@ export function Tooltip({
   children: ReactNode;
 }) {
   const anchor = useRef<HTMLSpanElement>(null);
+  const bubble = useRef<HTMLSpanElement>(null);
   const [position, setPosition] = useState<Position | null>(null);
+
+  useLayoutEffect(() => {
+    const element = bubble.current;
+    if (!element || !position) return;
+    if (!element.matches(":popover-open")) element.showPopover();
+    // Nudge back inside the window when the label would run off an edge.
+    const rect = element.getBoundingClientRect();
+    const shift =
+      rect.left < EDGE
+        ? EDGE - rect.left
+        : rect.right > window.innerWidth - EDGE
+          ? window.innerWidth - EDGE - rect.right
+          : 0;
+    element.style.translate = shift === 0 ? "" : `${String(shift)}px 0`;
+  }, [position]);
 
   function show() {
     const rect = anchor.current?.getBoundingClientRect();
@@ -69,9 +88,11 @@ export function Tooltip({
       {children}
       {position ? (
         <span
+          ref={bubble}
+          popover="manual"
           aria-hidden="true"
           style={{ left: position.left, top: position.top, transform: position.transform }}
-          className="pointer-events-none fixed z-50 rounded-md bg-ink px-2 py-0.5 text-caption font-medium whitespace-nowrap text-window shadow-tile"
+          className="pointer-events-none fixed inset-auto m-0 overflow-visible rounded-md border-0 bg-ink px-2 py-0.5 text-caption font-medium whitespace-nowrap text-window shadow-tile"
         >
           {label}
         </span>

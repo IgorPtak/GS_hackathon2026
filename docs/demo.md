@@ -280,27 +280,27 @@ Run the steady-load scenario (60 s at 200 msg/s = 12,000 events, 24,000 deliveri
 uv run python loadtest/scenarios.py steady --duration 60
 ```
 
-To demonstrate horizontal scaling of stateless workers (Prometheus discovers new replicas automatically via Compose DNS):
+To demonstrate horizontal scaling of stateless workers and HTTP tiers behind `proxy` (Prometheus discovers new replicas automatically via Compose DNS):
 
 ```bash
-docker compose up -d --scale processor=4
+docker compose up -d --scale processor=4 --scale delivery=4 --scale ingest=3 --scale api=2
 ```
 
-(When finished scaling, return to one replica with `docker compose up -d --scale processor=1`.)
+(When finished scaling, return to compose defaults with `docker compose up -d --scale processor=1 --scale delivery=2 --scale ingest=1 --scale api=1`.)
 
 ### UI clicks
 
 1. Open the **Metrics** tab at http://localhost:5173: point out the live tiles updating every 5 s (`Ingest rate`, `Processed rate`, `Events stream lag`, `Deliveries stream lag`, `End-to-end latency p50`, `End-to-end latency p99`, `Delivery retries`, `Dead-lettered`, `Open alerts`).
 2. Click **Open Grafana** (http://localhost:3000) and open the provisioned **Alerting** dashboard.
-3. Quote the numbers from the README load table (do not re-measure on stage), see [docs/load-test-results.md](load-test-results.md) for the full method:
-   - Steady 60 s at 200 msg/s: 12,000 sent, 24,000 / 24,000 delivered, **0 lost**, p50 373 ms, p99 572 ms.
-   - After the A-24 fixes, 350 msg/s: p50 56 ms, p99 163 ms, **0 lost**.
-   - In-network generator at 500 msg/s: p50 81.8 ms, p99 1917.9 ms (about 1.9 s), **0 lost**.
+3. Quote the final A-41 numbers from the README load table (do not re-measure on stage), see [docs/load-test-results.md](load-test-results.md) and [docs/benchmarks.md](benchmarks.md) for the full method and flame graphs:
+   - Steady 60 s at 200 msg/s: 12,000 sent, 24,000 / 24,000 delivered, **0 lost**, p50 **41.1 ms**, p99 **83.8 ms**.
+   - Horizontal scale sweep (`2:2:2:1` behind `proxy`): **500.0 msg/s** (p50 61.7 ms, p99 353.2 ms) and **800.0 msg/s** sustained (p50 **416.9 ms**, p99 **1,000.7 ms**, **0 lost**; peak **983.8 msg/s** on `1:2:1:1`).
+   - 120 s soak at 250 msg/s: 30,000 sent, 60,000 / 60,000 delivered, **0 lost**, p50 **43.2 ms**, p99 **461.3 ms**.
 
 ### What the viewer must see
 
 - Live msg/s, stream lag, and latency tiles during load.
-- The horizontal scaling command and the README numbers, with zero lost alerts.
+- The horizontal scaling command behind `proxy` and the measured benchmark numbers, with zero lost alerts.
 
 ---
 

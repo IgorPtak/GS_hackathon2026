@@ -7,6 +7,7 @@ import { Card } from "../components/ui/Card";
 import { PageFrame } from "../components/ui/PageFrame";
 import { Segmented } from "../components/ui/Segmented";
 import { PRODUCT_NAME } from "../lib/brand";
+import { markWelcomeSeen, setChecklistHidden } from "../lib/onboarding";
 import { TEST_CONSOLE_SHORTCUT, openTestConsole } from "../lib/testConsole";
 import { isThemeValue } from "../lib/theme";
 import { teamShortName } from "../lib/teams";
@@ -53,6 +54,7 @@ export function SettingsScreen({
   teams,
   onSelectTeam,
   onSignOut,
+  onNavigate,
 }: ScreenProps) {
   const { theme, chooseTheme } = useTheme();
   const speech = useSpeech();
@@ -104,6 +106,25 @@ export function SettingsScreen({
               />
             </div>
           ) : null}
+        </Section>
+        <Section title="Getting started" hint="The welcome tour and the setup checklist on Home.">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => {
+                if (person) markWelcomeSeen(person.id, false);
+              }}
+            >
+              Show the welcome again
+            </Button>
+            <Button
+              onClick={() => {
+                setChecklistHidden(teamId, false);
+                onNavigate("home");
+              }}
+            >
+              Show the setup checklist
+            </Button>
+          </div>
         </Section>
         <Section
           title={`About ${PRODUCT_NAME}`}
