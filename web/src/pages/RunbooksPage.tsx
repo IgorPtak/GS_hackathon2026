@@ -1,67 +1,109 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
+import { useRegisterBack, type RegisterBack } from "../lib/useBackSlot";
+
+import { AddRunbookFlow } from "../components/runbooks/AddRunbookFlow";
 import { RunbookDetailView } from "../components/runbooks/RunbookDetailView";
+import { RunbookList } from "../components/runbooks/RunbookList";
 import { useRunbooks } from "../components/runbooks/useRunbooks";
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
+import { IllustratedBanner } from "../components/ui/IllustratedBanner";
+import { Skeleton } from "../components/ui/Skeleton";
 
-/** Runbooks tab: list of stored runbooks; selecting one shows its source next to its steps. */
-export function RunbooksPage() {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const state = useRunbooks(selectedId);
+type View =
+  | { readonly name: "list" }
+  | { readonly name: "add" }
+  | { readonly name: "detail"; readonly id: string; readonly isNew: boolean };
+
+/** Runbooks: cards, one runbook's step checklist, and the add flow. */
+export function RunbooksPage({
+  teamId,
+  onBackChange,
+}: {
+  readonly teamId: string | null;
+  readonly onBackChange?: RegisterBack;
+}) {
+  const [view, setView] = useState<View>({ name: "list" });
+  const state = useRunbooks(view.name === "detail" ? view.id : null);
+
+  const showList = useCallback(() => {
+    setView({ name: "list" });
+  }, []);
+  useRegisterBack(onBackChange, view.name !== "list", showList);
 
   return (
-    <section aria-labelledby="runbooks-title">
-      <h2 id="runbooks-title" className="mb-3 text-xl font-semibold">
-        Runbooks
-      </h2>
-      {state.isListLoading ? <p className="text-sm text-slate-500">Loading runbooks...</p> : null}
-      {state.listError ? (
-        <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800">
-          Cannot load runbooks ({state.listError}).
-        </p>
+    <div className="mx-auto max-w-4xl space-y-6">
+      {view.name === "list" ? (
+        <IllustratedBanner
+          scene="runbooks"
+          title="Let Beacon read your runbooks"
+          focus="72% 30%"
+          action={
+            <Button
+              variant="primary"
+              icon="plus"
+              onClick={() => {
+                setView({ name: "add" });
+              }}
+            >
+              Add a runbook
+            </Button>
+          }
+        >
+          Paste the steps the way your team writes them. Beacon turns them into a checklist and
+          always asks before anything risky.
+        </IllustratedBanner>
       ) : null}
-      {!state.isListLoading && !state.listError && state.summaries.length === 0 ? (
-        <p className="text-sm text-slate-500">No runbooks yet</p>
-      ) : null}
-      <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
-        <ul className="space-y-1">
-          {state.summaries.map((item) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                aria-pressed={item.id === selectedId}
-                onClick={() => {
-                  setSelectedId(item.id);
-                }}
-                className={`w-full rounded border px-3 py-2 text-left text-sm ${
-                  item.id === selectedId
-                    ? "border-slate-800 bg-white"
-                    : "border-slate-200 bg-white hover:bg-slate-50"
-                }`}
-              >
-                <span className="block font-medium break-words">{item.title}</span>
-                <span className="block text-xs text-slate-500">
-                  {item.format} · {item.step_count} steps · {item.normalized_by}
-                  {item.llm_model ? ` (${item.llm_model})` : ""}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        <div className="min-w-0">
-          {selectedId === null && state.summaries.length > 0 ? (
-            <p className="text-sm text-slate-500">Select a runbook to see its source and steps.</p>
-          ) : null}
-          {state.isRunbookLoading ? (
-            <p className="text-sm text-slate-500">Loading runbook...</p>
-          ) : null}
-          {state.runbookError ? (
-            <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800">
-              Cannot load runbook ({state.runbookError}).
-            </p>
-          ) : null}
-          {state.runbook ? <RunbookDetailView runbook={state.runbook} /> : null}
+      {view.name === "list" ? (
+        <div className="flex min-h-9 items-center justify-between gap-3">
+          {
+            <>
+              <p className="text-body text-ink-2">
+                {state.summaries.length > 0
+                  ? `${String(state.summaries.length)} ${state.summaries.length === 1 ? "runbook" : "runbooks"}`
+                  : "Step-by-step help for responders"}
+              </p>
+            </>
+          }
         </div>
-      </div>
-    </section>
+      ) : null}
+      {view.name === "list" ? (
+        <RunbookList
+          items={state.summaries}
+          isLoading={state.isListLoading}
+          error={state.listError}
+          onOpen={(id) => {
+            setView({ name: "detail", id, isNew: false });
+          }}
+          onAdd={() => {
+            setView({ name: "add" });
+          }}
+        />
+      ) : null}
+      {view.name === "add" ? (
+        <AddRunbookFlow
+          teamId={teamId}
+          existingIds={state.summaries.map((s) => s.id)}
+          onSaved={(saved) => {
+            state.reload();
+            setView({ name: "detail", id: saved.id, isNew: true });
+          }}
+        />
+      ) : null}
+      {view.name === "detail" ? (
+        <>
+          {state.isRunbookLoading ? <Skeleton className="h-64 rounded-card" /> : null}
+          {state.runbookError ? (
+            <Card>
+              <p role="alert" className="text-body text-critical-ink">
+                Beacon could not open this runbook ({state.runbookError}). Go back and try again.
+              </p>
+            </Card>
+          ) : null}
+          {state.runbook ? <RunbookDetailView runbook={state.runbook} isNew={view.isNew} /> : null}
+        </>
+      ) : null}
+    </div>
   );
 }

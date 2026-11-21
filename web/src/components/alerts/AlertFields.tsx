@@ -31,11 +31,11 @@ export function AlertFields({ alert }: { alert: Alert }) {
     ...(alert.fields ?? []).map((field) => [field.path, formatValue(field.value)] as const),
   ];
   return (
-    <dl className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+    <dl className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-meta">
       {rows.map(([label, value]) => (
         <div key={label} className="contents">
-          <dt className="text-slate-500 break-words">{label}</dt>
-          <dd className="break-words">{value}</dd>
+          <dt className="break-words text-ink-2">{label}</dt>
+          <dd className="break-words text-ink">{value}</dd>
         </div>
       ))}
     </dl>

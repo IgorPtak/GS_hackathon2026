@@ -105,8 +105,9 @@ def _build_prompt(
 ) -> str:
     # Redacted here as well as inside LlmClient.generate: the sample is the only untrusted input.
     sample_json = redact_secrets(json.dumps(sample, indent=2, sort_keys=True))
+    sample_json = sample_json.replace("</untrusted_input>", "<\\/untrusted_input>")
     return (
-        f"Sample event:\n{sample_json}\n\n"
+        f"Sample event:\n<untrusted_input>\n{sample_json}\n</untrusted_input>\n\n"
         f"Normalized fields available: {', '.join(_NORMALIZED_FIELDS)}\n"
         f"Requested profile id: {profile_id or '(none, choose one)'}\n"
         f"Existing profile ids: {', '.join(sorted(existing)) or '(none)'}\n\n"

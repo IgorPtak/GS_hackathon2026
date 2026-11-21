@@ -38,6 +38,7 @@ from demo_rehearsal_helpers import (
     post_ingest_batch,
     run_scene,
 )
+from demo_rehearsal_judges import scene_judges_path
 from demo_rehearsal_scenes import (
     scene_alertmanager_resolve,
     scene_metrics_summary,
@@ -222,6 +223,7 @@ SCENES: dict[str, Callable[[RehearsalContext], SceneResult]] = {
     "runbook_approval_by_code": scene_runbook_approval_by_code,
     "metrics_summary": scene_metrics_summary,
     "alertmanager_resolve": scene_alertmanager_resolve,
+    "judges_path": scene_judges_path,
 }
 
 

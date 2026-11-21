@@ -23,9 +23,10 @@ def step(action: str, params: dict[str, str] | None = None) -> RunbookStep:
     )
 
 
-def test_safe_action_with_params_stays_automatic():
+def test_safe_action_with_params_keeps_its_action_but_not_automation():
+    # Only a human turns automation on (SEC-01), even for an action that needs no approval.
     [result] = guard_llm_steps([step("ticket", {"summary": "x"})], ACTIONS)
-    assert result.action == "ticket" and result.is_automatic and result.approval is None
+    assert result.action == "ticket" and not result.is_automatic and result.approval is None
 
 
 def test_blank_required_param_becomes_manual_text_step():

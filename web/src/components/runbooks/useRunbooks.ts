@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { apiClient } from "../../api/client";
 import type { Runbook, RunbookSummary } from "../../api/types";
@@ -37,6 +37,11 @@ async function fetchOne(id: string): Promise<Loaded<Runbook>> {
 export function useRunbooks(selectedId: string | null) {
   const [list, setList] = useState<Loaded<RunbookSummary[]> | null>(null);
   const [one, setOne] = useState<Loaded<Runbook> | null>(null);
+  const [nonce, setNonce] = useState(0);
+  const reload = useCallback(() => {
+    setNonce((n) => n + 1);
+    setOne(null);
+  }, []);
 
   useEffect(() => {
     let isCancelled = false;
@@ -46,7 +51,7 @@ export function useRunbooks(selectedId: string | null) {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [nonce]);
 
   useEffect(() => {
     if (selectedId === null) return;
@@ -57,7 +62,7 @@ export function useRunbooks(selectedId: string | null) {
     return () => {
       isCancelled = true;
     };
-  }, [selectedId]);
+  }, [selectedId, nonce]);
 
   const isOneCurrent = selectedId !== null && one?.key === selectedId;
   return {
@@ -67,5 +72,6 @@ export function useRunbooks(selectedId: string | null) {
     runbook: isOneCurrent ? one.data : null,
     isRunbookLoading: selectedId !== null && !isOneCurrent,
     runbookError: isOneCurrent ? one.error : null,
+    reload,
   };
 }

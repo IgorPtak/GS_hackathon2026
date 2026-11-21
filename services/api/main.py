@@ -25,6 +25,7 @@ from .routers import (
     config,
     fix_proposal_drafts,
     fix_proposals,
+    llm_status,
     metrics,
     ops,
     phone_simulator,
@@ -56,6 +57,7 @@ ROUTERS = (
     ops,
     metrics,
     recipients,
+    llm_status,
 )
 
 

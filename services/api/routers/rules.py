@@ -5,6 +5,7 @@ version, updated_at and updated_by that `RuleRecord` needs, and it is what `save
 writes. `POST /rules/preview` (B-16) is read-only: Redis reads and pure simulation.
 """
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -123,7 +124,9 @@ async def preview_rule_route(request: Request, redis: RedisDep, registry: Regist
     window_start = window_end - timedelta(seconds=parse_duration(body.window))
     event_read = await read_event_log(redis, window_start, body.max_events)
     try:
-        return preview_rule(
+        # CPU-bound pure simulation: keep it off the event loop.
+        return await asyncio.to_thread(
+            preview_rule,
             body.rule,
             event_read.envelopes,
             registry.snapshot,

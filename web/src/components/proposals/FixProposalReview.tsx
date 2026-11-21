@@ -1,69 +1,123 @@
-import { useState } from "react";
-
-import { useEventStream } from "../../hooks/useEventStream";
+import type { FixProposal } from "../../api/types";
+import { Button } from "../ui/Button";
+import { Card } from "../ui/Card";
+import { Pill } from "../ui/Pill";
+import { Skeleton } from "../ui/Skeleton";
+import { useToast } from "../ui/toastContext";
 import { FixProposalCard } from "./FixProposalCard";
-import { useFixDecision } from "./useFixDecision";
-import { useFixProposals } from "./useFixProposals";
+import { useFixDecision, type FixDecisionKind } from "./useFixDecision";
 
-/** Fix proposals owned by one team, live from fix_proposal.updated; pending by default. */
-export function FixProposalReview({ team }: { team: string }) {
-  const [isShowingDecided, setIsShowingDecided] = useState(false);
-  const proposals = useFixProposals(team, isShowingDecided);
-  const { apply, reload } = proposals;
-  const decision = useFixDecision(team, apply);
-  useEventStream(team, {
-    "fix_proposal.updated": (event) => {
-      apply(event.fix_proposal);
-    },
-    onReconnect: reload,
-  });
+interface FixProposalReviewProps {
+  readonly team: string;
+  readonly items: readonly FixProposal[];
+  readonly isLoading: boolean;
+  readonly error: string | null;
+  readonly isShowingDecided: boolean;
+  readonly onToggleDecided: () => void;
+  readonly getAlertTitle: (alertId: string) => string;
+  readonly onApply: (proposal: FixProposal) => void;
+  readonly onReload: () => void;
+  readonly onOpenAlert: (alertId: string) => void;
+  readonly isHidingEmpty?: boolean;
+}
+
+/** Fix proposals owned by one team with clean diffs and Accept / Reject actions. */
+export function FixProposalReview({
+  team,
+  items,
+  isLoading,
+  error,
+  isShowingDecided,
+  onToggleDecided,
+  getAlertTitle,
+  onApply,
+  onReload,
+  onOpenAlert,
+  isHidingEmpty = false,
+}: FixProposalReviewProps) {
+  const toast = useToast();
+  const decision = useFixDecision(team, onApply);
+
+  async function handleDecide(id: string, kind: FixDecisionKind, comment: string) {
+    const ok = await decision.decide(id, kind, comment);
+    if (ok) {
+      toast.show(
+        kind === "accept" ? "Accepted" : "Rejected",
+        kind === "accept" ? "success" : "info",
+      );
+    }
+  }
+
+  const isEmpty = !isLoading && !error && items.length === 0;
+  if (isEmpty && isHidingEmpty && !isShowingDecided) {
+    return (
+      <div className="flex justify-end">
+        <Pill isActive={false} onToggle={onToggleDecided}>
+          Show past fix proposals
+        </Pill>
+      </div>
+    );
+  }
 
   return (
-    <section aria-labelledby="fix-proposals-title" className="mt-8">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 id="fix-proposals-title" className="text-xl font-semibold">
-          Fix proposals
-        </h2>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={isShowingDecided}
-            onChange={(event) => {
-              setIsShowingDecided(event.target.checked);
-            }}
-          />
+    <section aria-labelledby="fix-proposals-heading" className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-baseline gap-3">
+          <h2 id="fix-proposals-heading" className="text-card-title font-semibold text-ink">
+            Fix proposals
+          </h2>
+          {items.length > 0 ? (
+            <span className="num text-meta font-medium text-ink-2">{items.length} shown</span>
+          ) : null}
+        </div>
+        <Pill isActive={isShowingDecided} onToggle={onToggleDecided}>
           Show decided
-        </label>
+        </Pill>
       </div>
-      {proposals.isLoading ? (
-        <p className="text-sm text-slate-500">Loading fix proposals...</p>
+
+      {isLoading ? (
+        <Card className="space-y-3">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-24 w-full" />
+        </Card>
       ) : null}
-      {proposals.error ? (
-        <p role="alert" className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-800">
-          Cannot load fix proposals ({proposals.error}).{" "}
-          <button type="button" className="underline" onClick={proposals.reload}>
+
+      {error ? (
+        <Card className="flex flex-wrap items-center justify-between gap-3 border-critical/30 bg-critical/8">
+          <p role="alert" className="text-body text-critical-ink">
+            Could not load fix proposals ({error}).
+          </p>
+          <Button variant="secondary" onClick={onReload}>
             Retry
-          </button>
-        </p>
+          </Button>
+        </Card>
       ) : null}
-      {!proposals.isLoading && !proposals.error && proposals.items.length === 0 ? (
-        <p className="text-sm text-slate-500">
-          {isShowingDecided ? "No fix proposals" : "No pending fix proposals"}
-        </p>
+
+      {isEmpty ? (
+        <Card className="text-body text-ink-2">
+          {isShowingDecided
+            ? "No fix proposals have been submitted for this team yet."
+            : "No pending fix proposals."}
+        </Card>
       ) : null}
-      <ul className="space-y-3">
-        {proposals.items.map((proposal) => (
-          <FixProposalCard
-            key={proposal.id}
-            proposal={proposal}
-            isBusy={decision.busyId === proposal.id}
-            error={decision.errors[proposal.id] || null}
-            onDecide={(kind, comment) => {
-              void decision.decide(proposal.id, kind, comment);
-            }}
-          />
-        ))}
-      </ul>
+
+      {items.length > 0 ? (
+        <ul className="space-y-4">
+          {items.map((proposal) => (
+            <FixProposalCard
+              key={proposal.id}
+              proposal={proposal}
+              alertTitle={getAlertTitle(proposal.alert_id)}
+              busyKind={decision.busyId === proposal.id ? decision.busyKind : null}
+              error={decision.errors[proposal.id] || null}
+              onOpenAlert={onOpenAlert}
+              onDecide={(kind, comment) => {
+                void handleDecide(proposal.id, kind, comment);
+              }}
+            />
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }

@@ -750,6 +750,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MetricsSummary'
+  /api/v1/llm/status:
+    get:
+      tags:
+      - ops
+      operationId: getLlmStatus
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmStatus'
   /healthz:
     get:
       tags:
@@ -2561,6 +2573,52 @@ components:
       - event_ids
       - duplicate_count
       title: IngestAccepted
+      type: object
+    LlmStatus:
+      additionalProperties: false
+      description: LLM connectivity for the Settings screen; never carries the full URL or the key.
+      properties:
+        is_enabled:
+          title: Is Enabled
+          type: boolean
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+        provider_host:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Provider Host
+        is_reachable:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Reachable
+        latency_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latency Ms
+        checked_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Checked At
+        privacy_note:
+          title: Privacy Note
+          type: string
+      required:
+      - is_enabled
+      - model
+      - provider_host
+      - is_reachable
+      - latency_ms
+      - checked_at
+      - privacy_note
+      title: LlmStatus
       type: object
     MetricsSummary:
       additionalProperties: false

@@ -1,3 +1,7 @@
+import { Field } from "../ui/Field";
+import { Select } from "../ui/Select";
+import { TextInput } from "../ui/TextInput";
+
 interface WorkingHoursInputProps {
   readonly startTime: string;
   readonly endTime: string;
@@ -7,9 +11,25 @@ interface WorkingHoursInputProps {
   readonly timezoneErrors: readonly string[];
 }
 
-const inputClass = "rounded border border-slate-300 px-2 py-1 text-sm";
+const FALLBACK_ZONES = [
+  "Europe/Warsaw",
+  "Europe/London",
+  "Europe/Berlin",
+  "America/New_York",
+  "UTC",
+];
 
-/** Working hours as HH:MM start/end plus an IANA timezone; empty hours mean "always". */
+/** Every IANA zone the browser knows, always including the current value so it never vanishes. */
+function timezoneOptions(current: string) {
+  const known =
+    typeof Intl.supportedValuesOf === "function"
+      ? Intl.supportedValuesOf("timeZone")
+      : FALLBACK_ZONES;
+  const zones = known.includes(current) || current === "" ? known : [current, ...known];
+  return zones.map((zone) => ({ value: zone, label: zone.replace(/_/g, " ") }));
+}
+
+/** Working hours as two time inputs plus a timezone select; empty hours mean "any time". */
 export function WorkingHoursInput({
   startTime,
   endTime,
@@ -20,43 +40,47 @@ export function WorkingHoursInput({
 }: WorkingHoursInputProps) {
   const current = { startTime, endTime, timezone };
   return (
-    <fieldset>
-      <legend className="text-xs font-medium text-slate-600">Working hours</legend>
-      <div className="mt-1 flex flex-wrap items-center gap-2">
-        <input
-          type="time"
-          aria-label="Working hours start"
-          value={startTime}
-          onChange={(e) => {
-            onChange({ ...current, startTime: e.target.value });
-          }}
-          className={inputClass}
-        />
-        <span className="text-xs text-slate-500">to</span>
-        <input
-          type="time"
-          aria-label="Working hours end"
-          value={endTime}
-          onChange={(e) => {
-            onChange({ ...current, endTime: e.target.value });
-          }}
-          className={inputClass}
-        />
-        <input
-          type="text"
-          aria-label="Timezone"
-          value={timezone}
-          onChange={(e) => {
-            onChange({ ...current, timezone: e.target.value });
-          }}
-          className={`${inputClass} w-44`}
-        />
-      </div>
-      {[...hoursErrors, ...timezoneErrors].map((message) => (
-        <p key={message} role="alert" className="mt-1 text-xs text-red-700">
-          {message}
-        </p>
-      ))}
-    </fieldset>
+    <div className="grid gap-4 sm:grid-cols-[8rem_8rem_1fr]">
+      <Field label="From" error={hoursErrors[0]}>
+        {(control) => (
+          <TextInput
+            {...control}
+            type="time"
+            value={startTime}
+            onChange={(e) => {
+              onChange({ ...current, startTime: e.target.value });
+            }}
+          />
+        )}
+      </Field>
+      <Field label="Until">
+        {(control) => (
+          <TextInput
+            {...control}
+            type="time"
+            value={endTime}
+            onChange={(e) => {
+              onChange({ ...current, endTime: e.target.value });
+            }}
+          />
+        )}
+      </Field>
+      <Field
+        label="Timezone"
+        help="Working hours. Leave both times empty to apply at any hour."
+        error={timezoneErrors[0]}
+      >
+        {(control) => (
+          <Select
+            {...control}
+            value={timezone}
+            options={timezoneOptions(timezone)}
+            onChange={(zone) => {
+              onChange({ ...current, timezone: zone });
+            }}
+          />
+        )}
+      </Field>
+    </div>
   );
 }

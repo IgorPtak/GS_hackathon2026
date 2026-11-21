@@ -68,3 +68,18 @@ export function errorsAt(
 export function toggled<T>(values: readonly T[], value: T): T[] {
   return values.includes(value) ? values.filter((v) => v !== value) : [...values, value];
 }
+
+const FRIENDLY: Record<string, string> = {
+  working_hours: "Fill in both times, for example 08:00 and 20:00.",
+  timezone: "Pick a timezone from the list.",
+  channels: "Pick at least one channel.",
+  otherwise: "Pick channels that exist in this setup.",
+};
+
+/** Turns a raw validation message into words for the field; unknown problems keep the API text. */
+export function humanizeError(field: string, message: string): string {
+  const isFormatProblem = /pattern|match|at least|too short|not found|unknown|invalid/i.test(
+    message,
+  );
+  return isFormatProblem ? (FRIENDLY[field] ?? message) : message;
+}

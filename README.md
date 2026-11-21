@@ -91,11 +91,18 @@ There is no authentication; pick a team (`Team Rates`, `Team Settlements`, `Team
 
 Full methodology, raw result files, and observations are in [docs/load-test-results.md](docs/load-test-results.md).
 
-Measured on Apple M4 (10 cores, 16 GB RAM, Docker Desktop VM: 10 CPUs, 7.7 GB RAM) with `ingest` (2 uvicorn workers), `outbox-relay` (1), and `mock-gateway` (1):
+Headline (after the A-24 fixes: relay polls every 50 ms, 2 delivery replicas): **≥ 350 msg/s
+sustained with p50 56 ms / p99 163 ms end to end, and 0 lost alerts in every scenario**, including
+a 60 s gateway outage and killing workers mid-load. The limit on this laptop is now ingest, not the
+pipeline.
+
+Measured on Apple M4 (10 cores, 16 GB RAM, Docker Desktop VM: 10 CPUs, 7.7 GB RAM), `ingest` with 2
+uvicorn workers:
 
 | Scenario | Target msg/s | Processor / delivery | Sent | Delivered | Lost | p50 | p99 |
 |---|---|---|---|---|---|---|---|
-| Steady 60 s | 200 | 1 / 1 | 12,000 | 24,000 / 24,000 | **0** | 373 ms | 572 ms |
+| Steady 30 s (after A-24) | 350 | 1 / 2 | — | — | **0** | **56 ms** | **163 ms** |
+| Steady 60 s (before A-24) | 200 | 1 / 1 | 12,000 | 24,000 / 24,000 | **0** | 373 ms | 572 ms |
 | Dup storm | 1,000 (5,000 events) | 1 / 1 | 5,000 | 2 / 2 (1 alert, count 5,000) | **0** | n/a | n/a |
 | Gateway down (60 s outage) | 100 | 1 / 1 | 9,000 | 18,000 / 18,000 | **0** | 1,327 ms | 69.4 s |
 | Kill processor (`docker kill`) | 200 | 2 / 1 | 12,000 | 24,000 / 24,000 | **0** | 405 ms | 1,131 ms |
@@ -103,6 +110,9 @@ Measured on Apple M4 (10 cores, 16 GB RAM, Docker Desktop VM: 10 CPUs, 7.7 GB RA
 Saturation sweep (1/2/4 processors, 20 s per step, `delivery=1`, sustainable = `events` drained within 5 s, p99 < 2 s, lost = 0), measured **before the A-24 fixes**: max sustainable throughput is **250 msg/s** with p99 dropping from **1276 ms** (1 processor) to **858 ms** (2 processors) to **621 ms** (4 processors), with **0 lost** in every run.
 
 After the A-24 fixes (`outbox-relay` polls every 50 ms, `delivery` runs 2 replicas), the max sustainable rate is **≥ 350 msg/s**: at 350 msg/s p50 was **56 ms**, p99 **163 ms**, lost **0**. An in-network generator run at **500 msg/s** reached p50 **81.8 ms**, p99 **1917.9 ms** (about 1.9 s), lost **0**. The ~420 msg/s plateau seen with the host generator is the host-to-VM path, not the pipeline.
+
+Recovery integration tests (A-23): 200 SMS sent through a gateway outage are all delivered, and
+`docker kill` of one of two delivery workers loses and duplicates nothing.
 
 Reproduce with:
 

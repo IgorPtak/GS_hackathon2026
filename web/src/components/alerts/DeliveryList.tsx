@@ -1,35 +1,50 @@
 import type { Delivery } from "../../api/types";
+import { StatusChip, type ChipTone } from "../ui/StatusChip";
 
-const STATUS_CLASSES: Record<Delivery["status"], string> = {
-  pending: "bg-slate-100 text-slate-700",
-  sent: "bg-blue-100 text-blue-800",
-  delivered: "bg-green-100 text-green-800",
-  failed: "bg-amber-100 text-amber-800",
-  dead_lettered: "bg-red-100 text-red-800",
-  suppressed: "bg-slate-100 text-slate-500",
+const STATUS: Record<Delivery["status"], { label: string; tone: ChipTone }> = {
+  pending: { label: "Pending", tone: "neutral" },
+  sent: { label: "Sent", tone: "info" },
+  delivered: { label: "Delivered", tone: "success" },
+  failed: { label: "Failed, retrying", tone: "warning" },
+  dead_lettered: { label: "Kept for retry", tone: "critical" },
+  suppressed: { label: "Skipped", tone: "neutral" },
 };
 
-/** Deliveries of one alert with channel, status and attempt number. */
+/** Deliveries of one alert as a table: channel, recipient, status and attempt. */
 export function DeliveryList({ deliveries }: { deliveries: readonly Delivery[] }) {
-  if (deliveries.length === 0) return <p className="text-sm text-slate-500">No deliveries yet</p>;
+  if (deliveries.length === 0) return <p className="text-meta text-ink-2">No deliveries yet.</p>;
   return (
-    <ul className="divide-y divide-slate-100">
-      {deliveries.map((delivery) => (
-        <li key={delivery.id} className="py-2 text-sm">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="font-medium">{delivery.channel_type}</span>
-            <span className="text-slate-600">{delivery.recipient_id ?? delivery.channel_id}</span>
-            <span className={`rounded px-1.5 text-xs leading-5 ${STATUS_CLASSES[delivery.status]}`}>
-              {delivery.status.replaceAll("_", " ")}
-            </span>
-            <span className="text-xs text-slate-500">attempt {delivery.attempt}</span>
-            {delivery.is_fallback ? <span className="text-xs text-slate-500">fallback</span> : null}
-          </div>
-          {delivery.last_error ? (
-            <p className="mt-1 text-xs break-words text-red-700">{delivery.last_error}</p>
-          ) : null}
-        </li>
-      ))}
-    </ul>
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-meta">
+        <thead className="text-ink-2">
+          <tr>
+            <th className="py-1 pr-3 font-medium">Channel</th>
+            <th className="py-1 pr-3 font-medium">To</th>
+            <th className="py-1 pr-3 font-medium">Status</th>
+            <th className="num py-1 font-medium">Attempt</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-hairline">
+          {deliveries.map((delivery) => (
+            <tr key={delivery.id} className="align-top">
+              <td className="py-2 pr-3 font-medium text-ink">{delivery.channel_type}</td>
+              <td className="py-2 pr-3 text-ink-2">
+                {delivery.recipient_id ?? delivery.channel_id}
+                {delivery.is_fallback ? " (fallback)" : ""}
+              </td>
+              <td className="py-2 pr-3">
+                <StatusChip tone={STATUS[delivery.status].tone}>
+                  {STATUS[delivery.status].label}
+                </StatusChip>
+                {delivery.last_error ? (
+                  <p className="mt-1 break-words text-critical-ink">{delivery.last_error}</p>
+                ) : null}
+              </td>
+              <td className="num py-2 text-ink-2">{delivery.attempt}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

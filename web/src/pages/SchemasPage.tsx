@@ -1,4 +1,7 @@
+import { useState } from "react";
+
 import { RecentEventsPanel } from "../components/events/RecentEventsPanel";
+import { Icon } from "../components/ui/icons";
 import { SchemaOnboarding } from "../components/schemas/SchemaOnboarding";
 import type { TabId } from "../lib/tabs";
 
@@ -7,25 +10,36 @@ interface SchemasPageProps {
   readonly onNavigate: (tab: TabId) => void;
 }
 
-/** Schemas tab: unknown-schema inbox, mapping form with live test, saved profiles. */
+/** Connect a system: the 3-step mapping flow, with the raw recent events under "Advanced". */
 export function SchemasPage({ teamId, onNavigate }: SchemasPageProps) {
+  const [isRecentOpen, setIsRecentOpen] = useState(false);
   return (
-    <section aria-labelledby="schemas-title">
-      <h2 id="schemas-title" className="mb-3 text-xl font-semibold">
-        Schemas
-      </h2>
+    <div className="mx-auto max-w-3xl space-y-6">
       <SchemaOnboarding
         teamId={teamId}
         onCreateRule={() => {
           onNavigate("rules");
         }}
       />
-      <details className="mt-6 rounded border border-slate-200 bg-white p-3">
-        <summary className="cursor-pointer text-sm font-semibold">Recent events</summary>
-        <div className="mt-3">
-          <RecentEventsPanel />
-        </div>
+      <details
+        className="group rounded-card border border-hairline bg-card px-6 py-4"
+        onToggle={(e) => {
+          setIsRecentOpen(e.currentTarget.open);
+        }}
+      >
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-body font-semibold">
+          <Icon
+            name="chevron"
+            size={16}
+            className="-rotate-90 transition-transform group-open:rotate-0"
+          />
+          <span className="whitespace-nowrap">Recent events</span>
+          <span className="text-meta font-normal text-ink-2 max-sm:hidden">
+            as Beacon received them
+          </span>
+        </summary>
+        <div className="mt-4">{isRecentOpen ? <RecentEventsPanel /> : null}</div>
       </details>
-    </section>
+    </div>
   );
 }

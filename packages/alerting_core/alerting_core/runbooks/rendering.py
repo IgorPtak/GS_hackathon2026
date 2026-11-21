@@ -8,17 +8,17 @@ from collections.abc import Mapping
 from typing import Any
 
 from alerting_contracts.alerts import Alert
-from alerting_contracts.config import ActionConfig, ApprovalPolicy
+from alerting_contracts.config import ActionConfig
 from alerting_contracts.runbooks import (
     RenderedRunbook,
     RenderedRunbookStep,
     Runbook,
     RunbookStep,
-    StepKind,
 )
 
 from ..rules.field_paths import build_context
 from ..templating import render_template
+from .approval_policy import step_requires_approval
 
 logger = logging.getLogger("alerting_core.runbooks")
 
@@ -30,19 +30,13 @@ def _alert_context(alert: Alert) -> Mapping[str, Any]:
 
 
 def _requires_approval(step: RunbookStep, actions: Mapping[str, ActionConfig]) -> bool:
-    if step.approval is not None:
-        return step.approval == ApprovalPolicy.required
-    if step.action is None or step.kind == StepKind.text:
-        return False
-    action = actions.get(step.action)
-    if action is None:
+    if step.action is not None and step.action not in actions:
         logger.warning(
             json.dumps(
                 {"event": "runbook_unknown_action", "action": step.action, "step": step.index}
             )
         )
-        return False
-    return action.approval == ApprovalPolicy.required
+    return step_requires_approval(step, actions)
 
 
 def render_runbook(

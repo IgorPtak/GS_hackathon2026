@@ -210,13 +210,15 @@ class RunbookWalker:
                     },
                 )
                 continue
-            elif step.requires_approval:
-                await self._request_approval(step)
+            # Never auto-run a step that needs approval, whatever `is_automatic` says and also
+            # when retrying after a failure: a human decides every attempt series.
+            if step.requires_approval:
+                await self._request_approval(step, last.attempt + 1 if last else 1)
                 return
             final = await self._execute(step, None, last)
             previous = final.status
 
-    async def _request_approval(self, step: RenderedRunbookStep) -> None:
+    async def _request_approval(self, step: RenderedRunbookStep, attempt: int = 1) -> None:
         assert step.action is not None
         run = await self._store.create_run(
             self._alert.id,
@@ -225,6 +227,7 @@ class RunbookWalker:
             step.action,
             step.params,
             ActionRunStatus.pending_approval,
+            attempt,
         )
         approval = await self._store.create_approval(run, self._alert.team, step.text)
         await self._notifier.notify(self._alert, approval)
@@ -250,8 +253,13 @@ class RunbookWalker:
 
         `approved` is the existing approved row, reused for the first attempt; `last` is a
         failed earlier attempt (max_attempts was raised since), after which numbering continues.
+
+        One approval covers every internal retry of this attempt series: retries do not ask
+        again, because a human approved the step, not a single try.
         """
         assert step.action is not None
+        if step.requires_approval and approved is None:
+            raise RuntimeError(f"step {step.index} requires approval and has none")
         attempt = approved.attempt if approved else (last.attempt + 1 if last else 1)
         existing = approved
         while True:

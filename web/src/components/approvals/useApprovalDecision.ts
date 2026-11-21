@@ -5,16 +5,22 @@ import type { ApprovalRequest } from "../../api/types";
 
 export type DecisionKind = "approve" | "reject";
 
-/** Sends one decision (via "ui"); `errors` is keyed by approval request id. */
+interface BusyDecision {
+  readonly id: string;
+  readonly kind: DecisionKind;
+}
+
+/** Sends one decision (via "ui"); returns true when accepted by the server. */
 export function useApprovalDecision(team: string, onDecided: (request: ApprovalRequest) => void) {
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<BusyDecision | null>(null);
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
 
   const decide = useCallback(
-    async (id: string, decision: DecisionKind, comment: string) => {
-      setBusyId(id);
+    async (id: string, decision: DecisionKind, comment: string): Promise<boolean> => {
+      setBusy({ id, kind: decision });
       setErrors((prev) => ({ ...prev, [id]: "" }));
       let message = "";
+      let succeeded = false;
       try {
         const { data, error, response } = await apiClient.POST(
           "/api/v1/approvals/{approval_request_id}/decision",
@@ -28,21 +34,32 @@ export function useApprovalDecision(team: string, onDecided: (request: ApprovalR
             },
           },
         );
-        if (data) onDecided(data);
-        else if (response.status === 409)
-          message = error.message.startsWith("Already")
-            ? error.message
-            : `Already decided: ${error.message}`;
-        else message = `Could not send the decision (API error ${String(response.status)}).`;
+        if (data) {
+          onDecided(data);
+          succeeded = true;
+        } else if (response.status === 409) {
+          message =
+            error.error === "alert_resolved"
+              ? "This alert is already resolved, so the request was closed and nothing will run."
+              : "Someone already decided this request.";
+        } else {
+          message = `Could not send the decision (API error ${String(response.status)}).`;
+        }
       } catch (e) {
         message = `Could not send the decision: ${e instanceof Error ? e.message : "API unreachable"}.`;
       } finally {
-        setBusyId(null);
+        setBusy(null);
       }
-      setErrors((prev) => ({ ...prev, [id]: message }));
+      if (message) setErrors((prev) => ({ ...prev, [id]: message }));
+      return succeeded;
     },
     [team, onDecided],
   );
 
-  return { busyId, errors, decide };
+  return {
+    busyId: busy?.id ?? null,
+    busyKind: busy?.kind ?? null,
+    errors,
+    decide,
+  };
 }

@@ -85,6 +85,7 @@ class Env:
         self.fail_mark = False
         self.stored: dict[str, Any] | None = None
         self.rule_team: str | None = "rates"
+        self.rule_deleted = False
         self.listed: list[tuple[Any, Any]] = []
 
 
@@ -184,6 +185,8 @@ def env(monkeypatch: pytest.MonkeyPatch) -> Env:
         return 7
 
     async def get_stored(pool: Any, rule_id: str) -> Any:
+        if state.stored is None and state.rule_team is not None and not state.rule_deleted:
+            return canonical_document(Rule.model_validate(rule_doc(team=state.rule_team))), 6
         return (state.stored, 7) if state.stored is not None else None
 
     async def save_rb(pool: Any, redis: Any, runbook: Runbook, actor: Any) -> int:
@@ -208,6 +211,11 @@ def env(monkeypatch: pytest.MonkeyPatch) -> Env:
     monkeypatch.setattr(fixr, "save_runbook", save_rb)
     monkeypatch.setattr(fixr, "publish_team_event", publish)
     return state
+
+
+def _registry_with_rule() -> Any:
+    rule = Rule.model_validate(rule_doc())
+    return SimpleNamespace(rules=lambda: {"r1": rule})
 
 
 @pytest.fixture
@@ -319,7 +327,7 @@ def test_list_filters_and_order_passthrough(client: TestClient, env: Env) -> Non
 
 
 def test_accept_rule_saves_once_then_marks_then_publishes(client: TestClient, env: Env) -> None:
-    create(client, kind="threshold", proposed_rule=rule_doc("New title"))
+    create(client, kind="fields", proposed_rule=rule_doc("New title"))
     env.events.clear()
     env.published.clear()
     response = decide(client, "accept")
@@ -365,7 +373,7 @@ def test_accept_missing_runbook_is_422_and_nothing_marked(client: TestClient, en
 
 
 def test_reject_changes_only_status(client: TestClient, env: Env) -> None:
-    create(client, kind="threshold", proposed_rule=rule_doc("New"))
+    create(client, kind="fields", proposed_rule=rule_doc("New"))
     response = decide(client, "reject")
     assert response.status_code == 200 and response.json()["status"] == "rejected"
     assert env.saved_rules == [] and env.saved_runbooks == []
@@ -393,12 +401,12 @@ def test_save_failure_marks_nothing_and_publishes_nothing(env: Env) -> None:
     app = create_app(Settings(database_url="postgresql://x@127.0.0.1:1/x"))
     app.dependency_overrides[get_pool] = lambda: FakePool(env)
     app.dependency_overrides[get_redis] = lambda: object()
-    app.dependency_overrides[get_registry] = lambda: None
+    app.dependency_overrides[get_registry] = _registry_with_rule
     app.dependency_overrides[get_catalog] = lambda: SimpleNamespace(
         get=lambda _id: env.runbook, actions=dict
     )
     with TestClient(app, raise_server_exceptions=False) as client:
-        create(client, kind="threshold", proposed_rule=rule_doc("New"))
+        create(client, kind="fields", proposed_rule=rule_doc("New"))
         env.fail_save = True
         env.published.clear()
         response = decide(client, "accept")
@@ -418,7 +426,7 @@ def _crashing_client(env: Env) -> TestClient:
     app = create_app(Settings(database_url="postgresql://x@127.0.0.1:1/x"))
     app.dependency_overrides[get_pool] = lambda: FakePool(env)
     app.dependency_overrides[get_redis] = lambda: object()
-    app.dependency_overrides[get_registry] = lambda: None
+    app.dependency_overrides[get_registry] = _registry_with_rule
     app.dependency_overrides[get_catalog] = lambda: SimpleNamespace(
         get=lambda _id: env.runbook, actions=dict
     )
@@ -427,7 +435,7 @@ def _crashing_client(env: Env) -> TestClient:
 
 def test_reaccept_after_crash_between_save_and_mark_saves_rule_once(env: Env) -> None:
     with _crashing_client(env) as client:
-        create(client, kind="threshold", proposed_rule=rule_doc("New"))
+        create(client, kind="fields", proposed_rule=rule_doc("New"))
         env.fail_mark = True
         assert decide(client, "accept").status_code == 500
         assert env.rows[PROPOSAL_ID].status is ProposalStatus.pending
@@ -540,3 +548,165 @@ def test_draft_prompt_is_redacted_and_has_rule_and_runbook(client: TestClient, e
     prompt = llm.prompts[0]
     assert "abcdefghijklmnop12345" not in prompt and "sk-secret123456" not in prompt
     assert "Current rule (YAML)" in prompt and "Runbook rb1 steps" in prompt
+
+
+# -- scope per kind and runbook step policy ----------------------------------------------------
+
+
+def changed_rule(**changes: Any) -> dict[str, Any]:
+    return rule_doc() | changes
+
+
+@pytest.mark.parametrize(
+    ("kind", "changes", "expected"),
+    [
+        ("threshold", {"enabled": False}, ["proposed_rule.enabled"]),
+        ("threshold", {"route": {"channels": ["email"]}}, ["proposed_rule.route.channels"]),
+        ("threshold", {"runbook": "rb2"}, ["proposed_rule.runbook"]),
+        (
+            "threshold",
+            {"present": {"title": "other", "body": "b"}},
+            ["proposed_rule.present.title"],
+        ),
+        ("fields", {"when": {"field": "x", "op": "exists", "value": True}}, None),
+        ("dedup_window", {"enabled": False, "runbook": "rb2"}, None),
+    ],
+)
+def test_rule_kind_cannot_change_other_fields(
+    client: TestClient, env: Env, kind: str, changes: dict[str, Any], expected: list[str] | None
+) -> None:
+    response = create(client, kind=kind, proposed_rule=changed_rule(**changes))
+    assert response.status_code == 422
+    found = paths(response)
+    if expected is not None:
+        assert found == expected
+    assert "proposed_rule.when" not in found or kind != "threshold"
+    assert env.rows == {} and env.published == []
+
+
+def test_rule_kind_may_change_its_own_fields(client: TestClient) -> None:
+    threshold = changed_rule(when={"field": "normalized.type", "op": "glob", "value": "x.*"})
+    assert create(client, kind="threshold", proposed_rule=threshold).status_code == 201
+    fields = changed_rule(present={"title": "new", "body": "b"})
+    assert create(client, kind="fields", proposed_rule=fields).status_code == 201
+    dedup = changed_rule(dedup={"window": "10m"})
+    assert create(client, kind="dedup_window", proposed_rule=dedup).status_code == 201
+
+
+def test_rule_kind_cannot_change_id_or_team_even_with_other_changes(
+    client: TestClient, env: Env
+) -> None:
+    response = create(
+        client, kind="fields", proposed_rule=changed_rule(team="other", enabled=False)
+    )
+    assert response.status_code == 422 and "proposed_rule.team" in paths(response)
+
+
+def test_stale_proposal_keeps_edits_made_after_it_was_created(client: TestClient, env: Env) -> None:
+    threshold = changed_rule(when={"field": "normalized.type", "op": "glob", "value": "x.*"})
+    assert create(client, kind="threshold", proposed_rule=threshold).status_code == 201
+    edited = Rule.model_validate(rule_doc() | {"route": {"channels": ["email"]}})
+    env.stored = canonical_document(edited)  # route changed elsewhere after the proposal
+    assert decide(client, "accept").status_code == 200
+    saved = env.saved_rules[-1]
+    assert saved.route.channels == ["email"]
+    assert saved.when.value == "x.*"  # type: ignore[union-attr]
+
+
+def test_accept_is_idempotent_when_allowed_fields_already_match(
+    client: TestClient, env: Env
+) -> None:
+    threshold = changed_rule(when={"field": "normalized.type", "op": "glob", "value": "x.*"})
+    create(client, kind="threshold", proposed_rule=threshold)
+    env.stored = canonical_document(Rule.model_validate(threshold))
+    assert decide(client, "accept").status_code == 200
+    assert env.saved_rules == []
+
+
+def test_rule_proposal_for_missing_rule_is_422_at_create(client: TestClient, env: Env) -> None:
+    env.rule_team = None
+    response = create(client, kind="fields", proposed_rule=rule_doc("New"))
+    assert response.status_code == 422 and paths(response) == ["proposed_rule.id"]
+    assert env.rows == {} and env.published == []
+
+
+def test_accept_after_rule_disappeared_saves_nothing(client: TestClient, env: Env) -> None:
+    create(client, kind="fields", proposed_rule=rule_doc("New"))
+    env.rule_deleted = True
+    env.published.clear()
+    response = decide(client, "accept")
+    assert response.status_code == 422
+    assert env.saved_rules == [] and "mark" not in env.events and env.published == []
+    assert env.rows[PROPOSAL_ID].status is ProposalStatus.pending
+
+
+def _client_with_actions(env: Env, actions: dict[str, Any]) -> TestClient:
+    app = create_app(Settings(database_url="postgresql://x@127.0.0.1:1/x"))
+    app.dependency_overrides[get_pool] = lambda: FakePool(env)
+    app.dependency_overrides[get_redis] = lambda: object()
+    rule = Rule.model_validate(rule_doc(team=env.rule_team or "rates"))
+    app.dependency_overrides[get_registry] = lambda: SimpleNamespace(rules=lambda: {"r1": rule})
+    app.dependency_overrides[get_catalog] = lambda: SimpleNamespace(
+        get=lambda _id: env.runbook, actions=lambda: actions
+    )
+    return TestClient(app)
+
+
+def action_step(index: int, action: str, **extra: Any) -> dict[str, Any]:
+    return {"index": index, "kind": "action", "text": "do", "action": action} | extra
+
+
+def test_runbook_step_unknown_action_is_422(env: Env) -> None:
+    from alerting_contracts.config import ActionConfig
+
+    actions = {"escalate": ActionConfig(id="escalate", type="webhook", approval="required")}
+    with _client_with_actions(env, actions) as test_client:
+        response = create(
+            test_client, kind="runbook_step", proposed_runbook_step=action_step(1, "nope")
+        )
+        assert response.status_code == 422
+        assert paths(response) == ["proposed_runbook_step.action"]
+
+
+def test_runbook_step_cannot_loosen_required_approval(env: Env) -> None:
+    from alerting_contracts.config import ActionConfig
+
+    actions = {"escalate": ActionConfig(id="escalate", type="webhook", approval="required")}
+    with _client_with_actions(env, actions) as test_client:
+        loose = action_step(1, "escalate", approval="none", is_automatic=True)
+        response = create(test_client, kind="runbook_step", proposed_runbook_step=loose)
+        assert response.status_code == 422
+        assert paths(response) == ["proposed_runbook_step.approval"]
+        ok = create(
+            test_client, kind="runbook_step", proposed_runbook_step=action_step(1, "escalate")
+        )
+        assert ok.status_code == 201
+
+
+def test_accepting_a_step_stores_it_with_required_approval(env: Env) -> None:
+    from alerting_contracts.config import ActionConfig
+
+    actions = {"escalate": ActionConfig(id="escalate", type="webhook", approval="required")}
+    with _client_with_actions(env, actions) as test_client:
+        created = create(
+            test_client, kind="runbook_step", proposed_runbook_step=action_step(1, "escalate")
+        )
+        assert created.status_code == 201
+        assert decide(test_client, "accept").status_code == 200
+    assert env.saved_runbooks[-1].steps[1].approval.value == "required"
+
+
+def test_draft_step_is_hardened(client: TestClient, env: Env) -> None:
+    step = {"index": 1, "kind": "text", "text": "check <untrusted>", "is_automatic": True}
+    llm = FakeLlm(draft_body(kind="runbook_step", proposed_runbook_step=step))
+    response = post_draft(client, llm)
+    assert response.status_code == 200
+    assert response.json()["proposed_runbook_step"]["is_automatic"] is False
+
+
+def test_draft_prompt_fences_untrusted_input(client: TestClient) -> None:
+    llm = FakeLlm(draft_body())
+    assert post_draft(client, llm).status_code == 200
+    prompt = llm.prompts[0]
+    assert prompt.startswith("<untrusted_input>") and "</untrusted_input>" in prompt
+    assert prompt.index("</untrusted_input>") < prompt.index("Draft one fix proposal.")

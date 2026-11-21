@@ -1,6 +1,14 @@
 import { useState } from "react";
 
 import type { ConditionLeaf } from "../../api/types";
+import { Select } from "../ui/Select";
+import { TextInput } from "../ui/TextInput";
+
+interface FieldControl {
+  readonly id: string;
+  readonly "aria-describedby": string | undefined;
+  readonly "aria-invalid": boolean;
+}
 
 export type ValueKind = "string" | "number" | "boolean";
 
@@ -8,10 +16,10 @@ interface ConditionValueInputProps {
   readonly op: ConditionLeaf["op"];
   readonly value: unknown;
   readonly label: string;
+  /** id and aria attributes from the surrounding Field; they go on the main control. */
+  readonly control: FieldControl;
   readonly onChange: (value: unknown) => void;
 }
-
-const INPUT = "min-w-0 rounded border border-slate-300 px-2 py-1 text-sm";
 
 function kindOf(value: unknown): ValueKind {
   if (typeof value === "number") return "number";
@@ -40,8 +48,68 @@ function fromText(op: ConditionLeaf["op"], text: string, kind: ValueKind): unkno
   return text;
 }
 
+const SEVERITIES = [
+  { value: "debug", label: "Debug" },
+  { value: "info", label: "Info" },
+  { value: "warning", label: "Warning" },
+  { value: "error", label: "Error" },
+  { value: "critical", label: "Critical" },
+];
+
+const TIME_WINDOW = /^(\d{2}:\d{2})-(\d{2}:\d{2})$/;
+
+/** "HH:MM-HH:MM" in UTC as two time pickers; a window that wraps midnight is allowed. */
+function TimeWindowInput({
+  value,
+  control,
+  label,
+  onChange,
+}: {
+  readonly value: unknown;
+  readonly control: FieldControl;
+  readonly label: string;
+  readonly onChange: (value: unknown) => void;
+}) {
+  const match = typeof value === "string" ? TIME_WINDOW.exec(value) : null;
+  const from = match?.[1] ?? "08:00";
+  const to = match?.[2] ?? "20:00";
+  const timeClass =
+    "h-10 rounded-input border border-transparent bg-fill px-3 text-body text-ink num transition-colors hover:bg-hairline/60";
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <input
+        {...control}
+        type="time"
+        value={from}
+        aria-label={`${label} from`}
+        onChange={(event) => {
+          onChange(`${event.target.value}-${to}`);
+        }}
+        className={timeClass}
+      />
+      <span className="text-meta text-ink-2">to</span>
+      <input
+        type="time"
+        value={to}
+        aria-label={`${label} to`}
+        onChange={(event) => {
+          onChange(`${from}-${event.target.value}`);
+        }}
+        className={timeClass}
+      />
+      <span className="text-meta text-ink-3">UTC</span>
+    </div>
+  );
+}
+
 /** Value editor whose widget follows the operator: list, true/false, or typed scalar. */
-export function ConditionValueInput({ op, value, label, onChange }: ConditionValueInputProps) {
+export function ConditionValueInput({
+  op,
+  value,
+  label,
+  control,
+  onChange,
+}: ConditionValueInputProps) {
   const [kind, setKind] = useState<ValueKind>(kindOf(value));
   const [text, setText] = useState(toText(value));
   const [committed, setCommitted] = useState(value);
@@ -52,19 +120,34 @@ export function ConditionValueInput({ op, value, label, onChange }: ConditionVal
     setKind(kindOf(value));
   }
 
+  if (op === "severity_gte") {
+    return (
+      <Select
+        {...control}
+        options={SEVERITIES}
+        value={typeof value === "string" && value !== "" ? value.toLowerCase() : "warning"}
+        onChange={onChange}
+      />
+    );
+  }
+
+  if (op === "time_between") {
+    return <TimeWindowInput value={value} control={control} label={label} onChange={onChange} />;
+  }
+
   if (op === "exists") {
     return (
-      <select
-        aria-label={`${label} value`}
-        className={INPUT}
+      <Select
+        {...control}
+        options={[
+          { value: "true", label: "present in the event" },
+          { value: "false", label: "missing from the event" },
+        ]}
         value={value === false ? "false" : "true"}
-        onChange={(event) => {
-          onChange(event.target.value === "true");
+        onChange={(next) => {
+          onChange(next === "true");
         }}
-      >
-        <option value="true">present</option>
-        <option value="false">missing</option>
-      </select>
+      />
     );
   }
 
@@ -77,46 +160,48 @@ export function ConditionValueInput({ op, value, label, onChange }: ConditionVal
     onChange(next);
   }
 
+  const isList = op === "in";
   return (
-    <>
-      {op === "in" ? null : (
-        <select
-          aria-label={`${label} value type`}
-          className={INPUT}
-          value={kind}
-          onChange={(event) => {
-            const nextKind = event.target.value as ValueKind;
-            commit(nextKind === "boolean" ? "true" : text, nextKind);
-          }}
-        >
-          <option value="string">text</option>
-          <option value="number">number</option>
-          <option value="boolean">boolean</option>
-        </select>
+    <div className="flex flex-col gap-2 sm:flex-row">
+      {isList ? null : (
+        <div className="shrink-0 sm:w-32">
+          <Select
+            aria-label={`${label} value type`}
+            options={[
+              { value: "string", label: "Text" },
+              { value: "number", label: "Number" },
+              { value: "boolean", label: "Yes / no" },
+            ]}
+            value={kind}
+            onChange={(next) => {
+              const nextKind = next as ValueKind;
+              commit(nextKind === "boolean" ? "true" : text, nextKind);
+            }}
+          />
+        </div>
       )}
-      {kind === "boolean" && op !== "in" ? (
-        <select
-          aria-label={`${label} value`}
-          className={INPUT}
+      {kind === "boolean" && !isList ? (
+        <Select
+          {...control}
+          options={[
+            { value: "true", label: "Yes" },
+            { value: "false", label: "No" },
+          ]}
           value={text === "false" ? "false" : "true"}
-          onChange={(event) => {
-            commit(event.target.value, "boolean");
+          onChange={(next) => {
+            commit(next, "boolean");
           }}
-        >
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </select>
+        />
       ) : (
-        <input
-          aria-label={`${label} value`}
-          className={`${INPUT} flex-1`}
-          placeholder={op === "in" ? "a, b, c" : "value"}
+        <TextInput
+          {...control}
+          placeholder={isList ? "a, b, c" : "10000000"}
           value={text}
           onChange={(event) => {
             commit(event.target.value, kind);
           }}
         />
       )}
-    </>
+    </div>
   );
 }

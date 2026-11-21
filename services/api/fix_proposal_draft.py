@@ -17,6 +17,8 @@ from alerting_core.config.store import canonical_yaml
 from alerting_core.llm import LlmClient, LlmError, LlmOutputInvalidError, redact_secrets
 from alerting_core.logging import get_logger
 
+from plugins.runbook_formats.text_format import validate_llm_steps
+
 log = get_logger(__name__)
 
 PROMPT_PATH = (
@@ -52,9 +54,12 @@ def build_user_prompt(alert: Alert, rule: Rule | None, runbook: Runbook | None) 
         parts.append(f"Runbook {runbook.id} steps:\n" + json.dumps(steps, indent=2))
     else:
         parts.append("The alert has no runbook.")
-    parts.append("Draft one fix proposal.")
+    # Everything above is outside data: fenced so the system prompt can call it untrusted.
+    data = "\n\n".join(parts).replace("</untrusted_input>", "<\\/untrusted_input>")
     # Redacted here as well as in LlmClient.generate so the guarantee does not depend on the client.
-    return redact_secrets("\n\n".join(parts))
+    return redact_secrets(
+        f"<untrusted_input>\n{data}\n</untrusted_input>\n\nDraft one fix proposal."
+    )
 
 
 class DraftUnavailableError(Exception):
@@ -69,13 +74,31 @@ class DraftInvalidError(Exception):
         self.details = details or []
 
 
+def _harden_draft_step(
+    draft: FixProposalCreate, actions: Mapping[str, ActionConfig]
+) -> FixProposalCreate:
+    """An LLM step gets the same hardening as LLM runbook steps (no automation, safe params)."""
+    step = draft.proposed_runbook_step
+    if step is None:
+        return draft
+    hardened = validate_llm_steps([step], actions)
+    if not hardened:
+        return draft.model_copy(update={"proposed_runbook_step": None})
+    return draft.model_copy(
+        update={"proposed_runbook_step": hardened[0].model_copy(update={"index": step.index})}
+    )
+
+
 async def draft_fix_proposal(
     client: LlmClient | None,
     alert: Alert,
     rule: Rule | None,
     runbook: Runbook | None,
     actions: Mapping[str, ActionConfig],
-    validate: Callable[[Alert, FixProposalCreate, Rule | None], list[ConfigValidationError]],
+    validate: Callable[
+        [Alert, FixProposalCreate, Rule | None, Mapping[str, ActionConfig]],
+        list[ConfigValidationError],
+    ],
 ) -> FixProposalCreate:
     """Ask the model for one proposal and check it with `validate` (same as the create route).
 
@@ -94,7 +117,8 @@ async def draft_fix_proposal(
     except LlmError as error:
         raise DraftUnavailableError(str(error)) from error
     assert isinstance(answer, FixProposalCreate)
-    errors = validate(alert, answer, rule)
+    answer = _harden_draft_step(answer, actions)
+    errors = validate(alert, answer, rule, actions)
     if errors:
         raise DraftInvalidError("LLM draft failed validation", errors)
     log.info("fix_proposal_drafted", extra={"alert_id": alert.id, "kind": answer.kind.value})

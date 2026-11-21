@@ -1,12 +1,78 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-/** Browser speech synthesis; `isSupported` is false when the API is missing. */
-export function useSpeech() {
+import { playSpeechChime } from "./playChime";
+import {
+  pickBestVoice,
+  readStoredVoiceUri,
+  sortVoicesForPicker,
+  writeStoredVoiceUri,
+} from "./voiceSelection";
+
+function readVoices(): readonly SpeechSynthesisVoice[] {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return [];
+  try {
+    return window.speechSynthesis.getVoices();
+  } catch {
+    return [];
+  }
+}
+
+export interface SpeechController {
+  readonly isSupported: boolean;
+  readonly voices: readonly SpeechSynthesisVoice[];
+  readonly selectedVoiceUri: string;
+  readonly activeVoice: SpeechSynthesisVoice | null;
+  readonly setSelectedVoiceUri: (uri: string) => void;
+  readonly speakSentences: (
+    sentences: readonly string[],
+    options?: { readonly withChime?: boolean },
+  ) => void;
+  readonly cancel: () => void;
+}
+
+/**
+ * Browser speech synthesis with best-voice selection, `voiceschanged` support,
+ * persisted voice choice, a pleasant chime, and queued short utterances.
+ */
+export function useSpeech(): SpeechController {
   const isSupported = typeof window !== "undefined" && "speechSynthesis" in window;
-  // Keep a reference so the utterance is not garbage collected mid-speech.
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const [rawVoices, setRawVoices] = useState<readonly SpeechSynthesisVoice[]>(readVoices);
+  const [selectedVoiceUri, setSelectedUriState] = useState<string>(readStoredVoiceUri);
+  // Keep references to queued utterances so the browser does not garbage-collect them mid-speech.
+  const utterancesRef = useRef<SpeechSynthesisUtterance[]>([]);
+  const generationRef = useRef(0);
+
+  useEffect(() => {
+    if (!isSupported) return;
+    const synth = window.speechSynthesis;
+    const refresh = () => {
+      setRawVoices(readVoices());
+    };
+    refresh();
+    synth.addEventListener("voiceschanged", refresh);
+    return () => {
+      synth.removeEventListener("voiceschanged", refresh);
+    };
+  }, [isSupported]);
+
+  const voices = useMemo(() => sortVoicesForPicker(rawVoices), [rawVoices]);
+
+  const activeVoice = useMemo(() => {
+    if (selectedVoiceUri !== "") {
+      const explicit = rawVoices.find((voice) => voice.voiceURI === selectedVoiceUri);
+      if (explicit) return explicit;
+    }
+    return pickBestVoice(rawVoices);
+  }, [rawVoices, selectedVoiceUri]);
+
+  const setSelectedVoiceUri = useCallback((uri: string) => {
+    setSelectedUriState(uri);
+    writeStoredVoiceUri(uri);
+  }, []);
 
   const cancel = useCallback(() => {
+    generationRef.current += 1;
+    utterancesRef.current = [];
     if (!isSupported) return;
     try {
       window.speechSynthesis.cancel();
@@ -15,24 +81,61 @@ export function useSpeech() {
     }
   }, [isSupported]);
 
-  const speak = useCallback(
-    (text: string) => {
-      if (!isSupported) return;
+  const speakSentences = useCallback(
+    (sentences: readonly string[], options?: { readonly withChime?: boolean }) => {
+      if (!isSupported || sentences.length === 0) return;
+      const runId = generationRef.current + 1;
+      generationRef.current = runId;
+
       try {
         window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = "en-US";
-        utterance.rate = 0.95;
-        utteranceRef.current = utterance;
-        window.speechSynthesis.speak(utterance);
       } catch {
-        // Speech is best effort.
+        // Ignore cancel errors.
+      }
+
+      const startSpeaking = () => {
+        if (generationRef.current !== runId) return;
+        const queued: SpeechSynthesisUtterance[] = [];
+        for (const sentence of sentences) {
+          const utterance = new SpeechSynthesisUtterance(sentence);
+          if (activeVoice) {
+            utterance.voice = activeVoice;
+            utterance.lang = activeVoice.lang;
+          } else {
+            utterance.lang = "en-US";
+          }
+          utterance.rate = 0.95;
+          utterance.pitch = 1.0;
+          queued.push(utterance);
+        }
+        utterancesRef.current = queued;
+        try {
+          for (const utterance of queued) {
+            window.speechSynthesis.speak(utterance);
+          }
+        } catch {
+          // Speech is best effort.
+        }
+      };
+
+      if (options?.withChime === false) {
+        startSpeaking();
+      } else {
+        void playSpeechChime().then(startSpeaking);
       }
     },
-    [isSupported],
+    [activeVoice, isSupported],
   );
 
   useEffect(() => cancel, [cancel]);
 
-  return { isSupported, speak, cancel };
+  return {
+    isSupported,
+    voices,
+    selectedVoiceUri,
+    activeVoice,
+    setSelectedVoiceUri,
+    speakSentences,
+    cancel,
+  };
 }

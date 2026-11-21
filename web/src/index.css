@@ -1,1 +1,492 @@
 @import "tailwindcss";
+
+/*
+ * Design tokens (docs/ui-design.md). light-dark() follows `color-scheme`, which follows the
+ * system by default and the user's choice when <html data-theme="light|dark"> is set.
+ */
+:root {
+  color-scheme: light dark;
+  /* Lets <details> and other panels animate to their natural height (progressive). */
+  interpolate-size: allow-keywords;
+
+  --canvas: light-dark(#e9e9ec, #0e0e10);
+  --window: light-dark(#ffffff, #1c1c1e);
+  --panel: light-dark(#f6f6f8, #151517);
+  --card: light-dark(#ffffff, #232326);
+  --ink: light-dark(#1d1d1f, #f5f5f7);
+  --ink-2: light-dark(#6e6e73, #a1a1a6);
+  --ink-3: light-dark(#a1a1a6, #6e6e73);
+  --hairline: light-dark(#e5e5ea, #2c2c2e);
+  --fill: light-dark(#f2f2f4, #2c2c2e);
+  --accent: #0a84ff;
+  --critical: light-dark(#ff3b30, #ff453a);
+  --error: light-dark(#ff9500, #ff9f0a);
+  --warning: light-dark(#ffcc00, #ffd60a);
+  --info: #8e8e93;
+  --success: light-dark(#34c759, #30d158);
+
+  /* Text-safe variants of the status colours (the bright ones fail AA as text on white). */
+  --critical-ink: light-dark(#d70015, #ff6961);
+  --error-ink: light-dark(#b35c00, #ff9f0a);
+  --warning-ink: light-dark(#a05a00, #ffd60a);
+  --success-ink: light-dark(#1a7f37, #30d158);
+  --accent-ink: light-dark(#0066cc, #4da3ff);
+
+  --team-rates: #0a84ff;
+  --team-settlements: #af52de;
+  --team-pricing: #ff9500;
+  --team-platform: #34c759;
+
+  --elev-window: 0 1px 0 rgb(0 0 0 / 0.04), 0 24px 60px -24px rgb(0 0 0 / 0.18);
+  --elev-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --elev-tile: 0 2px 6px rgb(0 0 0 / 0.06);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --elev-window: 0 1px 0 rgb(255 255 255 / 0.04), 0 24px 60px -24px rgb(0 0 0 / 0.6);
+  --elev-tile: 0 2px 6px rgb(0 0 0 / 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --elev-window: 0 1px 0 rgb(255 255 255 / 0.04), 0 24px 60px -24px rgb(0 0 0 / 0.6);
+    --elev-tile: 0 2px 6px rgb(0 0 0 / 0.3);
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-window: var(--window);
+  --color-panel: var(--panel);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-hairline: var(--hairline);
+  --color-fill: var(--fill);
+  --color-accent: var(--accent);
+  --color-critical: var(--critical);
+  --color-error: var(--error);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-success: var(--success);
+  --color-critical-ink: var(--critical-ink);
+  --color-error-ink: var(--error-ink);
+  --color-warning-ink: var(--warning-ink);
+  --color-success-ink: var(--success-ink);
+  --color-accent-ink: var(--accent-ink);
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-meta: 13px;
+  --text-meta--line-height: 18px;
+  --text-body: 15px;
+  --text-body--line-height: 22px;
+  --text-row: 17px;
+  --text-row--line-height: 22px;
+  --text-card-title: 22px;
+  --text-card-title--line-height: 28px;
+  --text-page: 28px;
+  --text-page--line-height: 34px;
+  --text-hero: 40px;
+  --text-hero--line-height: 44px;
+
+  --radius-window: 28px;
+  --radius-card: 20px;
+  --radius-tile: 14px;
+  --radius-input: 12px;
+
+  --shadow-window: var(--elev-window);
+  --shadow-card: var(--elev-card);
+  --shadow-tile: var(--elev-tile);
+
+  /* Motion: calm, never instant. Hover/press states ease over ~220 ms on a soft curve. */
+  --default-transition-duration: 220ms;
+  --default-transition-timing-function: cubic-bezier(0.25, 0.8, 0.25, 1);
+  --ease-soft: cubic-bezier(0.25, 0.8, 0.25, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --animate-row-in: row-in 320ms cubic-bezier(0.25, 0.8, 0.25, 1);
+  --animate-pop: pop 220ms cubic-bezier(0.25, 0.8, 0.25, 1);
+  --animate-fade-up: fade-up 320ms cubic-bezier(0.25, 0.8, 0.25, 1) both;
+  --animate-fade-in: fade-in 260ms ease-out both;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes row-in {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+@layer base {
+  html {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 22px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+  }
+
+  button,
+  [role="button"],
+  summary {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  dialog {
+    color: inherit;
+  }
+
+  dialog:modal {
+    overscroll-behavior: contain;
+  }
+
+  dialog::backdrop {
+    background: rgb(0 0 0 / 0.32);
+    overflow: hidden;
+    overscroll-behavior: contain;
+  }
+
+  /* Disclosures open and close smoothly, so whatever sits below them glides instead of jumping. */
+  details::details-content {
+    block-size: 0;
+    overflow-y: clip;
+    transition:
+      block-size 340ms var(--ease-soft),
+      content-visibility 340ms allow-discrete;
+  }
+
+  details[open]::details-content {
+    block-size: auto;
+  }
+}
+
+/* Dialogs fade and rise in, and fade out again; the backdrop dims with them. */
+dialog.modal-dialog {
+  opacity: 0;
+  transform: translateY(10px) scale(0.985);
+  transition:
+    opacity 220ms var(--ease-soft),
+    transform 320ms var(--ease-spring),
+    overlay 320ms allow-discrete,
+    display 320ms allow-discrete;
+}
+
+dialog.modal-dialog[open] {
+  opacity: 1;
+  transform: none;
+}
+
+@starting-style {
+  dialog.modal-dialog[open] {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+}
+
+dialog.modal-dialog::backdrop {
+  background: rgb(0 0 0 / 0);
+  backdrop-filter: blur(0);
+  transition:
+    background 260ms ease,
+    backdrop-filter 260ms ease,
+    overlay 320ms allow-discrete,
+    display 320ms allow-discrete;
+}
+
+dialog.modal-dialog[open]::backdrop {
+  background: rgb(0 0 0 / 0.28);
+  backdrop-filter: blur(3px);
+}
+
+@starting-style {
+  dialog.modal-dialog[open]::backdrop {
+    background: rgb(0 0 0 / 0);
+    backdrop-filter: blur(0);
+  }
+}
+
+/* The side sheet slides in from the right edge instead. */
+dialog.sheet-dialog {
+  transform: translateX(32px);
+}
+
+dialog.sheet-dialog[open] {
+  transform: none;
+}
+
+@starting-style {
+  dialog.sheet-dialog[open] {
+    transform: translateX(32px);
+  }
+}
+
+/*
+ * Selects: where the browser supports it, the picker is our own rounded card (top layer, full
+ * keyboard support, native semantics). Elsewhere the OS picker is a fine fallback.
+ */
+@supports (appearance: base-select) {
+  .select-base,
+  .select-base::picker(select) {
+    appearance: base-select;
+  }
+
+  .select-base {
+    display: flex;
+    align-items: center;
+  }
+
+  .select-base::picker-icon {
+    display: none;
+  }
+
+  .select-base::picker(select) {
+    margin-block: 6px;
+    padding: 6px;
+    border: 1px solid var(--hairline);
+    border-radius: 16px;
+    background: light-dark(var(--card), #2a2a2d);
+    color: var(--ink);
+    box-shadow:
+      0 18px 40px -12px rgb(0 0 0 / 0.22),
+      0 2px 8px rgb(0 0 0 / 0.06);
+    opacity: 0;
+    translate: 0 -4px;
+    transition:
+      opacity 180ms ease,
+      translate 240ms var(--ease-spring),
+      overlay 240ms allow-discrete,
+      display 240ms allow-discrete;
+  }
+
+  .select-base:open::picker(select) {
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  @starting-style {
+    .select-base:open::picker(select) {
+      opacity: 0;
+      translate: 0 -4px;
+    }
+  }
+
+  .select-base option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-block-size: 38px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 15px;
+    transition: background-color 160ms ease;
+  }
+
+  .select-base option:hover,
+  .select-base option:focus-visible {
+    background: var(--fill);
+    outline: none;
+  }
+
+  .select-base option:checked {
+    font-weight: 500;
+  }
+
+  .select-base option::checkmark {
+    order: 1;
+    margin-inline-start: auto;
+    color: var(--accent-ink);
+  }
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The popover and dialog reset: Tailwind preflight strips UA margins we rely on for centring. */
+dialog:not([open]) {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * Interim shim: pages not yet restyled use hard-coded light Tailwind palettes. Pin them to the
+ * light scheme so they stay readable in dark mode. Remove once every page uses the tokens.
+ */
+.legacy-light {
+  color-scheme: light;
+  color: #1d1d1f;
+}
+
+/* Section changes: only the main panel cross-fades; the rail stays still. */
+.main-panel {
+  view-transition-name: main-panel;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-old(main-panel) {
+  animation: panel-out 180ms ease-in both;
+}
+
+::view-transition-new(main-panel) {
+  animation: panel-in 380ms var(--ease-soft) 60ms both;
+}
+
+@keyframes panel-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Login sky: background dust is faint, stars brighter, the big mark brightest. */
+.ascii-sky {
+  color: light-dark(rgb(29 29 31 / 0.16), rgb(245 245 247 / 0.16));
+}
+
+.ascii-sky [data-level="1"] {
+  color: light-dark(rgb(29 29 31 / 0.38), rgb(245 245 247 / 0.55));
+}
+
+.ascii-sky [data-level="2"] {
+  color: light-dark(rgb(29 29 31 / 0.5), rgb(245 245 247 / 0.72));
+}
+
+/* The page backdrop: the same sky, much quieter, so it fills the grey without competing. */
+.ascii-sky-panel {
+  color: light-dark(rgb(29 29 31 / 0.05), rgb(245 245 247 / 0.04));
+}
+
+.ascii-sky-panel [data-level="1"] {
+  color: light-dark(rgb(29 29 31 / 0.13), rgb(245 245 247 / 0.12));
+}
+
+.ascii-sky-panel [data-level="2"] {
+  color: light-dark(rgb(29 29 31 / 0.085), rgb(245 245 247 / 0.075));
+}
+
+.ascii-twinkle {
+  animation: twinkle 4.8s ease-in-out infinite;
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.ascii-glow {
+  background: radial-gradient(
+    ellipse 45% 55% at 72% 48%,
+    light-dark(rgb(10 132 255 / 0.08), rgb(120 160 255 / 0.12)),
+    transparent 70%
+  );
+}
+
+/*
+ * The white header band casts a soft shadow only once the page scrolls under it (scroll-driven,
+ * progressive: browsers without it simply show no shadow).
+ */
+@supports (animation-timeline: scroll()) {
+  .page-frame {
+    timeline-scope: --page-scroll;
+  }
+
+  .page-scroll {
+    scroll-timeline: --page-scroll y;
+  }
+
+  .page-header {
+    animation: header-lift linear both;
+    animation-timeline: --page-scroll;
+    animation-range: 0 48px;
+  }
+
+  @keyframes header-lift {
+    from {
+      box-shadow: 0 0 0 transparent;
+    }
+    to {
+      box-shadow: 0 10px 24px -18px rgb(0 0 0 / 0.35);
+    }
+  }
+}

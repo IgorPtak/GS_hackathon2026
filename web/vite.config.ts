@@ -9,6 +9,11 @@ export default defineConfig({
     proxy: {
       "/api/v1/ingest": { target: "http://localhost:8001", changeOrigin: true },
       "/api": { target: "http://localhost:8000", changeOrigin: true },
+      "/gateway": {
+        target: "http://localhost:8090",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/gateway/, ""),
+      },
     },
   },
 });

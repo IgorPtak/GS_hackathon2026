@@ -20,7 +20,10 @@ function lines(value: unknown, indent: number): string[] {
     });
   }
   if (typeof value === "object" && value !== null) {
+    // Unset fields (null) are left out so they take their defaults; writing them as `{}` or
+    // `null` would turn a valid AI draft into validation errors.
     return Object.entries(value).flatMap(([key, item]) => {
+      if (item === null || item === undefined) return [];
       if (!isContainer(item)) {
         const empty = Array.isArray(item) ? "[]" : typeof item === "object" ? "{}" : null;
         return [`${pad}${key}: ${empty ?? scalar(item)}`];

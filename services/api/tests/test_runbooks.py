@@ -197,6 +197,40 @@ def test_put_markdown_and_yaml_use_parser_not_llm(
     assert response.json()["normalized_by"] == "parser" and llm.calls == 0
 
 
+def test_put_unknown_action_is_422(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_save(pool: Any, redis: Any, runbook: Runbook, actor: Any) -> int:
+        raise AssertionError("must not be saved")
+
+    monkeypatch.setattr(runbooks_router, "save_runbook", fake_save)
+    source = (
+        "id: rb-1\ntitle: RB\nsteps:\n"
+        "  - {index: 0, kind: action, text: x, action: no-such-action}\n"
+    )
+    response = client.put("/api/v1/runbooks/rb-1", json=put_body(format="yaml", source=source))
+    assert response.status_code == 422
+    assert response.json()["details"][0]["path"] == "steps.0.action"
+
+
+def test_put_yaml_with_loosened_approval_is_saved_as_required(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    saved: list[Runbook] = []
+
+    async def fake_save(pool: Any, redis: Any, runbook: Runbook, actor: Any) -> int:
+        saved.append(runbook)
+        return 1
+
+    monkeypatch.setattr(runbooks_router, "save_runbook", fake_save)
+    source = (
+        "id: rb-1\ntitle: RB\nsteps:\n"
+        "  - {index: 0, kind: action, text: x, action: escalate, approval: none,\n"
+        "     is_automatic: true}\n"
+    )
+    response = client.put("/api/v1/runbooks/rb-1", json=put_body(format="yaml", source=source))
+    assert response.status_code == 200
+    assert saved[0].steps[0].approval.value == "required"
+
+
 def test_file_fallback_never_calls_llm(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     from alerting_core.runbooks import store
 

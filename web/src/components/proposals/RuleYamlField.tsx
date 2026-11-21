@@ -6,6 +6,7 @@ import { ValidationErrorList } from "../rules/ValidationErrorList";
 import { YamlEditor } from "../rules/YamlEditor";
 import { errorLines } from "../rules/ruleErrors";
 import { useRuleValidation } from "../rules/useRuleValidation";
+import { Skeleton } from "../ui/Skeleton";
 
 interface RuleYamlFieldProps {
   readonly ruleId: string;
@@ -28,9 +29,13 @@ function Editor({
   }, [rule, onRuleChange]);
   const shown = serverErrors.length > 0 ? serverErrors : validation.errors;
   const lines = useMemo(() => errorLines(text, shown), [text, shown]);
+
   return (
     <div className="space-y-2">
-      <YamlEditor value={text} errorLines={lines} onChange={setText} />
+      <p className="text-meta font-medium text-ink">Proposed rule YAML</p>
+      <div className="overflow-hidden rounded-input border border-hairline">
+        <YamlEditor value={text} errorLines={lines} onChange={setText} />
+      </div>
       <ValidationErrorList
         errors={shown}
         isChecking={validation.isChecking}
@@ -53,6 +58,7 @@ export function RuleYamlField({
     yaml: string | null;
     error: string | null;
   } | null>(null);
+
   useEffect(() => {
     let isCancelled = false;
     apiClient
@@ -62,28 +68,36 @@ export function RuleYamlField({
         setLoaded({
           id: ruleId,
           yaml: data?.yaml ?? null,
-          error: data ? null : `Cannot load the rule (API error ${String(response.status)})`,
+          error: data
+            ? null
+            : `Could not load rule ${ruleId} (API error ${String(response.status)}).`,
         });
       })
       .catch((e: unknown) => {
-        if (!isCancelled)
+        if (!isCancelled) {
           setLoaded({
             id: ruleId,
             yaml: null,
             error: e instanceof Error ? e.message : "API unreachable",
           });
+        }
       });
     return () => {
       isCancelled = true;
     };
   }, [ruleId]);
-  if (loaded?.id !== ruleId) return <p className="text-sm text-slate-500">Loading rule...</p>;
-  if (loaded.yaml === null)
+
+  if (loaded?.id !== ruleId) return <Skeleton className="h-48 w-full" />;
+  if (loaded.yaml === null) {
     return (
-      <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800">
+      <p
+        role="alert"
+        className="rounded-tile border border-critical/30 bg-critical/8 px-3.5 py-2.5 text-meta text-critical-ink"
+      >
         {loaded.error}
       </p>
     );
+  }
   return (
     <Editor
       key={prefill?.nonce ?? 0}

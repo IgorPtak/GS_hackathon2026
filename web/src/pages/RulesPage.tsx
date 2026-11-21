@@ -1,88 +1,148 @@
 import { useState } from "react";
 
 import type { RuleRecord } from "../api/types";
-import { RecipientsSection } from "../components/recipients/RecipientsSection";
 import { RuleEditor } from "../components/rules/RuleEditor";
+import { RuleListCard } from "../components/rules/RuleListCard";
+import { newRuleYaml } from "../components/rules/topLevelYaml";
 import { useRules } from "../components/rules/useRules";
+import { EmptyState } from "../components/ui/EmptyState";
+import { Pill } from "../components/ui/Pill";
+import { Skeleton } from "../components/ui/Skeleton";
+import { useToast } from "../components/ui/toastContext";
 
-function RulesView({ team }: { readonly team: string }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [saved, setSaved] = useState<RuleRecord | null>(null);
-  const state = useRules(team);
-  const listed = state.rules.find((r) => r.id === selectedId) ?? null;
-  const record =
-    saved?.id === selectedId && saved.version >= (listed?.version ?? 0) ? saved : listed;
+/** `null` is the list, "new" a rule that does not exist yet, anything else a rule id. */
+export type RulesSelection = string | null;
+export const NEW_RULE = "new";
 
+type Filter = "all" | "enabled" | "disabled";
+
+interface RulesPageProps {
+  readonly teamId: string;
+  readonly selection: RulesSelection;
+  readonly onSelect: (selection: RulesSelection) => void;
+}
+
+function RulesList({
+  rules,
+  onSelect,
+}: {
+  readonly rules: readonly RuleRecord[];
+  readonly onSelect: (id: string) => void;
+}) {
+  const [filter, setFilter] = useState<Filter>("all");
+  const enabled = rules.filter((r) => r.rule.enabled).length;
+  const shown = rules.filter((r) => filter === "all" || (filter === "enabled") === r.rule.enabled);
   return (
-    <div className="space-y-3">
-      {state.isLoading ? <p className="text-sm text-slate-500">Loading rules...</p> : null}
-      {state.error ? (
-        <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800">
-          Cannot load rules ({state.error}).
-        </p>
-      ) : null}
-      {!state.isLoading && !state.error && state.rules.length === 0 ? (
-        <p className="text-sm text-slate-500">No rules for this team yet</p>
-      ) : null}
-      <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
-        <ul className="space-y-1">
-          {state.rules.map((item) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                aria-pressed={item.id === selectedId}
-                onClick={() => {
-                  setSelectedId(item.id);
-                }}
-                className={`w-full rounded border px-3 py-2 text-left text-sm ${
-                  item.id === selectedId
-                    ? "border-slate-800 bg-white"
-                    : "border-slate-200 bg-white hover:bg-slate-50"
-                }`}
-              >
-                <span className="block font-medium break-words">{item.rule.present.title}</span>
-                <span className="block text-xs break-all text-slate-500">{item.id}</span>
-                <span className="block text-xs text-slate-500">
-                  v{item.version} · {new Date(item.updated_at).toLocaleString()}
-                  {item.updated_by ? ` · ${item.updated_by.id}` : ""}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        <div className="min-w-0">
-          {record ? (
-            <RuleEditor
-              key={`${record.id}@${String(record.version)}`}
-              record={record}
-              team={team}
-              onSaved={(next) => {
-                setSaved(next);
-                state.reload();
-              }}
-            />
-          ) : (
-            <p className="text-sm text-slate-500">Select a rule to edit its YAML.</p>
-          )}
-        </div>
+    <div className="space-y-4">
+      <div role="toolbar" aria-label="Filter rules" className="flex flex-wrap gap-2">
+        <Pill
+          isActive={filter === "all"}
+          count={rules.length}
+          onToggle={() => {
+            setFilter("all");
+          }}
+        >
+          All
+        </Pill>
+        <Pill
+          isActive={filter === "enabled"}
+          count={enabled}
+          onToggle={() => {
+            setFilter("enabled");
+          }}
+        >
+          Enabled
+        </Pill>
+        <Pill
+          isActive={filter === "disabled"}
+          count={rules.length - enabled}
+          onToggle={() => {
+            setFilter("disabled");
+          }}
+        >
+          Disabled
+        </Pill>
       </div>
+      <ul className="space-y-3">
+        {shown.map((record) => (
+          <RuleListCard
+            key={record.id}
+            record={record}
+            onOpen={() => {
+              onSelect(record.id);
+            }}
+          />
+        ))}
+      </ul>
     </div>
   );
 }
 
-/** Rules tab: pick a rule of the team, edit it as YAML, preview and save a new version. */
-export function RulesPage({ teamId }: { readonly teamId: string | null }) {
-  return (
-    <section aria-labelledby="rules-title">
-      <h2 id="rules-title" className="mb-3 text-xl font-semibold">
-        Rules
-      </h2>
-      {teamId === null ? (
-        <p className="text-sm text-slate-500">Pick a team to see its rules.</p>
-      ) : (
-        <RulesView key={teamId} team={teamId} />
-      )}
-      {teamId === null ? null : <RecipientsSection key={`recipients-${teamId}`} team={teamId} />}
-    </section>
-  );
+/** The team's rules as cards, or the 3-step flow for the opened or new rule. */
+export function RulesPage({ teamId, selection, onSelect }: RulesPageProps) {
+  const [saved, setSaved] = useState<RuleRecord | null>(null);
+  const state = useRules(teamId);
+  const toast = useToast();
+  const listed = state.rules.find((r) => r.id === selection) ?? null;
+  const record =
+    saved?.id === selection && saved.version >= (listed?.version ?? 0) ? saved : listed;
+
+  function handleSaved(next: RuleRecord) {
+    setSaved(next);
+    state.reload();
+    toast.show(`Saved ${next.id}`);
+    if (selection === NEW_RULE) onSelect(next.id);
+  }
+
+  if (selection === NEW_RULE) {
+    return (
+      <RuleEditor
+        key="new"
+        source={{ id: null, yaml: newRuleYaml(teamId) }}
+        version={null}
+        team={teamId}
+        onSaved={handleSaved}
+      />
+    );
+  }
+  if (selection !== null && record) {
+    return (
+      <RuleEditor
+        key={record.id}
+        source={{ id: record.id, yaml: record.yaml }}
+        version={record.version}
+        team={teamId}
+        onSaved={handleSaved}
+      />
+    );
+  }
+  if (state.isLoading) return <Skeleton className="h-40 w-full" />;
+  if (state.error) {
+    return (
+      <p role="alert" className="rounded-tile bg-critical/12 px-4 py-3 text-critical-ink">
+        Cannot load rules ({state.error}). Check that the API is running, then reload.
+      </p>
+    );
+  }
+  if (state.rules.length === 0) {
+    return (
+      <EmptyState
+        icon="rules"
+        action={
+          <button
+            type="button"
+            onClick={() => {
+              onSelect(NEW_RULE);
+            }}
+            className="h-9 rounded-full bg-ink px-4 text-body font-medium text-window"
+          >
+            New rule
+          </button>
+        }
+      >
+        This team has no rules yet. Create one to turn events into alerts.
+      </EmptyState>
+    );
+  }
+  return <RulesList rules={state.rules} onSelect={onSelect} />;
 }

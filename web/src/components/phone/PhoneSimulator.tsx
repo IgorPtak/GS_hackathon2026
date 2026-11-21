@@ -1,123 +1,194 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import type { PhoneMessage, Recipient } from "../../api/types";
 import { useEventStream } from "../../hooks/useEventStream";
-import { ConnectionIndicator } from "../alerts/ConnectionIndicator";
-import type { PhoneMessage } from "../../api/types";
+import { EmptyState } from "../ui/EmptyState";
+import { Spinner } from "../ui/Spinner";
 import { IncomingCallScreen } from "./IncomingCallScreen";
-import { PhoneMessageBubble } from "./PhoneMessageBubble";
-import { PhoneReplyBox } from "./PhoneReplyBox";
+import { LockScreen } from "./LockScreen";
+import { PhoneDeviceFrame } from "./PhoneDeviceFrame";
+import { readDevPhoneState, readUrlRecipientId, resolveDevCallMessage } from "./phoneDevOverride";
+import { PhoneInfoCard } from "./PhoneInfoCard";
+import { useAudioUnlock } from "./useAudioUnlock";
 import { usePhoneMessages } from "./usePhoneMessages";
 import { useRecipients } from "./useRecipients";
+import { useSpeech } from "./useSpeech";
 
-/** Mock phone per recipient: SMS and calls, live from phone.message, with a reply box. */
-export function PhoneSimulator({ teamId }: { teamId: string | null }) {
+function useIsNarrowViewport(): boolean {
+  const [isNarrow, setIsNarrow] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 639px)").matches : false,
+  );
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const update = () => {
+      setIsNarrow(query.matches);
+    };
+    update();
+    query.addEventListener("change", update);
+    return () => {
+      query.removeEventListener("change", update);
+    };
+  }, []);
+
+  return isNarrow;
+}
+
+function pickDefaultRecipient(
+  recipients: readonly Recipient[],
+  teamId: string | null,
+  urlRecipientId: string | null,
+): Recipient | null {
+  if (recipients.length === 0) return null;
+  if (urlRecipientId) {
+    const fromUrl = recipients.find((candidate) => candidate.id === urlRecipientId);
+    if (fromUrl) return fromUrl;
+  }
+  if (teamId) {
+    const teamMatch = recipients.find((candidate) => candidate.teams?.includes(teamId));
+    if (teamMatch) return teamMatch;
+  }
+  return recipients.find((candidate) => candidate.id === "piotr") ?? recipients[0] ?? null;
+}
+
+interface PhoneSimulatorProps {
+  readonly teamId: string | null;
+  readonly isFullScreen?: boolean;
+  /** Only the device, no side card (the test console). */
+  readonly isDeviceOnly?: boolean;
+}
+
+/** iPhone-like phone simulator: live SMS lock screen, incoming calls, keypad approvals, and speech. */
+export function PhoneSimulator({
+  teamId,
+  isFullScreen = false,
+  isDeviceOnly = false,
+}: PhoneSimulatorProps) {
   const { recipients, isLoading: isLoadingRecipients, error: recipientsError } = useRecipients();
-  const [picked, setPicked] = useState<string | null>(null);
-  const recipientId = picked ?? recipients[0]?.id ?? null;
+  const [picked, setPicked] = useState<string | null>(readUrlRecipientId);
+  const selectedRecipient =
+    (picked ? recipients.find((candidate) => candidate.id === picked) : null) ??
+    pickDefaultRecipient(recipients, teamId, picked);
+  const recipientId = selectedRecipient?.id ?? null;
+
   const phone = usePhoneMessages(recipientId);
-  const [ringing, setRinging] = useState<PhoneMessage | null>(null);
+  const speech = useSpeech();
+  const isAudioUnlocked = useAudioUnlock();
+  const isNarrow = useIsNarrowViewport();
+
+  const [devState, setDevState] = useState(readDevPhoneState);
+  const [liveCall, setLiveCall] = useState<PhoneMessage | null>(null);
+  const [isCallAnswered, setIsCallAnswered] = useState(false);
   const [answeredIds, setAnsweredIds] = useState<readonly string[]>([]);
+
   const { apply, reload } = phone;
-  // The stream needs a team; phone.message is broadcast so any team receives every phone.
-  const streamStatus = useEventStream(teamId, {
+  // phone.message is broadcast to every team stream, so standalone /phone can subscribe without a stored team.
+  const streamTeam = teamId ?? selectedRecipient?.teams?.[0] ?? "settlements";
+  const streamStatus = useEventStream(streamTeam, {
     "phone.message": (event) => {
       apply(event.message);
       if (event.message.channel_type === "phone" && event.message.recipient_id === recipientId) {
-        setRinging(event.message);
+        setLiveCall(event.message);
+        setIsCallAnswered(false);
       }
     },
     onReconnect: reload,
   });
 
-  const newest = phone.messages.length > 0 ? phone.messages[phone.messages.length - 1] : undefined;
-  return (
-    <section aria-labelledby="phone-title" className="mx-auto max-w-md">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 id="phone-title" className="text-xl font-semibold">
-          Phone
-        </h2>
-        <ConnectionIndicator status={streamStatus} />
+  if (isLoadingRecipients) {
+    return (
+      <div className="flex min-h-[360px] items-center justify-center">
+        <Spinner size={24} label="Loading phone simulator" />
       </div>
-      {teamId === null ? (
-        <p className="mb-2 text-xs text-slate-500">Select a team to get live messages.</p>
+    );
+  }
+
+  if (recipientsError) {
+    return (
+      <EmptyState icon="phone">
+        Could not load recipients ({recipientsError}). Check that the API is running.
+      </EmptyState>
+    );
+  }
+
+  if (recipientId === null) {
+    return <EmptyState icon="phone">No recipients are configured yet.</EmptyState>;
+  }
+
+  const activeCall =
+    liveCall ?? (devState ? resolveDevCallMessage(phone.messages, recipientId) : null);
+  const isRinging = activeCall !== null && !isCallAnswered && devState !== "incall";
+  const isInCall = activeCall !== null && (isCallAnswered || devState === "incall");
+
+  function handleSelectRecipient(nextId: string) {
+    setPicked(nextId);
+    setLiveCall(null);
+    setIsCallAnswered(false);
+    setDevState(null);
+  }
+
+  const device = (
+    <PhoneDeviceFrame
+      isRinging={isRinging}
+      isInCall={isInCall}
+      isFrameless={isFullScreen && isNarrow}
+      isFullScreenDesktop={isFullScreen && !isNarrow}
+    >
+      <LockScreen
+        messages={phone.messages}
+        isLoading={phone.isLoading}
+        error={phone.error}
+        onReload={phone.reload}
+        answeredIds={answeredIds}
+        activeCallId={activeCall?.id ?? null}
+        recipientName={selectedRecipient?.display_name ?? null}
+        isAudioUnlocked={isAudioUnlocked}
+        onOpenCall={(message) => {
+          setLiveCall(message);
+          setIsCallAnswered(true);
+        }}
+        isFullScreen={isFullScreen}
+        recipients={recipients}
+        selectedRecipientId={recipientId}
+        onSelectRecipient={handleSelectRecipient}
+      />
+      {activeCall ? (
+        <IncomingCallScreen
+          key={`${activeCall.id}-${devState ?? "live"}`}
+          message={activeCall}
+          recipientName={selectedRecipient?.display_name ?? null}
+          isAudioUnlocked={isAudioUnlocked}
+          initialAnswered={isCallAnswered || devState === "incall"}
+          speech={speech}
+          onAnsweredChange={setIsCallAnswered}
+          onClose={(answered) => {
+            if (answered) setAnsweredIds((ids) => [...ids, activeCall.id]);
+            setLiveCall(null);
+            setIsCallAnswered(false);
+            setDevState(null);
+          }}
+        />
       ) : null}
-      {recipientsError ? (
-        <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800">
-          Cannot load recipients ({recipientsError}).
-        </p>
-      ) : null}
-      {isLoadingRecipients ? <p className="text-sm text-slate-500">Loading recipients...</p> : null}
-      {recipientId !== null ? (
-        <>
-          <label className="mb-2 flex items-center gap-2 text-sm">
-            <span className="font-medium text-slate-700">Recipient</span>
-            <select
-              value={recipientId}
-              onChange={(event) => {
-                setPicked(event.target.value);
-                setRinging(null);
-              }}
-              className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1"
-            >
-              {recipients.map((recipient) => (
-                <option key={recipient.id} value={recipient.id}>
-                  {recipient.display_name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="relative overflow-hidden rounded-3xl border-4 border-slate-800 bg-slate-100">
-            {ringing ? (
-              <IncomingCallScreen
-                key={ringing.id}
-                message={ringing}
-                callerLabel={teamId ?? ringing.alert_id}
-                onClose={(answered) => {
-                  if (answered) setAnsweredIds((ids) => [...ids, ringing.id]);
-                  setRinging(null);
-                }}
-              />
-            ) : null}
-            <div className="h-96 overflow-y-auto p-3">
-              {phone.isLoading ? (
-                <p className="text-sm text-slate-500">Loading messages...</p>
-              ) : null}
-              {phone.error ? (
-                <p role="alert" className="mb-2 rounded bg-red-50 px-3 py-2 text-sm text-red-800">
-                  Cannot load messages ({phone.error}).{" "}
-                  <button type="button" className="underline" onClick={phone.reload}>
-                    Retry
-                  </button>
-                </p>
-              ) : null}
-              {!phone.isLoading && !phone.error && phone.messages.length === 0 ? (
-                <p className="text-sm text-slate-500">No messages for this recipient yet</p>
-              ) : null}
-              <ul className="space-y-2">
-                {phone.messages.map((message) => (
-                  <PhoneMessageBubble
-                    key={message.id}
-                    message={message}
-                    isMissed={
-                      message.channel_type === "phone" &&
-                      message.id !== ringing?.id &&
-                      !answeredIds.includes(message.id)
-                    }
-                  />
-                ))}
-              </ul>
-            </div>
-            <PhoneReplyBox
-              key={recipientId}
-              recipientId={recipientId}
-              approvalCode={newest?.approval_code ?? null}
-            />
-          </div>
-        </>
-      ) : null}
-      {!isLoadingRecipients && !recipientsError && recipientId === null ? (
-        <p className="text-sm text-slate-500">No recipients configured</p>
-      ) : null}
-    </section>
+    </PhoneDeviceFrame>
+  );
+
+  if (isDeviceOnly) return device;
+
+  if (isFullScreen) {
+    if (isNarrow) return device;
+    return <div className="flex min-h-dvh items-center justify-center p-6">{device}</div>;
+  }
+
+  return (
+    <div className="mx-auto flex min-h-full max-w-4xl flex-wrap items-center justify-center gap-10 max-lg:gap-6">
+      {device}
+      <PhoneInfoCard
+        recipients={recipients}
+        selectedRecipient={selectedRecipient}
+        onSelectRecipient={handleSelectRecipient}
+        streamStatus={streamStatus}
+        speech={speech}
+      />
+    </div>
   );
 }

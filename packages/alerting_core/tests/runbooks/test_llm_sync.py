@@ -81,7 +81,8 @@ def test_risky_action_with_policy_none_still_needs_approval(actions):
     }
     first, second = run(actions, FakeLlm(steps_json(retry, ticket))).steps
     assert first.approval is ApprovalPolicy.required and not first.is_automatic
-    assert second.action == "open-ticket" and second.is_automatic
+    # A safe action keeps its action id, but only a human turns automation on (SEC-01).
+    assert second.action == "open-ticket" and not second.is_automatic
 
 
 def test_timeout_and_errors_fall_back(actions, monkeypatch):

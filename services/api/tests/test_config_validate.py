@@ -67,3 +67,13 @@ def test_every_kind_reports_missing_fields(kind: str) -> None:
     out = validate(kind, "foo: 1\n")
     assert out["is_valid"] is False and out["errors"]
     assert all(e["path"] for e in out["errors"])
+
+
+def test_invalid_regex_rule_fails_with_when_path() -> None:
+    import yaml
+
+    rule = yaml.safe_load((ROOT / "config/rules/platform-alertmanager.yaml").read_text())
+    rule["when"] = {"all": [{"field": "a", "op": "regex", "value": "("}]}
+    out = validate("rule", yaml.safe_dump(rule))
+    assert out["is_valid"] is False
+    assert out["errors"][0]["path"] == "when"

@@ -1,68 +1,135 @@
 import { useState } from "react";
 
-import { MetricsPanel } from "../metrics/MetricsPanel";
-import { RecentEventsPanel } from "../events/RecentEventsPanel";
-import { AlertsPage } from "../../pages/AlertsPage";
-import { ApprovalsPage } from "../../pages/ApprovalsPage";
 import { PhonePage } from "../../pages/PhonePage";
-import { RulesPage } from "../../pages/RulesPage";
-import { SchemasPage } from "../../pages/SchemasPage";
-import { RunbooksPage } from "../../pages/RunbooksPage";
-import { PlaceholderPage } from "../../pages/PlaceholderPage";
-import { readStoredTeamId, writeStoredTeamId } from "../../lib/teamStorage";
-import { TABS, type TabId } from "../../lib/tabs";
-import { TeamPicker } from "../team/TeamPicker";
-import { TabNav } from "./TabNav";
+import {
+  readStoredPersonId,
+  readStoredTeamId,
+  writeStoredPersonId,
+  writeStoredTeamId,
+} from "../../lib/teamStorage";
+import { teamShortName } from "../../lib/teams";
+import { PageBackContext } from "../../lib/backContext";
+import { ALL_PAGES } from "../../lib/tabs";
+import { pathForTab, useRoute } from "../../lib/useRoute";
+import { AsciiSky } from "../login/AsciiSky";
+import { LoginScreen } from "../login/LoginScreen";
+import { useTeams } from "../team/useTeams";
+import { ToastProvider } from "../ui/ToastProvider";
+import { AppRail } from "./AppRail";
+import { AppWindow } from "./AppWindow";
+import { TestConsole } from "../console/TestConsole";
+import { DemoPlaceholder, ShellPage } from "./ShellPage";
 
-const WIRED_TABS: readonly TabId[] = [
-  "alerts",
-  "rules",
-  "runbooks",
-  "approvals",
-  "schemas",
-  "phone",
-  "metrics",
-];
-
+/** Routes between the shell (rail + page), the full-screen phone and the reserved demo panel. */
 export function AppLayout() {
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(() => readStoredTeamId());
-  const [activeTabId, setActiveTabId] = useState<TabId>("alerts");
-  const activeTab = TABS.find((tab) => tab.id === activeTabId);
+  const { route, navigate } = useRoute();
+  const { teams, people, isLoading, error, reload } = useTeams();
+  const [teamId, setTeamId] = useState<string | null>(() => readStoredTeamId());
+  const [personId, setPersonId] = useState<string | null>(() => readStoredPersonId());
 
-  function handleTeamSelect(teamId: string) {
-    setSelectedTeamId(teamId);
-    writeStoredTeamId(teamId);
+  function selectTeam(next: string) {
+    setTeamId(next);
+    writeStoredTeamId(next);
+  }
+  function signIn(nextPerson: string, nextTeam: string) {
+    setPersonId(nextPerson);
+    writeStoredPersonId(nextPerson);
+    selectTeam(nextTeam);
+    navigate("/home");
+  }
+  function signOut() {
+    setPersonId(null);
+    setTeamId(null);
+    writeStoredPersonId(null);
+  }
+  const person = people.find((candidate) => candidate.id === personId) ?? null;
+
+  const pageBack =
+    route.kind === "shell" && route.from !== null
+      ? {
+          onBack: () => {
+            window.history.back();
+          },
+          label: `Back to ${labelForPath(route.from)}`,
+        }
+      : null;
+
+  if (route.kind === "phone") {
+    return <PhoneFullScreen teamId={teamId} />;
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-3">
-        <h1 className="text-lg font-semibold">Alerting console</h1>
-        <TeamPicker selectedTeamId={selectedTeamId} onSelect={handleTeamSelect} />
-      </header>
-      <TabNav tabs={TABS} activeTabId={activeTabId} onSelect={setActiveTabId} />
-      <main className="flex-1 p-6">
-        {activeTabId === "alerts" ? <AlertsPage teamId={selectedTeamId} /> : null}
-        {activeTabId === "rules" ? <RulesPage teamId={selectedTeamId} /> : null}
-        {activeTabId === "runbooks" ? <RunbooksPage /> : null}
-        {activeTabId === "approvals" ? <ApprovalsPage teamId={selectedTeamId} /> : null}
-        {activeTabId === "schemas" ? (
-          <SchemasPage teamId={selectedTeamId} onNavigate={setActiveTabId} />
-        ) : null}
-        {activeTabId === "phone" ? <PhonePage teamId={selectedTeamId} /> : null}
-        {activeTabId === "metrics" ? <MetricsPanel /> : null}
-        {activeTab && !WIRED_TABS.includes(activeTabId) ? (
-          <PlaceholderPage title={activeTab.label} teamId={selectedTeamId} />
-        ) : null}
-        {activeTabId === "alerts" ? (
-          <details className="mt-6 rounded border border-slate-200 bg-white p-3">
-            <summary className="cursor-pointer text-sm font-semibold">Recent events</summary>
-            <div className="mt-3">
-              <RecentEventsPanel />
-            </div>
-          </details>
-        ) : null}
-      </main>
-    </div>
+    <ToastProvider>
+      <AppWindow>
+        {route.kind === "demo" ? (
+          <DemoPlaceholder />
+        ) : teamId === null || personId === null ? (
+          <LoginScreen
+            teams={teams}
+            people={people}
+            isLoading={isLoading}
+            error={error}
+            onRetry={reload}
+            onSignIn={signIn}
+          />
+        ) : (
+          <>
+            <AppRail
+              activeTabId={route.tabId}
+              teams={teams}
+              teamId={teamId}
+              onNavigate={(tab) => {
+                navigate(tab.path);
+              }}
+              onSelectTeam={selectTeam}
+            />
+            <PageBackContext.Provider value={pageBack}>
+              <div className="relative isolate my-3 mr-3 flex min-w-0 flex-1 overflow-hidden rounded-[24px] border border-hairline bg-panel max-sm:m-0 max-sm:rounded-none max-sm:border-0">
+                <AsciiSky tone="panel" />
+                <div className="main-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-[23px] max-sm:rounded-none">
+                  <ShellPage
+                    tabId={route.tabId}
+                    teamId={teamId}
+                    teamLabel={teamLabel(teams, teamId)}
+                    onNavigate={(tab) => {
+                      navigate(pathForTab(tab), { isDeepLink: true });
+                    }}
+                    person={person}
+                    teams={teams}
+                    onSelectTeam={selectTeam}
+                    onSignOut={signOut}
+                  />
+                </div>
+              </div>
+            </PageBackContext.Provider>
+            <TestConsole
+              teamId={teamId}
+              teamLabel={teamLabel(teams, teamId)}
+              onNavigate={(tab) => {
+                navigate(pathForTab(tab));
+              }}
+            />
+          </>
+        )}
+      </AppWindow>
+    </ToastProvider>
   );
+}
+
+function teamLabel(teams: readonly { id: string; display_name: string }[], teamId: string): string {
+  const team = teams.find((candidate) => candidate.id === teamId);
+  return team ? teamShortName(team.display_name) : teamId.charAt(0).toUpperCase() + teamId.slice(1);
+}
+
+/** `/phone`: only the simulator, full screen, for a real phone. */
+function PhoneFullScreen({ teamId }: { teamId: string | null }) {
+  return (
+    <main className="min-h-dvh bg-canvas max-sm:bg-[#0e1424]">
+      <PhonePage teamId={teamId} isFullScreen />
+    </main>
+  );
+}
+
+function labelForPath(path: string): string {
+  return ALL_PAGES.find((page) => page.path === path)?.label.toLowerCase() ?? "the previous page";
 }

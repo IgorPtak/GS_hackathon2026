@@ -1,84 +1,131 @@
 import type { RulePreview } from "../../api/types";
+import { channelWord } from "../recipients/preferenceSentence";
+import { Avatar } from "../ui/Avatar";
+import { CountBadge } from "../ui/CountBadge";
+import { SeverityDot } from "../ui/SeverityDot";
+import { StatusChip } from "../ui/StatusChip";
 
-function Stat({ label, value }: { readonly label: string; readonly value: string }) {
+const SAMPLE_LIMIT = 4;
+
+const WINDOW_WORDS: Record<string, string> = {
+  "15m": "15 minutes",
+  "1h": "hour",
+  "6h": "6 hours",
+  "24h": "24 hours",
+};
+
+function plural(count: number, noun: string): string {
+  return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/** The big plain sentence that leads the preview. */
+function previewSentence(preview: RulePreview, window: string): string {
+  const sent = preview.deliveries.reduce((total, d) => total + d.count, 0);
+  const span = `In the last ${WINDOW_WORDS[window] ?? window}`;
+  if (preview.alerts_created === 0) return `${span} this rule would not have created any alerts.`;
+  return `${span} this rule would have created ${plural(preview.alerts_created, "alert")} and sent ${plural(sent, "message")}.`;
+}
+
+function DeliveriesPerPerson({
+  preview,
+  names,
+}: {
+  readonly preview: RulePreview;
+  readonly names: Readonly<Record<string, string>>;
+}) {
+  const people = new Map<string, { channel: string; count: number }[]>();
+  for (const d of preview.deliveries) {
+    const key = d.recipient_id ?? "";
+    people.set(key, [...(people.get(key) ?? []), { channel: d.channel_id, count: d.count }]);
+  }
+  if (people.size === 0) {
+    return <p className="text-body text-ink-2">No messages would have been sent.</p>;
+  }
   return (
-    <div className="rounded bg-slate-50 px-3 py-2">
-      <div className="text-lg font-semibold">{value}</div>
-      <div className="text-xs text-slate-500">{label}</div>
-    </div>
+    <ul className="space-y-2">
+      {[...people].map(([id, channels]) => {
+        const name = id === "" ? "Everyone on duty" : (names[id] ?? id);
+        return (
+          <li
+            key={id}
+            className="flex flex-wrap items-center gap-3 rounded-tile bg-panel px-4 py-3"
+          >
+            <Avatar name={name} size="sm" />
+            <span className="min-w-0 flex-1 text-body font-medium">{name}</span>
+            <span className="flex flex-wrap gap-1.5">
+              {channels.map((c) => (
+                <StatusChip key={c.channel}>
+                  {channelWord(c.channel)} · {c.count}
+                </StatusChip>
+              ))}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
-/** Counters, deliveries table, sample alerts and warnings of one preview run. */
-export function RulePreviewResult({ preview }: { readonly preview: RulePreview }) {
+/** Sentence, sample alerts as mini rows, and messages per person and channel. */
+export function RulePreviewResult({
+  preview,
+  window,
+  names,
+}: {
+  readonly preview: RulePreview;
+  readonly window: string;
+  readonly names: Readonly<Record<string, string>>;
+}) {
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat label="Events scanned" value={String(preview.events_scanned)} />
-        <Stat label="Events matched" value={String(preview.events_matched)} />
-        <Stat label="Alerts created" value={String(preview.alerts_created)} />
-        <Stat label="Duration" value={`${String(preview.duration_ms)} ms`} />
+    <div className="space-y-6">
+      <div>
+        <p className="text-card-title font-semibold tracking-tight text-balance">
+          {previewSentence(preview, window)}
+        </p>
+        <p className="num mt-2 text-meta text-ink-2">
+          {plural(preview.events_scanned, "event")} checked, {String(preview.events_matched)}{" "}
+          matched, in {String(preview.duration_ms)} ms.
+        </p>
       </div>
       {(preview.warnings ?? []).map((warning) => (
-        <p key={warning} className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p
+          key={warning}
+          className="rounded-tile bg-warning/20 px-4 py-3 text-body text-warning-ink"
+        >
           {warning}
         </p>
       ))}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <caption className="mb-1 text-left text-xs font-semibold text-slate-600">
-            Deliveries per recipient and channel
-          </caption>
-          <thead className="text-xs text-slate-500">
-            <tr>
-              <th className="py-1 pr-3">Recipient</th>
-              <th className="py-1 pr-3">Channel</th>
-              <th className="py-1">Count</th>
-            </tr>
-          </thead>
-          <tbody>
-            {preview.deliveries.map((d) => (
-              <tr
-                key={`${d.recipient_id ?? ""}/${d.channel_id}`}
-                className="border-t border-slate-100"
-              >
-                <td className="py-1 pr-3">{d.recipient_id ?? "-"}</td>
-                <td className="py-1 pr-3">{d.channel_id}</td>
-                <td className="py-1">{d.count}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {preview.deliveries.length === 0 ? (
-          <p className="text-sm text-slate-500">No deliveries in this window.</p>
-        ) : null}
-      </div>
-      <div>
-        <h5 className="mb-1 text-xs font-semibold text-slate-600">Sample alerts</h5>
+      <section aria-label="Sample alerts" className="space-y-2">
+        <h4 className="text-body font-semibold">Sample alerts</h4>
         {preview.sample_alerts.length === 0 ? (
-          <p className="text-sm text-slate-500">No alerts would have been created.</p>
+          <p className="text-body text-ink-2">No alerts would have been created.</p>
         ) : (
-          <ul className="space-y-1">
-            {preview.sample_alerts.map((alert) => (
+          <ul className="space-y-2">
+            {preview.sample_alerts.slice(0, SAMPLE_LIMIT).map((alert) => (
               <li
                 key={alert.fingerprint}
-                className="flex flex-wrap items-center gap-2 rounded border border-slate-200 px-2 py-1 text-sm"
+                className="flex items-center gap-3 rounded-tile border border-hairline px-4 py-3"
               >
-                <span className="rounded bg-slate-200 px-1.5 text-xs uppercase">
-                  {alert.severity}
-                </span>
-                <span className="min-w-0 break-words">{alert.title}</span>
-                <span className="text-xs text-slate-500">×{alert.count}</span>
+                <SeverityDot severity={alert.severity} />
+                <span className="min-w-0 flex-1 truncate text-body">{alert.title}</span>
                 {alert.is_group_summary ? (
-                  <span className="rounded bg-purple-100 px-1.5 text-xs text-purple-800">
-                    Group · {alert.member_count} members
-                  </span>
+                  <StatusChip tone="info">Group of {alert.member_count}</StatusChip>
                 ) : null}
+                {alert.count > 1 ? <CountBadge count={alert.count} /> : null}
               </li>
             ))}
           </ul>
         )}
-      </div>
+        {preview.sample_alerts.length > SAMPLE_LIMIT ? (
+          <p className="text-meta text-ink-2">
+            and {String(preview.sample_alerts.length - SAMPLE_LIMIT)} more alerts like these
+          </p>
+        ) : null}
+      </section>
+      <section aria-label="Messages per person" className="space-y-2">
+        <h4 className="text-body font-semibold">Who would be messaged</h4>
+        <DeliveriesPerPerson preview={preview} names={names} />
+      </section>
     </div>
   );
 }

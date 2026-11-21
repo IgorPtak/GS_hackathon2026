@@ -1,4 +1,6 @@
 import type { ConfigValidationError } from "../../api/types";
+import { cx } from "../../lib/cx";
+import { Icon } from "../ui/icons";
 import { FieldErrors } from "./FieldErrors";
 
 interface FingerprintPickerProps {
@@ -8,27 +10,36 @@ interface FingerprintPickerProps {
   readonly onChange: (next: string[]) => void;
 }
 
-/** Multi-select of the key paths whose values identify a repeated problem. */
+/** Chips for the key paths whose values identify a repeated problem ("Group repeats by"). */
 export function FingerprintPicker({ selected, paths, errors, onChange }: FingerprintPickerProps) {
   const all = [...new Set([...selected, ...paths])];
   return (
-    <fieldset className="space-y-1">
-      <legend className="text-sm font-medium">Fingerprint (same values = same alert group)</legend>
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {all.map((path) => (
-          <label key={path} className="flex items-center gap-1 font-mono text-xs break-all">
-            <input
-              type="checkbox"
-              checked={selected.includes(path)}
-              onChange={(e) => {
-                onChange(
-                  e.target.checked ? [...selected, path] : selected.filter((p) => p !== path),
-                );
+    <fieldset>
+      <legend className="text-body font-semibold">Group repeats by</legend>
+      <p className="mt-0.5 mb-3 text-meta text-ink-2">
+        Events with the same values in these fields count as one alert.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {all.map((path) => {
+          const isOn = selected.includes(path);
+          return (
+            <button
+              key={path}
+              type="button"
+              aria-pressed={isOn}
+              onClick={() => {
+                onChange(isOn ? selected.filter((p) => p !== path) : [...selected, path]);
               }}
-            />
-            {path}
-          </label>
-        ))}
+              className={cx(
+                "inline-flex h-8 items-center gap-1.5 rounded-full px-3 font-mono text-meta transition-colors",
+                isOn ? "bg-ink text-window" : "bg-fill text-ink-2 hover:text-ink",
+              )}
+            >
+              {isOn ? <Icon name="check" size={13} strokeWidth={2.4} /> : null}
+              {path}
+            </button>
+          );
+        })}
       </div>
       <FieldErrors errors={errors} />
     </fieldset>

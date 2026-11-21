@@ -16,10 +16,11 @@ import os
 import re
 import time
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 from alerting_contracts.config import ActionConfig
+from alerting_core.settings import Settings
 from pydantic import BaseModel, Field
 
 DEFAULT_MOCK_GATEWAY_URL = "http://mock-gateway:8090"
@@ -72,6 +73,25 @@ def render_url(template: str, params: dict[str, str]) -> str:
     )
 
 
+def check_url_allowed(url: str) -> str | None:
+    """Return a failure detail unless the URL is http(s) to a host in `channel_allowed_hosts`.
+
+    Actions reuse the channel allowlist (compose services plus localhost): the settings live in
+    `alerting_core`, so a separate `action_allowed_hosts` is not added here. Blocks SSRF via
+    params such as the `url` of `http-health-check`.
+    """
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        return "blocked: invalid url"
+    if parts.scheme not in ("http", "https"):
+        return f"blocked: scheme {parts.scheme!r} is not allowed (http or https only)"
+    if not host or host not in Settings().channel_allowed_hosts:
+        return f"blocked: host {host!r} is not in the allowed hosts"
+    return None
+
+
 class ActionPlugin(abc.ABC):
     """Base class of all action plugins. Set ``type`` and implement ``_run``."""
 
@@ -116,15 +136,23 @@ class ActionPlugin(abc.ABC):
         content: str | None = None,
     ) -> ActionResult:
         """One HTTP call with the config timeout; maps errors and non-2xx to failures."""
+        blocked = check_url_allowed(url)
+        if blocked is not None:
+            return ActionResult(is_success=False, detail=blocked)
         timeout = parse_duration_seconds(config.timeout)
         started = time.monotonic()
         try:
             if self._client is not None:
                 resp = await self._client.request(
-                    method, url, headers=headers, content=content, timeout=timeout
+                    method,
+                    url,
+                    headers=headers,
+                    content=content,
+                    timeout=timeout,
+                    follow_redirects=False,
                 )
             else:
-                async with httpx.AsyncClient(timeout=timeout) as client:
+                async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
                     resp = await client.request(method, url, headers=headers, content=content)
         except httpx.TimeoutException:
             return ActionResult(is_success=False, detail=f"timeout after {config.timeout}")
