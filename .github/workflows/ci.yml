@@ -1,0 +1,101 @@
+# Minimal CI (audit D-4): lint, contract drift, unit tests, dependency audit.
+# Integration tests need the full compose stack and are not run here (see Makefile).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    services:
+      # Credentials and DB match the defaults in packages/alerting_core/alerting_core/settings.py
+      # and the test conftests (postgresql://alerting:change-me-local-only@localhost:5432/alerting).
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: alerting
+          POSTGRES_PASSWORD: change-me-local-only
+          POSTGRES_DB: alerting
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U alerting -d alerting"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install Python 3.12
+        run: uv python install 3.12
+
+      - name: Install Python dependencies
+        run: uv sync --frozen --python 3.12
+
+      - name: Check lockfile is up to date
+        run: uv lock --check
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      # generate_contracts.py calls `npx -y openapi-typescript@7` (fetches the tool itself), so node
+      # is the only hard requirement; npm ci keeps web/ installed as the local workflow expects.
+      - name: Install web dependencies
+        run: npm --prefix web ci
+
+      - name: Contract drift check
+        run: uv run python scripts/generate_contracts.py --check
+
+      # Mirrors `make test` but excludes tests/integration, which need the compose stack.
+      - name: Unit tests
+        run: uv run pytest -q --ignore=tests/integration
+
+      # Reported only: new CVEs should show up in the log without blocking unrelated changes.
+      - name: Dependency audit (pip-audit)
+        continue-on-error: true
+        run: |
+          uv export --frozen --no-dev --no-hashes > req.txt
+          uvx pip-audit -r req.txt
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm --prefix web ci
+
+      - name: Lint
+        run: npm --prefix web run lint
+
+      - name: Typecheck
+        run: npm --prefix web run typecheck
+
+      - name: Production dependency audit
+        run: npm --prefix web audit --omit=dev --audit-level=high
