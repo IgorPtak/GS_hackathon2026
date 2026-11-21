@@ -51,7 +51,28 @@ for retakes and for the live Q&A only.
      signed-in person's phone, and Piotr gets calls and SMS at any hour.
    - Sign-in lasts one tab session, so a new window always starts at "choose who you are".
 
-## Recording plan: one silent clip per scene, the voice last
+## Automated recording (what we used)
+
+`scripts/demo_video/` records every scene with scripted clicks and builds the film.
+
+- **Recording:** Chrome screencast at 2880×1620, a drawn cursor, and waits on the AI cut out.
+- **Editing:** zooms, captions, chapter labels, title cards and the benchmark card.
+- **Voice:** a guide voice from macOS `say`. The phone's lines are dubbed exactly where the app
+  speaks them.
+
+```bash
+uv run python scripts/forget_demo_config.py --yes && uv run python scripts/reset_demo.py --seed
+uv run --with playwright python scripts/demo_video/record.py --all    # silent clips, about 8 min
+uv run --with playwright python scripts/demo_video/render.py          # ~/Movies/beacon-demo/beacon-demo.mp4
+```
+
+To put your own voice in, record one file per block of `~/Movies/beacon-demo/VOICE_SCRIPT.md`
+(`s1.wav`, `s3-1.wav`, …) into `~/Movies/beacon-demo/voice/`, then run `render.py --voice
+~/Movies/beacon-demo/voice`. Leading silence is trimmed, and a missing file keeps the guide
+voice. To redo one scene, run `record.py <scene>` and render again. Scene 2c needs the
+`payments-declined` rule deleted first.
+
+## Recording plan by hand: one silent clip per scene, the voice last
 
 1. Record each scene as its own silent clip (`s1-setup.mov` … `s7-ai.mov`), with 2 s of stillness
    at both ends for transitions. A mistake costs one scene, not the whole video.
@@ -148,13 +169,13 @@ This is the scene the judges care about most, so give it time.
     looks**, Title `Payment {{data.paymentId}} declined`, Text
     `{{data.amount}} {{data.currency}} declined: {{data.declineCode}}`. **Runbook**: *Payment
     declined check*. **Next**.
-  - **Preview** (under 1 s): "In the last hour this rule would have created 1 alert and sent 2
+  - **Preview** (under 1 s): "In the last hour this rule would have created N alerts and sent M
     messages", then "Who would be messaged". *[nothing is sent yet]*
   - Open **Advanced** for 2 s to show the same rule as YAML, then **Save rule**.
 - **Voice:** "Now the rule, as a form, not code. When: the event type matches 'payment declined',
   at warning or above. Who and how: Anna's team, in the app and by email. How the alert reads,
   with values from the event in double braces. And which runbook it carries. Before anything goes
-  live, Preview replays the last hour: one alert, two messages, and exactly who. Under Advanced
+  live, Preview replays the last hour: how many alerts, how many messages, and exactly who. Under Advanced
   it is plain YAML, ready for Git. Save, and every worker reloads live."
 
 **2d · The first alert (2:15–2:30)**
@@ -176,11 +197,12 @@ This is the scene the judges care about most, so give it time.
      Type the code on the keypad. Speed up the ringing, but keep the voice at 1×.
   4. Close the console, open the alert in the **Inbox**, and scroll through **What happened**: the
      health check, the failed retries, "waiting for Piotr", approved by phone, escalated.
-- **Voice:** "When a settlement workflow fails, the team's runbook runs on its own. It checks the
-  service and retries the workflow twice. The retries fail, and escalating is risky, so Beacon asks
-  first. It calls Piotr, reads him the problem and a four-digit code, and he approves on the
-  keypad. He could also reply to the SMS, or click Approve. Every step is recorded: what ran, who
-  approved, and how."
+- **Voice, part 1** (while it rings): "When a settlement workflow fails, the team's runbook runs
+  on its own. It checks the service and retries the workflow twice. The retries fail, and
+  escalating is risky, so Beacon asks first. It calls Piotr."
+- *The phone's own voice reads the problem and the four-digit code. Leave it alone.*
+- **Voice, part 2** (after the code is typed): "He approves on the keypad. He could also reply to
+  the SMS, or click Approve. Every step is recorded: what ran, who approved, and how."
 
 ### Scene 4 · 3:15–3:50 · Everyone picks their channels; anyone can propose a fix
 
@@ -214,17 +236,19 @@ This is the scene the judges care about most, so give it time.
 ### Scene 6 · 4:15–4:40 · Built to scale, and measured
 
 - **Screen:**
-  1. **Insights** during a load run started off-camera: events per second, end-to-end p50 and
-     p99, "Where the time goes" per stage, and Channels.
-  2. **Settings → Grafana dashboards** opens the **Alerting** dashboard. Zoom on the top row:
-     **p99 latency (5m)**, **msg/s in (5m)**, **Dead letters (in range)** = 0. Then show **msg/s
-     processed by replica**, with one line per replica after scaling out off-camera.
-  3. A still of the README load-test table.
-     *[800 msg/s sustained · p99 ≈ 1.0 s · 0 lost · steady 200 msg/s at p99 84 ms]*
-- **Voice:** "Under the hood, every worker is stateless and scales out. Alerts and their
-  deliveries are written in one database transaction, so a crash cannot lose them. We measured,
-  not estimated: eight hundred messages a second sustained, p99 around one second, and zero lost
-  in every test, including a gateway outage and killing workers under load."
+  1. **Insights → Pipeline queues and deliveries** during a load run started off-camera, with 3
+     processor replicas: Retries 0, Dead-lettered 0, no stream lag.
+  2. Grafana, the **msg/s processed by replica** panel alone (`viewPanel=8`): one line per
+     replica, sharing the work.
+  3. A "Measured, not estimated" card with the README benchmark table.
+  - Do not show live p99 tiles while recording. Screen capture and the SMS and phone mocks
+    (inside working hours) slow the laptop, so the live p99 does not match the controlled
+    benchmark, and the 5-minute window still includes any outage scene.
+- **Voice, part 1** (live): "Under the hood, every worker is stateless and scales out. Alerts
+  and their deliveries are written in one database transaction, so a crash cannot lose them."
+- **Voice, part 2** (benchmark card): "We measured, not estimated: eight hundred messages a
+  second sustained, p99 around one second, and zero lost in every test, including a gateway
+  outage and killing workers under load."
 
 ### Scene 7 · 4:40–5:00 · AI that helps, humans that decide
 
