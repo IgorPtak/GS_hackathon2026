@@ -284,3 +284,29 @@ async def test_reconcile_pages_past_guarded_rows(
         await redis.set(reconcile.reconciled_key(delivery_id), 1)
 
     assert await republish_stale_deliveries(pool, redis) == 3
+
+
+def test_parsed_delivery_body_round_trips_through_the_contract() -> None:
+    from alerting_contracts.alerts import DeliveryJob
+
+    from services.outbox_relay.relay import _parse_row
+
+    payload = DeliveryJob(
+        delivery_id=0,
+        alert_id="a1",
+        team="ops",
+        recipient_id="r1",
+        channel_id="c1",
+        channel_type="ui",
+        purpose="alert",
+        content={
+            "title": "t",
+            "body": "b",
+            "severity": "info",
+            "fields": [],
+            "alert_url": "http://x/a",
+        },
+    ).model_dump(mode="json")
+    job = _parse_row({"id": 7, "kind": "delivery", "payload": payload})  # type: ignore[arg-type]
+    assert DeliveryJob.model_validate_json(job.body) == job.delivery
+    assert orjson.loads(job.body)["delivery_id"] == 7

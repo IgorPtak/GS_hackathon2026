@@ -1,6 +1,6 @@
 # One image for every Python service (api, ingest, workers, mock-gateway). Each compose service
 # picks its entrypoint with `command:`.
-FROM python:3.12-slim
+FROM python:3.12.16-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.6 /uv /uvx /bin/
 

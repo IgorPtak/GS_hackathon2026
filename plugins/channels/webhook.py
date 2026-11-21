@@ -1,12 +1,13 @@
 """`webhook` channel: renders a YAML `body_template` to JSON and sends it (Slack and similar)."""
 
 import json
-import re
 from typing import Any
 
 import httpx
 from alerting_contracts.alerts import DeliveryJob
 from alerting_contracts.config import ChannelConfig, ChannelType, Recipient
+from alerting_core.rules.field_paths import MISSING, lookup_segments
+from alerting_core.templating import compile_template, format_value
 
 from .base import (
     ChannelContext,
@@ -19,25 +20,23 @@ from .base import (
 from .registry import register_channel_plugin
 
 TIMEOUT_SECONDS = 5.0
-_PLACEHOLDER = re.compile(r"\{\{\s*([\w.]+)\s*\}\}")
-
-
-def _lookup(context: dict[str, Any], path: str) -> str:
-    value: Any = context
-    for part in path.split("."):
-        value = value.get(part) if isinstance(value, dict) else None
-    if value is None:
-        return ""
-    return value if isinstance(value, str) else json.dumps(value)
 
 
 def render_body(template: str, context: dict[str, Any]) -> str:
-    """Substitute `{{path}}` placeholders.
+    """Substitute `{{path}}` placeholders using the shared templating engine.
 
-    Values are JSON-escaped (outer quotes stripped) so they are safe inside a JSON string.
-    Replace with alerting_core.templating.render_template once A-08 is merged.
+    Thin wrapper: the core renderer does not escape, but values here land inside a JSON
+    string, so each rendered value is JSON-escaped (outer quotes stripped). Missing fields
+    render as an empty string.
     """
-    return _PLACEHOLDER.sub(lambda match: json.dumps(_lookup(context, match[1]))[1:-1], template)
+    compiled = compile_template(template)
+    parts = [compiled.chunks[0]]
+    for index, segments in enumerate(compiled.segments):
+        value = lookup_segments(context, segments)
+        text = "" if value is MISSING else format_value(value)
+        parts.append(json.dumps(text)[1:-1])
+        parts.append(compiled.chunks[index + 1])
+    return "".join(parts)
 
 
 def build_context(job: DeliveryJob, recipient: Recipient | None) -> dict[str, Any]:

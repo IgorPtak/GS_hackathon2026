@@ -27,7 +27,7 @@ x-python-service: &python-service
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16.13
     env_file: *env-file
     # Published so host-side tests (pytest, smoke, load test) reach the same database.
     ports:
@@ -43,7 +43,7 @@ services:
       retries: 20
 
   redis:
-    image: redis:7
+    image: redis:7.4.12
     # Redis holds accepted-but-unprocessed events and relayed-but-undelivered jobs, so it must
     # survive a crash: AOF fsynced every second (at most ~1 s lost) on a named volume.
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
