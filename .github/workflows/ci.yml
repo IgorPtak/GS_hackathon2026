@@ -17,7 +17,7 @@ jobs:
       # Credentials and DB match the defaults in packages/alerting_core/alerting_core/settings.py
       # and the test conftests (postgresql://alerting:change-me-local-only@localhost:5432/alerting).
       postgres:
-        image: postgres:16
+        image: postgres:16.13  # same as compose.yaml
         env:
           POSTGRES_USER: alerting
           POSTGRES_PASSWORD: change-me-local-only
@@ -28,7 +28,7 @@ jobs:
           --health-cmd "pg_isready -U alerting -d alerting"
           --health-interval 5s --health-timeout 5s --health-retries 10
       redis:
-        image: redis:7
+        image: redis:7.4.12  # same as compose.yaml
         ports:
           - 6379:6379
         options: >-
@@ -58,8 +58,7 @@ jobs:
       - name: Format check
         run: uv run ruff format --check .
 
-      # generate_contracts.py calls `npx -y openapi-typescript@7` (fetches the tool itself), so node
-      # is the only hard requirement; npm ci keeps web/ installed as the local workflow expects.
+      # generate_contracts.py runs the pinned web/node_modules/.bin/openapi-typescript.
       - name: Install web dependencies
         run: npm --prefix web ci
 
@@ -98,4 +97,6 @@ jobs:
         run: npm --prefix web run typecheck
 
       - name: Production dependency audit
+        # Reports new advisories without failing unrelated changes (like pip-audit above).
+        continue-on-error: true
         run: npm --prefix web audit --omit=dev --audit-level=high
