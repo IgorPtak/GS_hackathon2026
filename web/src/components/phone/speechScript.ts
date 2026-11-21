@@ -1,4 +1,5 @@
 import type { PhoneMessage } from "../../api/types";
+import { toBannerText } from "./messageText";
 
 const DIGIT_WORDS: Record<string, string> = {
   "0": "zero",
@@ -74,7 +75,16 @@ export function buildCallScript(
 ): readonly string[] {
   const firstName = recipientName?.trim().split(/\s+/)[0] ?? "";
   const greeting = firstName ? `Hi ${firstName}.` : "Hello.";
-  const sentences: string[] = [greeting, "This is Beacon.", ...humanizeForSpeech(message.text)];
+  // Same clean-up as the lock-screen banner: no "Call:", no [SEVERITY], no link, readable codes.
+  const banner = toBannerText(message.text);
+  const spoken = [banner.title, banner.detail].filter((part) => part !== "").join(". ");
+  const severity = banner.severity === "critical" ? ["This is urgent."] : [];
+  const sentences: string[] = [
+    greeting,
+    "This is Beacon.",
+    ...severity,
+    ...humanizeForSpeech(spoken),
+  ];
 
   if (message.approval_code) {
     sentences.push("To approve, enter code:");

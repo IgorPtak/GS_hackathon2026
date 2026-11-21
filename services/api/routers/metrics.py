@@ -28,6 +28,12 @@ QUERIES: dict[str, str] = {
     "e2e_latency_p99_seconds": f"histogram_quantile(0.99, {_LATENCY})",
     "retries_total": "sum(delivery_retries_total)",
     "dead_lettered_total": "sum(dead_lettered_total)",
+    "relay_wait_p99_seconds": (
+        "histogram_quantile(0.99, sum by (le) (rate(outbox_relay_wait_seconds_bucket[1m])))"
+    ),
+    "delivery_p99_seconds": (
+        "histogram_quantile(0.99, sum by (le) (rate(delivery_post_relay_seconds_bucket[1m])))"
+    ),
 }
 INTEGER_FIELDS = frozenset(
     {"events_stream_lag", "deliveries_stream_lag", "retries_total", "dead_lettered_total"}
