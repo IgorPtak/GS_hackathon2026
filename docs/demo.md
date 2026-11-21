@@ -50,9 +50,37 @@ equivalents for each step are in the appendix, for retakes and for live judging.
 
 ## Shot list and voiceover (5:00)
 
-The voiceover is about 590 words: roughly 4:10 at a calm pace, which leaves room for pauses. Record the screen silently,
-scene by scene, then record the voice over the edit. That is much easier than talking while
-clicking. Text in *[brackets]* is an on-screen caption for the edit.
+The voiceover is about 590 words: roughly 4:10 at a calm pace, which leaves room for pauses. Text
+in *[brackets]* is an on-screen caption for the edit.
+
+### Recording plan: one clip per scene, the voice last
+
+1. **Record each scene as its own silent clip,** in the order below, and name the files
+   `s1-setup.mov` … `s7-ai.mov`. A mistake costs one scene, not the whole take. Leave 2 s of stillness
+   at the start and the end of every clip as handles for transitions.
+2. **Set the start state before pressing record** (table below). Never record signing in or
+   navigating unless the scene is about it.
+3. **Lay the clips on the timeline** in order, cut the waits, and add zooms and captions.
+4. **Record the voice last,** scene by scene, while watching the cut. Read each scene's text once
+   or twice and keep the best take. Then trim the picture so it matches the voice, not the other
+   way round. If a clip is shorter than its text, hold a still frame or slow a zoom. Do not rush the
+   reading.
+5. **Music and the title card come last.** Export, then watch it once muted, to check that the
+   captions alone tell the story.
+
+| Clip | Sign in as | Start on | Before pressing record | The clip ends when |
+|---|---|---|---|---|
+| s0 problem | nobody | the sign-in screen | open a new window, wait for the star to draw | after a 6–8 s still |
+| s1 setup | nobody, then Anna | a terminal, then the sign-in screen | `reset_demo.py --seed`; record the terminal part separately | the test alert is in the Inbox |
+| s2 new system | Anna | Home | welcome already seen; console closed | the second payment event is an alert in the Inbox |
+| s3 runbook & phone | Piotr | Home | click once on the page (sound); voice tested in Settings | the Inbox timeline shows "escalated" |
+| s4 channels & fix | Anna | Home | Mailpit tab open; LLM endpoint reachable for Draft with AI | the fix card folds away in Approvals |
+| s5 no flood, no loss | Anna, then Piotr for SMS | Home | SMS is up (console says **Take SMS down**) | SMS is back to **Sending** with nothing waiting |
+| s6 scale | n/a | the architecture diagram | Grafana open, last 15 minutes; a terminal with the commands ready to paste | one line per replica in "msg/s processed by replica" |
+| s7 AI | Anna | Runbooks | nothing | the closing card |
+
+Scene 5 is easiest as two clips: the ×500 part as Anna, and the SMS part as Piotr, because
+settlement events reach Piotr by SMS at any hour.
 
 ### Scene 0 · 0:00–0:20 · The problem
 
@@ -161,11 +189,15 @@ clicking. Text in *[brackets]* is an on-screen caption for the edit.
   1. The architecture diagram (`docs/diagrams/architecture.svg`), with a slow pan from ingest to
      channels.
   2. Grafana **Alerting** during a short run (`uv run python loadtest/scenarios.py steady
-     --duration 60`), then the README load-test table.
+     --duration 60`). The top row is the stat tiles: **p99 latency (5m)**, **msg/s in (5m)**,
+     **alerts/s (5m)**, **deliveries/s (5m)**, **Outbox relay lag**, **Dead letters (in range)**. Zoom
+     on p99 and Dead letters = 0. Below them, the "Throughput: events in, events processed, alerts
+     created" chart. Then cut to the README load-test table.
      *[800 msg/s sustained · p99 ≈ 1.0 s · 0 lost]* *[steady 200 msg/s · p99 84 ms]*
   3. The scale command in a terminal:
      `docker compose up -d --scale processor=4 --scale delivery=4 --scale ingest=3 --scale api=2`.
-     In Grafana, "msg/s processed by replica" gets one line per replica.
+     In Grafana, **msg/s processed by replica** gets one line per replica within about 15 s. Scale
+     back to the defaults after the take (see the appendix).
 - **Voice:** "Under the hood, every worker is stateless. Events go through Redis Streams. Alerts and
   their deliveries are written in one Postgres transaction, so a crash cannot lose them. Dedup
   windows and delivery state live in Redis and Postgres, not in memory. We measured, not estimated:
