@@ -170,37 +170,37 @@ def _walk(node: Any) -> Iterator[tuple[Any, Any]]:
             yield from _walk(item)
 
 
-def _first_chars(branch: Any) -> set[str] | None:
-    """Possible first characters of an alternative, or None when unknown or it may be empty."""
+def _literal_text(branch: Any) -> str | None:
+    """The branch as plain text when it is only literal characters, else None."""
     items = branch.data if isinstance(branch, _sre_parser.SubPattern) else branch
-    if not items:
+    if not all(op is _sre_constants.LITERAL for op, _ in items):
         return None
-    op, argument = items[0]
-    if op is _sre_constants.LITERAL:
-        return {chr(argument).lower()}
-    if op is _sre_constants.SUBPATTERN:
-        return _first_chars(argument[3])
-    if op is _sre_constants.IN:
-        chars: set[str] = set()
-        for kind, value in argument:
-            if kind is not _sre_constants.LITERAL:
-                return None  # categories and ranges: assume they overlap
-            chars.add(chr(value).lower())
-        return chars
-    return None
+    return "".join(chr(argument) for _, argument in items)
 
 
 def _has_overlapping_branch(body: Any) -> bool:
-    """True when an alternation in `body` has alternatives that can start with the same char."""
+    """True when an alternation in `body` can match empty, or has identical or prefix branches.
+
+    The parser factors a common prefix out, so `(a|aa)` arrives as `a` + `(|a)`; empty branches
+    are therefore the signal for those. Distinct literals like POST|PUT and class or category
+    branches are linear in CPython and stay allowed.
+    """
     for op, argument in _walk(body):
         if op is not _sre_constants.BRANCH:
             continue
-        seen: set[str] = set()
+        texts: list[str] = []
         for branch in argument[1]:
-            first = _first_chars(branch)
-            if first is None or seen & first:
+            items = branch.data if isinstance(branch, _sre_parser.SubPattern) else branch
+            if not items:
                 return True
-            seen |= first
+            text = _literal_text(branch)
+            if text is not None:
+                texts.append(text)
+        for index, first in enumerate(texts):
+            if any(first.startswith(other) for other in texts[:index]) or any(
+                other.startswith(first) for other in texts[:index]
+            ):
+                return True
     return False
 
 
@@ -208,8 +208,8 @@ def check_pattern_safety(pattern: str) -> None:
     r"""Reject patterns that can backtrack catastrophically; raises ValueError.
 
     Refused: over-long patterns, backreferences, nested repetition unless both bounds are
-    small (`(a+)+`, `(a+){1,50}`, `(a{1,100}){1,100}`), and alternation under repetition whose
-    alternatives can start with the same character (`(a|a)+`, `(\w|\d)+`).
+    small (`(a+)+`, `(a+){1,50}`, `(a{1,100}){1,100}`), and alternation under repetition with
+    identical, prefix-related or empty alternatives (`(a|a)+`, `(a|aa)+`).
     The parse tree comes from the private `re._parser` because the public API cannot expose
     quantifier structure; the stdlib `re` has no timeout, so the shape must be rejected up front.
     """
