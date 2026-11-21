@@ -7,7 +7,7 @@ This is the single source of truth for every UI task in `web/`. Read it before y
 - **Product.** A real-time alerting console for operations teams at a trading firm. The teams are Rates, Settlements, Pricing and Platform.
 - **Audience.** On-call engineers and ops staff (non-technical people included) during an incident, and a hackathon jury watching a 5-minute video.
 - **Primary job.** In this order: what is wrong, who has been told, what is being done about it, and approve the next step.
-- **Selling point to make visible.** It is fast (350 msg/s, p99 163 ms). Nothing gets lost. Duplicates fold into one alert. Fixes wait for a human.
+- **Selling point to make visible.** It is fast (800 msg/s sustained, p99 1.0 s; 200 msg/s at p99 84 ms). Nothing gets lost. Duplicates fold into one alert. Fixes wait for a human.
 
 ## Visual direction
 

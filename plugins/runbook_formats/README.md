@@ -2,8 +2,6 @@
 
 Runbook format normalizer plugins (`yaml`, `markdown`, `text`) that convert a runbook's original source text into normalized `list[RunbookStep]`.
 
-Owner: track B. Tasks: B-06, B-09. See `docs/IMPLEMENTATION_PLAN.md`.
-
 ## Add a new runbook format in under ten lines
 
 Create `plugins/runbook_formats/csv_format.py` (8 lines for the plugin class):
@@ -16,7 +14,6 @@ from alerting_contracts.runbooks import RunbookFormat, RunbookStep, StepKind
 
 from plugins.runbook_formats.base import RunbookFormatPlugin
 from plugins.runbook_formats.registry import register_runbook_format
-
 
 @register_runbook_format
 class CsvRunbookFormat(RunbookFormatPlugin):

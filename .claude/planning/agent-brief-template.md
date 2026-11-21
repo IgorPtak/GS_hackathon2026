@@ -1,6 +1,6 @@
 # Delegation brief template
 
-Fill every field from the task in `docs/IMPLEMENTATION_PLAN.md`. Keep "Context to read" minimal:
+Fill every field from the task in `.claude/planning/IMPLEMENTATION_PLAN.md`. Keep "Context to read" minimal:
 exact files and sections, never "read the docs".
 
 ```

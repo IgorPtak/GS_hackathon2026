@@ -4,32 +4,9 @@ Teams change alerts without fear and without code, and the AI only proposes.
 
 Flexible Alerting & Notification Service ingests events from HTTP webhooks (including Prometheus Alertmanager) and tailed log files into Redis Streams (`events`), evaluates YAML rules and schema profiles in stateless `processor` workers, persists alerts and outbox rows atomically in Postgres, relays them (`FOR UPDATE SKIP LOCKED`) to Redis Streams (`deliveries` and `runbook-jobs`), and dispatches deliveries through pluggable channels (`ui`, `email`, `sms`, `phone`, `webhook`) while running automated or human-approved runbook actions. Schema profiles, rules, recipients, channel preferences, channels, runbooks, and actions are YAML configuration synced to Postgres and hot-reloaded across every worker via Redis pub/sub (`config.changed`) with no restart; a new source of an existing type is one YAML file in `config/sources/`, also with no restart. The LLM never runs on the hot path; it is used only at save time for free-text runbooks and for proposals that a human approves.
 
-```text
-Webhook / Alertmanager / Log tail
-        │
-        ▼
-  proxy (nginx :8000 / :8001 ──▶ api / ingest replicas)
-        │
-        ▼
-  ingest (FastAPI) ──▶ Redis Streams: events
-                              │
-                              ▼
-                     processor workers  ◀── config/ YAML ──▶ Postgres (config_documents)
-                     (profiles, rules,                         │  Redis pub/sub: config.changed
-                      dedup, grouping)                         ▼ (hot reload, no restart)
-                              │
-                              ▼  (one Postgres transaction)
-                  alerts + audit_entries + outbox
-                              │
-                              ▼
-                  outbox-relay (FOR UPDATE SKIP LOCKED)
-                     ├──▶ Redis Streams: deliveries   ──▶ delivery workers ──▶ channel plugins
-                     │                                     (retries, DLQ,      (ui, email, sms,
-                     │                                      fallback, CB)       phone, webhook)
-                     └──▶ Redis Streams: runbook-jobs ──▶ runbook-runner   ──▶ action plugins
-                                                           (approvals)          (mock gateway /
-                                                                                 YAML webhooks)
-```
+![Architecture](docs/diagrams/architecture.svg)
+
+Sequence, outage, runbook-approval and lifecycle diagrams: [docs/architecture.md](docs/architecture.md).
 
 ## Quickstart: three commands
 
@@ -210,7 +187,8 @@ uv run python loadtest/soak_and_scale.py --mode scale --rate 800 --duration 30 -
 config/         Runtime YAML configuration (sources, schemas, rules, recipients, teams, channels, runbooks, actions)
 contracts/      Shared Pydantic models, OpenAPI spec, generated JSON Schemas, and event fixtures
 deploy/         Dockerfiles, nginx proxy config, Postgres migrations, Prometheus config, and Grafana dashboard
-docs/           Architecture plan, domain glossary, demo script, load-test results, benchmarks, and flame graphs (`docs/profiles/`)
+docs/           Architecture and PlantUML diagrams (`docs/diagrams/`), glossary, demo script, load-test results, benchmarks, flame graphs (`docs/profiles/`)
+.claude/        Claude Code agents and the build-time planning material (`.claude/planning/`)
 loadtest/       Synthetic event generator and end-to-end load-test scenarios
 packages/       Shared Python library (`alerting_core`: config, events, rules, dedup, grouping, routing, runbooks, llm)
 plugins/        Pluggable sources, channels, actions, and runbook format normalizers

@@ -1,0 +1,52 @@
+@startuml event-to-delivery
+!include style.iuml
+title Hot path: one event, one transaction, no lost alert
+autonumber "<b>0."
+
+participant "Source" as src
+participant "ingest" as ingest <<hot>>
+queue "Redis\nevents" as events
+participant "processor" as proc <<hot>>
+database "Redis\ndedup / group keys" as dedup
+database "Postgres" as pg
+participant "outbox-relay" as relay <<hot>>
+queue "Redis\ndeliveries" as dl
+participant "delivery" as del <<hot>>
+participant "Channel plugin" as ch
+
+src -> ingest : POST /api/v1/ingest/{source_id}
+ingest -> events : XADD (idempotency key per event)
+ingest --> src : 202 {event_ids}
+events -> proc : XREADGROUP processors
+proc -> proc : schema profile → normalized.*\nrules on raw JSON by dot path
+proc -> dedup : SET NX fingerprint (rule window)
+alt first event in the window
+  group one Postgres transaction
+    proc -> pg : INSERT alert
+    proc -> pg : INSERT audit_entries
+    proc -> pg : INSERT outbox (deliveries, runbook_job)
+  end
+else duplicate
+  proc -> dedup : fold count (dedup-count-index)
+  note right : identical events → one alert ×N
+end
+proc -> events : XACK (only after commit)
+
+loop every 50 ms
+  relay -> pg : SELECT … FOR UPDATE SKIP LOCKED LIMIT 500
+  relay -> pg : INSERT deliveries
+  relay -> dl : XADD (pipeline)
+  relay -> pg : mark relayed
+end
+dl -> del : XREADGROUP delivery-workers
+del -> dedup : claim delivery-done:<id> (Lua)
+del -> ch : send
+ch --> del : ok
+del -> pg : delivered + audit
+del -> dl : XACK
+note over proc, del
+  A crash anywhere before XACK leaves the entry pending;
+  XAUTOCLAIM hands it to another replica. delivery-done:<id>
+  makes the second send a no-op, so retries never duplicate.
+end note
+@enduml

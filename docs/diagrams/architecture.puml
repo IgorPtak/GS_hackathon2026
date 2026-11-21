@@ -1,0 +1,72 @@
+@startuml architecture
+!include style.iuml
+title Architecture: from a raw event to a person, with the LLM off the hot path
+left to right direction
+
+package "Sources" {
+  rectangle "HTTP webhooks" as webhooks <<edge>>
+  rectangle "Prometheus\nAlertmanager" as am <<edge>>
+  rectangle "Log files\n(tail)" as logs <<edge>>
+}
+
+component "proxy\nnginx :8000 / :8001" as proxy
+component "ingest ×N\nFastAPI" as ingest <<hot>>
+queue "Redis Stream\n**events**" as events
+component "processor ×N\nschema profiles · rules\ndedup · grouping" as processor <<hot>>
+database "Postgres\nalerts · audit_entries\n**outbox** · deliveries" as pg
+component "outbox-relay\nFOR UPDATE SKIP LOCKED" as relay <<hot>>
+queue "Redis Stream\n**deliveries**" as deliveries
+queue "Redis Stream\n**runbook-jobs**" as jobs
+component "delivery ×N\nretries · circuit breaker\nfallback · DLQ" as delivery <<hot>>
+component "runbook-runner\nactions · approvals" as runner
+
+package "Channel plugins" {
+  rectangle "ui (SSE)" as ui
+  rectangle "email\n(Mailpit)" as email
+  rectangle "sms / phone\n(mock gateway)" as sms
+  rectangle "webhook\n(YAML)" as hook
+}
+rectangle "Action plugins\nhttp · ticket · escalate" as actions
+
+webhooks --> proxy
+am --> proxy
+logs --> ingest : tail
+proxy --> ingest
+ingest --> events : XADD
+events --> processor : XREADGROUP
+processor --> pg : alert + outbox\n**one transaction**
+pg --> relay
+relay --> deliveries : XADD
+relay --> jobs : XADD
+deliveries --> delivery
+jobs --> runner
+delivery --> ui
+delivery --> email
+delivery --> sms
+delivery --> hook
+runner --> actions
+
+package "Control plane (not on the hot path)" {
+  component "api ×N\nFastAPI" as api
+  component "web\nReact UI" as web
+  rectangle "config/ YAML\nrules · schemas · recipients\nchannels · runbooks · actions" as yaml
+  component "LLM client\nOllama or allowlisted host\nredact_secrets first" as llm <<human>>
+  component "Prometheus · Grafana" as metrics
+}
+actor "Operator" as op
+
+op --> web
+web --> proxy : /api
+proxy --> api
+api --> pg : config_documents\nreads, decisions
+yaml --> api : sync on start
+api ..> processor : Redis pub/sub\n**config.changed**\n(hot reload)
+api --> llm : proposals only:\nschema, fix, runbook steps
+metrics ..> processor : scrape /metrics
+
+legend right
+  <back:$hotFill>  green  </back> hot path: zero LLM calls, every stage scales with replicas
+  <back:$storeFill>  blue  </back> durable state: nothing is acknowledged before it is stored
+  <back:$humanFill>  pink  </back> the LLM only proposes; a person approves
+endlegend
+@enduml

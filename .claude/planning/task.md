@@ -1,17 +1,17 @@
 # Task brief — Flexible Alerting & Notification Service
 
 > **RECONSTRUCTED PLACEHOLDER — replace with the official brief verbatim.**
-> The official `docs/task.md` was not in the repository when the implementation plan was written.
+> The official `.claude/planning/task.md` was not in the repository when the implementation plan was written.
 > This file was rebuilt from the requirement-mapping table, demo script and appendix references in
-> `docs/plan.md`. Requirement IDs (`R-…`, `J-…`) are ours and are used for traceability in
-> `docs/IMPLEMENTATION_PLAN.md`. When the official brief arrives:
+> `.claude/planning/plan.md`. Requirement IDs (`R-…`, `J-…`) are ours and are used for traceability in
+> `.claude/planning/IMPLEMENTATION_PLAN.md`. When the official brief arrives:
 > 1. paste it below the line at the end of this file,
 > 2. diff its sections 2.1–2.6, judging criteria and appendices against the lists here,
 > 3. replace `contracts/fixtures/` with the official Appendix A events and Appendix B runbooks
 >    (commit `feat(contracts): replace reconstructed fixtures with official appendix`),
 > 4. add a task to the plan for every requirement that is not yet traced.
 
-## Requirements (reconstructed from `docs/plan.md`, section "Requirement mapping")
+## Requirements (reconstructed from `.claude/planning/plan.md`, section "Requirement mapping")
 
 ### 2.1 Ingest
 - **R-2.1a** At least two source types.
@@ -55,7 +55,7 @@
 - **R-S2** Repository link; README with the commands to run the demo.
 - **R-S3** README lists everything that is mocked.
 
-## Judging criteria (reconstructed from the demo-script table in `docs/plan.md`)
+## Judging criteria (reconstructed from the demo-script table in `.claude/planning/plan.md`)
 
 | ID | Criterion |
 |---|---|

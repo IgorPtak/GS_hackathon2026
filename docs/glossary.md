@@ -18,7 +18,7 @@ JSON on the wire is `snake_case` (no aliasing between Python and TypeScript).
 
 ## Terms
 
-| Canonical name | Polish in `docs/plan.md` | Definition | Where in code |
+| Canonical name | Polish term | Definition | Where in code |
 |---|---|---|---|
 | **event** | zdarzenie | One raw message received from a source, stored unchanged in the `events` stream. | `EventEnvelope` (contracts), stream `events`, field `payload` |
 | **event envelope** | — | Wrapper around a raw event with ingest metadata (`event_id`, `source_id`, `received_at`, `sent_at`). | `alerting_contracts.events.EventEnvelope` |

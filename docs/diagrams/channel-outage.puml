@@ -1,0 +1,42 @@
+@startuml channel-outage
+!include style.iuml
+title A channel goes down: retry, circuit breaker, fallback, replay
+
+start
+:Delivery job from **deliveries**;
+if (delivery-done:<id> already set?) then (yes)
+  :Skip (idempotent);
+  stop
+endif
+if (circuit:<channel_id> open?) then (yes)
+  :Wait for the circuit\n(10 s, then one half-open probe);
+else (no)
+  :Send through the channel plugin;
+  if (delivered?) then (yes)
+    :Mark delivered, close circuit;
+    stop
+  else (no)
+    :Count failure\n(5 in a row open the circuit);
+  endif
+endif
+if (channel unavailable\n(refused, timeout, 5xx)?) then (yes)
+  if (delivery older than 10 min?) then (no)
+    :Retry at max_backoff\n**without** spending attempts;
+    :ZADD delivery-retries → back to **deliveries**;
+    detach
+  endif
+else (other error)
+  if (attempts < retry.max_attempts?) then (yes)
+    :Exponential backoff\nZADD delivery-retries;
+    detach
+  endif
+endif
+:Move to **deliveries-dlq**, status dead_lettered; <<#FDF2F8>>
+:Queue the fallback channel (once);
+note right
+  After the fix:
+  scripts/replay_dead_letters.py --all
+  Replays are idempotent by delivery id.
+end note
+stop
+@enduml

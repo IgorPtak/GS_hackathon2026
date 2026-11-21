@@ -1,6 +1,6 @@
 # 5-minute demo script
 
-Step-by-step commands, UI clicks, and expected outcomes for each scene of the 5-minute demo video (see `docs/plan.md` and `docs/IMPLEMENTATION_PLAN.md` section 6). Scene timings add up to 5:00; the judges checklist at the end is untimed.
+Step-by-step commands, UI clicks, and expected outcomes for each scene of the 5-minute demo video. Scene timings add up to 5:00; the judges checklist at the end is untimed.
 
 ## Before you start
 
@@ -33,7 +33,7 @@ Step-by-step commands, UI clicks, and expected outcomes for each scene of the 5-
 
 ## Scene 1 (0:00–0:20) — Problem, pitch, and architecture
 
-- **Show on screen:** Architecture diagram from [README.md](../README.md) (events → Redis Streams `events` → `processor` → Postgres `outbox` → `outbox-relay` → `deliveries` / `runbook-jobs` → channel and action plugins; YAML hot reload; LLM off the hot path).
+- **Show on screen:** Architecture diagram from [docs/architecture.md](architecture.md) (events → Redis Streams `events` → `processor` → Postgres `outbox` → `outbox-relay` → `deliveries` / `runbook-jobs` → channel and action plugins; YAML hot reload; LLM off the hot path).
 - **Key line:** "Teams change alerts without fear and without code, and the AI only proposes."
 
 ---

@@ -1,6 +1,6 @@
 # Implementation plan — Flexible Alerting & Notification Service
 
-Sources: `docs/task.md` (brief, currently reconstructed), `docs/plan.md` (architecture, Polish),
+Sources: `.claude/planning/task.md` (brief, currently reconstructed), `.claude/planning/plan.md` (architecture, Polish),
 `docs/glossary.md` (names), `contracts/` (frozen interfaces), `OWNERSHIP.md` (who edits what),
 `CLAUDE.md` (conventions, routing policy, definition of done).
 
@@ -8,7 +8,7 @@ Sources: `docs/task.md` (brief, currently reconstructed), `docs/plan.md` (archit
 
 | # | Question | What we do now |
 |---|---|---|
-| 1 | The official brief (`docs/task.md`) was not in the repo. | **ASSUMPTION:** requirements, judging criteria and fixtures are reconstructed from `docs/plan.md`. First thing in hour 0: paste the brief, diff it against `docs/task.md`, replace fixtures, add tasks for anything untraced (orchestrator, 15 min). |
+| 1 | The official brief (`.claude/planning/task.md`) was not in the repo. | **ASSUMPTION:** requirements, judging criteria and fixtures are reconstructed from `.claude/planning/plan.md`. First thing in hour 0: paste the brief, diff it against `.claude/planning/task.md`, replace fixtures, add tasks for anything untraced (orchestrator, 15 min). |
 | 2 | Who takes which track? | **ASSUMPTION:** Igor = track A and runs the orchestrator session; teammate = track B. |
 | 3 | Hardware for the local LLM. | **ASSUMPTION:** Ollama with `qwen2.5:7b-instruct` (structured output via `format: <json schema>`); fall back to `qwen2.5:3b-instruct` if a runbook normalization takes > 20 s. Measured in task B-08 in hour 1. |
 | 4 | Reusing Dynamic-Monitoring needs a `FakeSource` flag added in Go in another repo. | **ASSUMPTION:** we copy only its Prometheus/Grafana/Alertmanager config into `deploy/`; the "real Prometheus alert" is a rule on our own metric `mock_gateway_up == 0`. The FakeSource exporter is a stretch goal inside A-22. |
@@ -27,7 +27,7 @@ The two meet at A-17 → B-16 (rule preview) and at A-19 → B-03 (alerts API).
 
 | Time | Action |
 |---|---|
-| 0:00–0:15 | Paste the official brief into `docs/task.md`; diff it against the reconstruction; update fixtures and the traceability table if needed (open question 1). |
+| 0:00–0:15 | Paste the official brief into `.claude/planning/task.md`; diff it against the reconstruction; update fixtures and the traceability table if needed (open question 1). |
 | 0:15–0:35 | Review `contracts/` with Person B, especially `config.py`, `alerts.py`, `storage.md`. Fix anything wrong now: changes are free until 1:00. |
 | 0:20 | Dispatch **A-00** (`scaffolder`, haiku): pyproject, compose skeleton, Dockerfile, Makefile. In parallel, write **S-02** (initial migration) in the orchestrator session. |
 | 0:40 | Once A-00 is green: start **A-02** in the orchestrator session (opus: `StreamConsumer` failure semantics) and dispatch **A-01** (`test-engineer`) for `scripts/smoke_test.py` with `--gate 3h` checks. Then dispatch **A-04** as soon as A-02's settings/connections part is committed. |
@@ -354,7 +354,7 @@ to the repo root. Python tests live next to their code in `tests/` subdirectorie
 ### Docs and demo
 
 **D-01 README** — haiku, docs-writer. Files: `README.md`.
-- AC: quickstart (`git clone`, `cp .env.example .env`, `docker compose up`); the URLs of each UI; demo commands; "What is mocked" (from `docs/plan.md`); load-test results table with hardware; "How we used AI" (section 4); "Known limitations" (Redis is a single point of failure, with the production answer).
+- AC: quickstart (`git clone`, `cp .env.example .env`, `docker compose up`); the URLs of each UI; demo commands; "What is mocked" (from `.claude/planning/plan.md`); load-test results table with hardware; "How we used AI" (section 4); "Known limitations" (Redis is a single point of failure, with the production answer).
 - Verify: a fresh clone into `/tmp` + the quickstart commands → `smoke_test.py --gate 14h` green.
 
 **D-02 Plugin how-tos** — haiku, docs-writer. Files: `plugins/*/README.md`, `config/README.md`.
@@ -451,7 +451,7 @@ graph LR
 
 ## 6. Demo-script coverage
 
-| Time | Scene (`docs/plan.md`) | Tasks |
+| Time | Scene (`.claude/planning/plan.md`) | Tasks |
 |---|---|---|
 | 0:00–0:30 | Problem, one-line solution, architecture diagram | D-03, D-04 |
 | 0:30–1:15 | `git clone` + `docker compose up`; unknown JSON pasted, mapping proposed, saved, first alerts | A-00, D-01, A-07, B-19, B-20, B-21 (fallback heuristic), A-09, B-04 |
@@ -463,7 +463,7 @@ graph LR
 
 ## 7. Requirements traceability
 
-| Requirement (`docs/task.md`) | Tasks |
+| Requirement (`.claude/planning/task.md`) | Tasks |
 |---|---|
 | R-2.1a two source types | A-04 (webhook), A-06 (log_tail, alertmanager), A-22 |
 | R-2.1b different schemas, little code | S-03, A-07, B-19, B-20, B-21 |
@@ -499,7 +499,7 @@ graph LR
 | J-6 reliability | A-11, A-13, A-23 |
 | J-7 throughput and scalability | A-20, A-21, A-24, B-25 |
 
-## 8. Cut list (consistent with `docs/plan.md`)
+## 8. Cut list (consistent with `.claude/planning/plan.md`)
 
 Already out of scope: full Slack Bolt (the webhook channel covers it), Kafka/Redpanda, on-call
 schedules (static `on_call` + working hours remain), rule from a sentence, GitHub/Jira, Go processor.
