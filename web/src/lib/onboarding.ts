@@ -1,11 +1,11 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * First-run state kept in this browser: has the welcome been seen, and has a team hidden its
+ * First-run state kept in this browser: has this person seen the welcome, and has a team hidden its
  * setup checklist. Storage can throw (privacy modes), so every access is guarded and the UI
  * falls back to showing the guide.
  */
-const WELCOME_KEY = "beacon.welcome_seen";
+const WELCOME_KEY_PREFIX = "beacon.welcome_seen.";
 const CHECKLIST_KEY_PREFIX = "beacon.setup_hidden.";
 const CHANGE_EVENT = "beacon:onboarding-changed";
 
@@ -36,12 +36,13 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-export function useHasSeenWelcome(): boolean {
-  return useSyncExternalStore(subscribe, () => read(WELCOME_KEY));
+/** Per person, so each teammate who signs in on this browser gets the welcome once. */
+export function useHasSeenWelcome(personId: string): boolean {
+  return useSyncExternalStore(subscribe, () => read(WELCOME_KEY_PREFIX + personId));
 }
 
-export function markWelcomeSeen(isSeen = true): void {
-  write(WELCOME_KEY, isSeen);
+export function markWelcomeSeen(personId: string, isSeen = true): void {
+  write(WELCOME_KEY_PREFIX + personId, isSeen);
 }
 
 export function useIsChecklistHidden(teamId: string): boolean {

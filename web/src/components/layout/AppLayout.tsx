@@ -104,6 +104,7 @@ export function AppLayout() {
               </div>
             </PageBackContext.Provider>
             <WelcomeDialog
+              personId={personId}
               teamId={teamId}
               teamLabel={teamLabel(teams, teamId)}
               onNavigate={(tab) => {

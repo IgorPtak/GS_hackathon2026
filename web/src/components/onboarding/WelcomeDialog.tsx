@@ -11,6 +11,7 @@ import { Dialog } from "../ui/Dialog";
 import { Icon, type IconName } from "../ui/icons";
 
 interface WelcomeDialogProps {
+  readonly personId: string;
   readonly teamId: string;
   readonly teamLabel: string;
   readonly onNavigate: (tab: TabId) => void;
@@ -123,15 +124,15 @@ function TryPage({ teamLabel }: { teamLabel: string }) {
   );
 }
 
-/** A three-page welcome shown once per browser after the first sign-in; Settings reopens it. */
-export function WelcomeDialog({ teamId, teamLabel, onNavigate }: WelcomeDialogProps) {
-  const hasSeen = useHasSeenWelcome();
+/** A three-page welcome shown once per person after signing in on this browser; Settings reopens it. */
+export function WelcomeDialog({ personId, teamId, teamLabel, onNavigate }: WelcomeDialogProps) {
+  const hasSeen = useHasSeenWelcome(personId);
   const [page, setPage] = useState(0);
   const testAlert = useSendTestAlert(teamId, teamLabel);
   const isLast = page === PAGE_TITLES.length - 1;
 
   function finish() {
-    markWelcomeSeen();
+    markWelcomeSeen(personId);
     setPage(0);
   }
 

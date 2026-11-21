@@ -111,7 +111,7 @@ export function SettingsScreen({
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => {
-                markWelcomeSeen(false);
+                if (person) markWelcomeSeen(person.id, false);
               }}
             >
               Show the welcome again
