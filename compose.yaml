@@ -59,7 +59,7 @@ services:
       retries: 20
 
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.34.0
     ports:
       - "8025:8025"
       - "1025:1025"
@@ -67,7 +67,7 @@ services:
   # Local LLM is optional: only started with `--profile local-llm`.
   ollama:
     profiles: ["local-llm"]
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.40.16
     volumes:
       - ollama:/root/.ollama
     ports:
@@ -89,10 +89,10 @@ services:
       - "9093:9093"
 
   grafana:
-    image: grafana/grafana:11.2.0
+    image: grafana/grafana:11.6.16
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
     volumes:
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro

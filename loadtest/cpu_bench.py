@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import statistics
 import sys
 import time
@@ -141,7 +142,9 @@ async def snapshot_cpu(containers: Sequence[str]) -> dict[str, dict[str, int]]:
 def _build_load_cmd(args: argparse.Namespace) -> list[str]:
     db = "postgresql://alerting:change-me-local-only@postgres:5432/alerting"
     return [
-        "docker", "run", "--rm", "-i", "--network", args.network, "-v", f"{REPO}:/work",
+        # The image runs as uid 10001; run as the host user so results/*.json stay writable.
+        "docker", "run", "--rm", "-i", "--network", args.network,
+        "--user", f"{os.getuid()}:{os.getgid()}", "-v", f"{REPO}:/work",
         "-w", "/work", "-e", "INGEST_URL=http://ingest:8001", "-e", f"LOADTEST_DATABASE_URL={db}",
         "-e", "LOADTEST_REDIS_URL=redis://redis:6379/0", args.image, "python",
         "loadtest/scenarios.py", "steady", "--rate", str(args.rate),
