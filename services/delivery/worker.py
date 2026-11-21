@@ -19,7 +19,7 @@ from alerting_core.config.registry import ConfigRegistry
 from alerting_core.durations import parse_duration_ms
 from alerting_core.logging import get_logger
 from alerting_core.metrics import DEAD_LETTERED, DELIVERIES, DELIVERY_RETRIES
-from alerting_core.publishing import publish_team_event
+from alerting_core.publishing import publish_team_events
 from alerting_core.streams import StreamMessage
 from pydantic import ValidationError
 from redis.asyncio import Redis
@@ -284,8 +284,8 @@ class DeliveryWorker:
 
     async def _publish(self, job: DeliveryJob, recorded: RecordedOutcome) -> None:
         now = datetime.now(UTC)
+        events: list[DeliveryUpdatedEvent | AuditAppendedEvent] = []
         if recorded.delivery is not None:
-            event = DeliveryUpdatedEvent(at=now, delivery=recorded.delivery)
-            await publish_team_event(self._redis, job.team, event)
-        for entry in recorded.audit:
-            await publish_team_event(self._redis, job.team, AuditAppendedEvent(at=now, entry=entry))
+            events.append(DeliveryUpdatedEvent(at=now, delivery=recorded.delivery))
+        events.extend(AuditAppendedEvent(at=now, entry=entry) for entry in recorded.audit)
+        await publish_team_events(self._redis, job.team, events)
