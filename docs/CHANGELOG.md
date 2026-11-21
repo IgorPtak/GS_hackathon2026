@@ -84,3 +84,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-34 swarm port: per-stage latency (outbox wait, post-relay) + Grafana panel, Postgres-restart and backend-profiler load tools, pg_stat_statements, team events in one pipeline, delivery claim/complete in one Lua call (−11 % total CPU per event, lost 0)
 - S-04 contract v1.1: `severity_gte` and `time_between` condition operators, 404/409/422 on the manual step-run route, 422 on rule preview
 - A-35 loadtest: raw result files committed under loadtest/results (cpu-bench and profile logs excluded), results doc summary and 500 msg/s row added, compose header corrected
+- A-37 ingest: sources come from the ConfigRegistry and reload on config.changed (new/removed sources and log-tail start/stop/restart, no restart needed)
