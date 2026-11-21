@@ -239,3 +239,44 @@ async def test_email_bad_config_and_host_are_rejected(context: ChannelContext) -
     bad_host.settings["smtp_host"] = "evil.example.com"
     with pytest.raises(ChannelRejectedError):
         await plugin(ChannelType.email).send(make_job(ChannelType.email), ALICE, bad_host, context)
+
+
+async def test_email_uses_dedicated_executor_with_capped_workers(
+    context: ChannelContext, fake_smtp: type[FakeSmtp]
+) -> None:
+    from plugins.channels import email as email_module
+
+    await plugin(ChannelType.email).send(
+        make_job(ChannelType.email), ALICE, email_config(), context
+    )
+    executor = email_module.get_smtp_executor()
+    assert executor is email_module.get_smtp_executor()
+    assert executor._max_workers == email_module.SMTP_POOL_SIZE == 50
+    assert executor._thread_name_prefix == "email-smtp"
+    assert len(fake_smtp.sent) == 1
+
+
+async def test_email_concurrent_sends_beyond_default_executor_do_not_block(
+    context: ChannelContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time
+
+    sends = 40  # more than the default executor's min(32, cpu + 4) threads
+    delay = 0.3
+
+    class SlowSmtp(FakeSmtp):
+        def send_message(self, message: Any) -> None:
+            time.sleep(delay)
+
+    monkeypatch.setattr(smtplib, "SMTP", SlowSmtp)
+    started = time.monotonic()
+    await asyncio.gather(
+        *(
+            plugin(ChannelType.email).send(
+                make_job(ChannelType.email), ALICE, email_config(), context
+            )
+            for _ in range(sends)
+        )
+    )
+    # Serialised in a 32-thread pool this would take two rounds (>= 2 * delay).
+    assert time.monotonic() - started < delay * 1.8

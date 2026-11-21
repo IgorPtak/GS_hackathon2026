@@ -1,10 +1,12 @@
 """`email` channel: plain-text mail over SMTP (Mailpit in the demo).
 
 Uses stdlib `smtplib` in a worker thread; replaces aiosmtplib from the plan (no new dependency).
+Sends run in a dedicated thread pool so they never compete with asyncio's default executor.
 """
 
 import asyncio
 import smtplib
+from concurrent.futures import ThreadPoolExecutor
 from email.message import EmailMessage
 
 from alerting_contracts.alerts import DeliveryJob, DeliveryPurpose
@@ -20,6 +22,22 @@ from .base import (
 from .registry import register_channel_plugin
 
 DEFAULT_TIMEOUT_SECONDS = 5.0
+# Equals services.delivery.worker.MAX_CONCURRENT_SENDS (plugins must not import services): one
+# thread per in-flight send, so no send waits for a thread and a hung SMTP call cannot pile up
+# more threads than the worker allows; the smtplib socket timeout frees a blocked thread.
+SMTP_POOL_SIZE = 50
+
+_smtp_executor: ThreadPoolExecutor | None = None
+
+
+def get_smtp_executor() -> ThreadPoolExecutor:
+    """Return the module-level `email-smtp` pool, creating it on first use."""
+    global _smtp_executor
+    if _smtp_executor is None:
+        _smtp_executor = ThreadPoolExecutor(
+            max_workers=SMTP_POOL_SIZE, thread_name_prefix="email-smtp"
+        )
+    return _smtp_executor
 
 
 def _one_line(value: str) -> str:
@@ -96,8 +114,12 @@ class EmailChannel(ChannelPlugin):
         except (ValueError, TypeError) as error:
             raise ChannelRejectedError(f"invalid email configuration: {error}") from error
         try:
+            loop = asyncio.get_running_loop()
             await asyncio.wait_for(
-                asyncio.to_thread(_send_smtp, message, str(host), port, timeout), timeout * 3
+                loop.run_in_executor(
+                    get_smtp_executor(), _send_smtp, message, str(host), port, timeout
+                ),
+                timeout * 3,
             )
         except TimeoutError as error:
             raise ChannelUnavailableError("smtp send timed out") from error
