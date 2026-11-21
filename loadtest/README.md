@@ -78,3 +78,13 @@ It drives `scenarios.py steady --sync-stdin` inside the compose network, snapsho
 `/sys/fs/cgroup/cpu.stat` on every pipeline container before and after the run, annotates each
 `steady-*.json` with `cpu_per_event`, and writes a median summary to
 `loadtest/results/cpu-bench-<timestamp>.json`.
+
+## Postgres restart under load (`postgres_restart_test.sh`)
+
+Verifies zero lost alerts when Postgres restarts mid-stream under load:
+
+    ./loadtest/postgres_restart_test.sh
+
+Runs an in-network `scenarios.py steady` pass at 100 msg/s for 60 s, restarts
+`alerting-postgres-1` (`docker restart`) at `t = 15 s`, waits for settlement, prints the summary,
+and exits non-zero if `steady` exits non-zero, the run did not settle, or `lost != 0`.
