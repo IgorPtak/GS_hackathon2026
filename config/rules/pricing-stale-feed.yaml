@@ -2,7 +2,7 @@ id: pricing-stale-feed
 team: pricing
 when:
   all:
-    - { field: level, op: in, value: [ERROR, CRITICAL] }
+    - { field: level, op: severity_gte, value: warning }
     - { field: msg, op: regex, value: "^Price stale" }
 severity: warning
 route: { channels: [ui, email] }

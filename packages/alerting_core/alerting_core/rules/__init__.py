@@ -13,6 +13,7 @@ from alerting_contracts.config import (
 
 from .conditions import CompiledCondition, compile_condition, evaluate_condition
 from .field_paths import MISSING, EventContext, build_context, resolve_field_path
+from .validation import validate_rule
 
 __all__ = [
     "MISSING",
@@ -24,6 +25,7 @@ __all__ = [
     "evaluate_condition",
     "index_rules_by_type",
     "resolve_field_path",
+    "validate_rule",
 ]
 
 _TYPE_PATH = "normalized.type"

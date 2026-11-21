@@ -18,6 +18,28 @@ Owner: A: schemas, rules, recipients, teams, channels, sources · B: runbooks, a
 - **JSON Schema:** [`config.Rule.schema.json`](../contracts/schemas/config.Rule.schema.json)
 - Owned by a **team**; defines the `when` **condition** tree (over raw event fields and **normalized fields**), optional **severity** override, **route**, **presentation** templates, **dedup window**, optional **group window**, **throttle**, **auto-resolve** policy, and optional **runbook** reference.
 
+**Condition operators `severity_gte` and `time_between`:**
+- `severity_gte`: ranks the field and the value as `debug < info < warning < error < critical`. Aliases are case-insensitive: `WARN`, `ERR`, `FATAL`/`CRIT`, `TRACE`. `{ field: level, op: severity_gte, value: warning }` matches WARN, ERROR and FATAL. Unknown field values never match.
+- `time_between`: the field is a timestamp (ISO-8601, epoch seconds or milliseconds), typically `normalized.occurred_at`. The value is `"HH:MM-HH:MM"` in UTC or `{ range: "HH:MM-HH:MM", timezone: Europe/Warsaw }`. Start is inclusive, end exclusive; `20:00-08:00` wraps midnight. A missing or unparseable timestamp never matches.
+- Invalid values (unknown severity, bad range or timezone, unsafe regex) are reported by `alerting_core.rules.validate_rule` with a path such as `when.all[1].value`; the processor logs `rule_invalid` and skips that rule.
+
+Example, "Anna: critical from payments-api, SMS 08:00-20:00":
+
+```yaml
+id: payments-critical-daytime
+team: payments
+when:
+  all:
+    - { field: normalized.source, op: eq, value: payments-api }
+    - { field: normalized.severity, op: severity_gte, value: critical }
+    - field: normalized.occurred_at
+      op: time_between
+      value: { range: "08:00-20:00", timezone: Europe/Warsaw }
+route: { channels: [sms] }
+present:
+  title: "Critical on payments-api"
+```
+
 ### `schema_profile`
 - **Directory:** `config/schemas/<id>.yaml` (`.yaml`, `.yml`)
 - **JSON Schema:** [`config.SchemaProfile.schema.json`](../contracts/schemas/config.SchemaProfile.schema.json)

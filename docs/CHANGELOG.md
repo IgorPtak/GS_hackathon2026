@@ -1,7 +1,6 @@
 # Changelog
 
 One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
-
 - S-00 contracts v1: Pydantic contracts, generated JSON Schemas and OpenAPI components, config examples, reconstructed fixtures.
 - S-02 initial migration: 11 tables from contracts/storage.md with partial indexes (unrelayed outbox, open alerts, pending approval codes)
 - S-01 contract generator: scripts/generate_contracts.py regenerates contracts/schemas, openapi components.schemas (paths untouched) and web/src/api/schema.gen.ts; --check detects drift, validates $refs and config examples.
@@ -89,3 +88,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-45 runbook formats: markdown inline `action key=value` params and approval, "needs approval" prose, actions with missing required params become text steps
 - A-47 api/runbook-runner: decisions and action runs refuse resolved alerts (409 alert_resolved, SMS "Alert already resolved", runner skips without calling the plugin; alert row locked FOR UPDATE)
 - A-36 processor: delivery content now carries numbered, filled-in runbook steps (email prints them; SMS/phone stay link-only)
+- A-38 rules: severity_gte and time_between operators, validate_rule with dot-path errors, processor logs rule_invalid once per rule version

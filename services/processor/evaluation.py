@@ -16,11 +16,31 @@ from alerting_core.config.registry import ConfigSnapshot
 from alerting_core.events import ProfileMatcher, compute_fingerprint
 from alerting_core.grouping import group_key
 from alerting_core.logging import get_logger
-from alerting_core.rules import build_context, compile_condition, index_rules_by_type
+from alerting_core.rules import (
+    build_context,
+    compile_condition,
+    index_rules_by_type,
+    validate_rule,
+)
 from alerting_core.rules.conditions import CompiledCondition
 from alerting_core.templating import render_presentation
 
 log = get_logger(__name__)
+
+# Explicit registry of invalid rule versions already reported, so a reload of unchanged
+# config does not repeat the same `rule_invalid` line.
+_reported_invalid: set[tuple[str, int]] = set()
+
+
+def _log_invalid_rule_once(rule: Rule) -> None:
+    key = (rule.id, hash(rule.model_dump_json()))
+    if key in _reported_invalid:
+        return
+    if len(_reported_invalid) >= 1024:
+        _reported_invalid.clear()
+    _reported_invalid.add(key)
+    errors = [{"path": e.path, "message": e.message} for e in validate_rule(rule)]
+    log.error("rule_invalid", extra={"rule_id": rule.id, "errors": errors})
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +88,7 @@ class RuleSet:
             except (ValueError, TypeError) as error:
                 # A rule that cannot compile is skipped, never fatal: other rules keep working.
                 log.error("rule_skipped", extra={"rule_id": rule.id, "error": str(error)})
+                _log_invalid_rule_once(rule)
         # Only rules whose `normalized.type` constraint fits the event are evaluated per event.
         self.rules = index_rules_by_type((c, c.rule.when) for c in compiled_rules)
         self.rule_count = len(compiled_rules)
