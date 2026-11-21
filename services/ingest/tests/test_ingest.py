@@ -18,6 +18,7 @@ from ulid import ULID
 from plugins.sources import HttpSourcePlugin, get_source_plugin, register_source_plugin
 from services.ingest.main import create_app
 from services.ingest.sources import load_sources
+from services.ingest.tests.fake_registry import FakeRegistry
 
 REDIS_URL = "redis://localhost:6379/15"
 EXAMPLES = Path(__file__).resolve().parents[3] / "contracts" / "examples" / "sources"
@@ -55,7 +56,10 @@ def config_dir(tmp_path: Path) -> str:
 @pytest.fixture
 def client(sync_redis: redis.Redis, config_dir: str) -> Iterator[TestClient]:
     with TestClient(
-        create_app(Settings(redis_url=REDIS_URL, config_dir=config_dir))
+        create_app(
+            Settings(redis_url=REDIS_URL, config_dir=config_dir),
+            FakeRegistry(load_sources(config_dir)),  # type: ignore[arg-type]
+        )
     ) as test_client:
         yield test_client
 
@@ -262,7 +266,10 @@ def test_alertmanager_batch_is_split_and_resends_are_dropped(
     ]
     body = {"status": "firing", "receiver": "r", "alerts": alerts}
     resolved = {"status": "resolved", "alerts": [{**alerts[0], "status": "resolved"}]}
-    app = create_app(Settings(redis_url=REDIS_URL, config_dir=str(tmp_path)))
+    app = create_app(
+        Settings(redis_url=REDIS_URL, config_dir=str(tmp_path)),
+        FakeRegistry(load_sources(str(tmp_path))),  # type: ignore[arg-type]
+    )
     with TestClient(app) as test_client:
         first = test_client.post("/api/v1/ingest/alertmanager", json=body).json()
         again = test_client.post("/api/v1/ingest/alertmanager", json=body).json()
