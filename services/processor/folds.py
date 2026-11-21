@@ -119,10 +119,15 @@ class FoldTracker:
             for key in keys:
                 pipeline.object("idletime", key)
             idle = await pipeline.execute(raise_on_error=False)
+        if any(not isinstance(seconds, int) for seconds in idle):
+            # OBJECT IDLETIME errors under an LFU maxmemory-policy: adoption is then disabled.
+            log.warning("fold_orphan_idletime_unavailable", extra={"keys": len(keys)})
         orphans = [
-            k
-            for k, i in zip(keys, idle, strict=True)
-            if isinstance(i, int) and i >= ORPHAN_IDLE_SECONDS
+            key
+            for key, seconds in zip(keys, idle, strict=True)
+            if isinstance(seconds, int)
+            and seconds >= ORPHAN_IDLE_SECONDS
+            and key.count(":") >= 2  # dedup-count:<rule>:<fingerprint>
         ]
         # rule ids never contain ':'; fingerprints are hex, so the last ':' splits the two.
         pairs = [key.removeprefix(_COUNT_PREFIX).rsplit(":", 1) for key in orphans]
@@ -153,6 +158,8 @@ class FoldTracker:
                 await asyncio.wait_for(stop.wait(), timeout=interval_seconds)
             except TimeoutError:
                 pass
+            if stop.is_set():
+                break  # the final flush already ran; adopted entries would never be applied
             try:
                 await self.adopt_orphans()
             except asyncio.CancelledError:
