@@ -77,7 +77,7 @@ class _Job:
     __slots__ = ("outbox_id", "stream", "body", "delivery")
 
     def __init__(
-        self, outbox_id: int, stream: str, body: bytes, delivery: DeliveryJob | None
+        self, outbox_id: int, stream: str, body: str, delivery: DeliveryJob | None
     ) -> None:
         self.outbox_id = outbox_id
         self.stream = stream
@@ -92,10 +92,10 @@ def _parse_row(row: asyncpg.Record) -> _Job:
         # The producer cannot know the outbox id inside its INSERT; the relay stamps it so the
         # id is the delivery's idempotency key end to end.
         job = DeliveryJob.model_validate({**payload, "delivery_id": row["id"]})
-        return _Job(row["id"], DELIVERIES_STREAM, orjson.dumps(job.model_dump(mode="json")), job)
+        return _Job(row["id"], DELIVERIES_STREAM, job.model_dump_json(), job)
     if row["kind"] == OutboxKind.runbook_job:
         runbook_job = RunbookJob.model_validate(payload)
-        body = orjson.dumps(runbook_job.model_dump(mode="json"))
+        body = runbook_job.model_dump_json()
         return _Job(row["id"], RUNBOOK_JOBS_STREAM, body, None)
     raise ValueError(f"unknown outbox kind {row['kind']!r}")
 
