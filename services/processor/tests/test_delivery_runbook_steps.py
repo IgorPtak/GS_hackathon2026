@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 
+import pytest
 from alerting_contracts.alerts import Alert, DeliveryJob
 from alerting_contracts.config import Rule, Severity
 from alerting_core.config.registry import ConfigSnapshot
@@ -69,3 +70,18 @@ def test_every_delivery_payload_lists_filled_in_runbook_steps() -> None:
 
 def test_no_snapshot_leaves_steps_empty() -> None:
     assert all(not job.content.runbook_steps for job in _build(with_snapshot=False))
+
+
+def test_runbook_render_failure_still_builds_deliveries(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise KeyError("missing placeholder")
+
+    monkeypatch.setattr("services.processor.deliveries.render_runbook", boom)
+    jobs = _build(with_snapshot=True)
+    assert len(jobs) == 2
+    assert all(job.content.runbook_steps == [] for job in jobs)
+    record = next(r for r in caplog.records if r.getMessage() == "runbook_render_failed")
+    assert record.alert_id == "alert-1"
+    assert record.rule_id == "settlements-workflow-failed"

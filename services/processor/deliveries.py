@@ -15,11 +15,14 @@ from alerting_contracts.alerts import (
 from alerting_contracts.common import Actor
 from alerting_contracts.config import Rule
 from alerting_core.config.registry import ConfigSnapshot
+from alerting_core.logging import get_logger
 from alerting_core.outbox import OutboxRow
 from alerting_core.routing import DeliveryTarget, check_throttle, resolve_deliveries
 from alerting_core.runbooks.rendering import render_runbook, runbook_step_texts
 from alerting_core.storage.alerts_write import AuditRow
 from redis.asyncio import Redis
+
+log = get_logger(__name__)
 
 PROCESSOR_ACTOR = Actor(id="system:processor")
 
@@ -63,7 +66,15 @@ def _runbook_steps(rule: Rule, alert: Alert, snapshot: ConfigSnapshot | None) ->
     runbook = snapshot.of_kind("runbook").get(rule.runbook)
     if runbook is None:
         return []
-    return runbook_step_texts(render_runbook(runbook, alert, snapshot.of_kind("action")))
+    try:
+        return runbook_step_texts(render_runbook(runbook, alert, snapshot.of_kind("action")))
+    except (ValueError, TypeError, KeyError) as error:
+        # Runs inside the persist transaction: a bad runbook must not fail and re-poison the batch.
+        log.error(
+            "runbook_render_failed",
+            extra={"alert_id": alert.id, "rule_id": rule.id, "error": str(error)},
+        )
+        return []
 
 
 def build_side_effects(
