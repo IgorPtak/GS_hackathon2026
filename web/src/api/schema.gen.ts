@@ -112,7 +112,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start a manual step; creates an approval request when the step requires approval. */
+        /** Start a manual step; creates an approval request when the step requires approval. 409 when the alert is resolved or the step already has a run that has not failed. */
         post: operations["runRunbookStep"];
         delete?: never;
         options?: never;
@@ -1216,7 +1216,7 @@ export interface components {
          * ConditionOperator
          * @enum {string}
          */
-        ConditionOperator: "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "in" | "glob" | "regex" | "exists";
+        ConditionOperator: "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "in" | "glob" | "regex" | "exists" | "severity_gte" | "time_between";
         /**
          * ConfigChangedEvent
          * @description Also the payload of pub/sub channel `config.changed` that makes workers reload.
@@ -3050,6 +3050,9 @@ export interface operations {
                     "application/json": components["schemas"]["ActionRun"];
                 };
             };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     createFixProposal: {
@@ -3334,6 +3337,7 @@ export interface operations {
                     "application/json": components["schemas"]["RulePreview"];
                 };
             };
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listSchemaProfiles: {

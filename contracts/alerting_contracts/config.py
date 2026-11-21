@@ -35,6 +35,10 @@ class ConditionOperator(StrEnum):
     glob = "glob"
     regex = "regex"
     exists = "exists"
+    # Ranks both sides by SEVERITY_ORDER (aliases such as WARN, ERR, FATAL accepted), so "WARN or above" works.
+    severity_gte = "severity_gte"
+    # value is a TimeOfDayRange "HH:MM-HH:MM" (UTC, may wrap midnight) or {range: "HH:MM-HH:MM", timezone: <IANA>}.
+    time_between = "time_between"
 
 
 class ConditionLeaf(ContractModel):

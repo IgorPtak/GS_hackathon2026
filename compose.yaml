@@ -1,7 +1,7 @@
 # One project name for everyone, so `docker compose -p alerting exec` (smoke test) always works.
 name: alerting
 
-# Local stack. `docker compose up -d --build` starts everything except the web profile.
+# Local stack. `docker compose up -d --build` starts every service, including `web` (no profile).
 # Scale workers with: docker compose up -d --scale processor=4
 
 x-env-file: &env-file

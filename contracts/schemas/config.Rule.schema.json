@@ -158,7 +158,9 @@
         "in",
         "glob",
         "regex",
-        "exists"
+        "exists",
+        "severity_gte",
+        "time_between"
       ],
       "title": "ConditionOperator",
       "type": "string"

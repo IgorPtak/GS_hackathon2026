@@ -51,7 +51,9 @@ class RunbookCatalog:
         found: dict[str, Runbook] = {}
         for path in sorted((self._config_dir / "runbooks").glob("*")):
             try:
-                runbook = load_runbook_file(path)
+                runbook = load_runbook_file(
+                    path, normalize_text_with_llm=False
+                )  # never the LLM per request
             except Exception as error:  # noqa: BLE001 - one bad file must not hide the others
                 log.warning("runbook_file_invalid", extra={"file": path.name, "error": str(error)})
                 continue

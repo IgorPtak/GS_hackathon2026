@@ -195,3 +195,13 @@ def test_put_markdown_and_yaml_use_parser_not_llm(
     yaml_source = (FIXTURES / "workflow-failed.yaml").read_text()
     response = _put_with_llm(client, monkeypatch, llm, format="yaml", source=yaml_source)
     assert response.json()["normalized_by"] == "parser" and llm.calls == 0
+
+
+def test_file_fallback_never_calls_llm(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from alerting_core.runbooks import store
+
+    def boom(cache: object) -> None:
+        raise AssertionError("LLM client must not be created on a request")
+
+    monkeypatch.setattr(store, "create_sync_llm_client", boom)
+    assert client.get("/api/v1/runbooks").status_code == 200

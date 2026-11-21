@@ -174,6 +174,7 @@ class GroupFlusher:
             public_base_url=self._settings.public_base_url,
             event_sent_at=events[0].sent_at or events[0].received_at,
             purpose=DeliveryPurpose.group_summary,
+            snapshot=snapshot,
         )
         async with self._pool.acquire() as connection, connection.transaction():
             inserted = await insert_alerts(connection, [alert])

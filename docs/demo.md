@@ -1,6 +1,6 @@
 # 5-minute demo script
 
-Step-by-step commands, UI clicks, and expected outcomes for each scene of the 5-minute demo video (see `docs/plan.md` and `docs/IMPLEMENTATION_PLAN.md` section 6).
+Step-by-step commands, UI clicks, and expected outcomes for each scene of the 5-minute demo video (see `docs/plan.md` and `docs/IMPLEMENTATION_PLAN.md` section 6). Scene timings add up to 5:00; the judges checklist at the end is untimed.
 
 ## Before you start
 
@@ -22,21 +22,21 @@ Step-by-step commands, UI clicks, and expected outcomes for each scene of the 5-
 
 ---
 
-## Scene 1 (0:00–0:30) — Problem, pitch, and architecture
+## Scene 1 (0:00–0:20) — Problem, pitch, and architecture
 
 - **Show on screen:** Architecture diagram from [README.md](../README.md) (events → Redis Streams `events` → `processor` → Postgres `outbox` → `outbox-relay` → `deliveries` / `runbook-jobs` → channel and action plugins; YAML hot reload; LLM off the hot path).
 - **Key line:** "Teams change alerts without fear and without code, and the AI only proposes."
 
 ---
 
-## Scene 2 (0:30–1:15) — Quickstart and unknown schema onboarding
+## Scene 2 (0:20–1:00) — Quickstart and unknown schema onboarding
 
 ### Commands
 
 Show the quickstart (or run against a fresh clone):
 
 ```bash
-git clone <repo> && cd <repo>
+git clone https://github.com/IgorPtak/GS_hackathon2026.git && cd GS_hackathon2026
 cp .env.example .env
 docker compose up -d --build
 ```
@@ -55,27 +55,27 @@ Expected response: HTTP 202 with `{"event_ids":["..."],"duplicate_count":0}`.
 
 1. Open http://localhost:5173 and pick a team in the top-right dropdown (needed to save a schema profile).
 2. Click the **Schemas** tab.
-3. Under **Unknown schema inbox**, locate the `generic-webhook` card (`evt`, `lvl`, `svc`, `at`, `data.paymentId`, …) and click **Propose a schema** (alternatively paste the contents of `contracts/fixtures/events/unknown_payments.json` into **Paste a sample JSON event** and click **Propose a schema**).
-4. Review the prefilled field mappings (`type ← evt`, `source ← svc`, `severity ← lvl`, `occurred_at ← at`, `entity ← data.paymentId`, fingerprint `[evt, svc]`).
-5. Under **Test on the last hour**, click **Run test** to preview matched events and normalized fields without writing anything.
-6. Click **Save schema profile**, then click **Create a rule for this schema** to jump to **Rules**.
+3. Under **Unknown schema inbox**, locate the `generic-webhook` card and click **Propose a schema** (or paste `contracts/fixtures/events/unknown_payments.json` into **Paste a sample JSON event** and click **Propose a schema**).
+4. Review the prefilled mappings (`type ← evt`, `source ← svc`, `severity ← lvl`, `occurred_at ← at`, `entity ← data.paymentId`, fingerprint `[evt, svc]`).
+5. Under **Test on the last hour**, click **Run test** (nothing is written), then click **Save schema profile** and **Create a rule for this schema**.
 
 ### What the viewer must see
 
-- An unknown JSON event lands immediately in the **Unknown schema inbox** with its key paths and count.
-- **Run test** displays normalized rows (`type: payment.declined`, `source: payments-api`, `severity: warning`, `entity: P-99812`).
-- Saving persists the new schema profile version and hot-reloads the processor without restarting any container.
+- The unknown JSON event lands in the **Unknown schema inbox** with its key paths and count.
+- **Run test** shows normalized rows (`type: payment.declined`, `source: payments-api`, `severity: warning`, `entity: P-99812`).
+- Saving hot-reloads the processor without restarting any container.
 
 ---
 
-## Scene 3 (1:15–2:15) — Team Rates rule preview, live alert, Mailpit, and Anna's preferences
+## Scene 3 (1:00–2:20) — Rules, rule validation, runbook actions, Mailpit, and Anna's preferences
 
-### UI clicks (rule preview and live edit)
+### UI clicks (rule preview, operators, and validation)
 
-1. In the header team picker, select **Team Rates**.
-2. Open the **Rules** tab and select `rates-large-rejections`.
-3. Under **Preview**, keep **Window** on **Last 1h** and click **Run preview**.
-4. Make a live edit in the YAML editor (for example, adjust the `payload.notional` threshold or title template), verify validation stays green, and click **Save** (watch the version badge increment, e.g. `Active version v2`).
+1. In the header team picker, select **Team Rates**. Open the **Rules** tab and select `rates-large-rejections`.
+2. Under **Preview**, keep **Window** on **Last 1h** and click **Run preview**.
+3. Make a live edit in the YAML editor (for example, adjust the `payload.notional` threshold), verify validation stays green, and click **Save** (the version badge increments, e.g. `Active version v2`).
+4. **Operators (do not save):** Pick **Team Pricing** → **Rules** → `pricing-stale-feed`. Point at `{ field: level, op: severity_gte, value: warning }`: "WARN or above" matches WARN, ERROR and FATAL. Back in **Team Rates**, paste the `time_between` example from [config/README.md](../config/README.md) into `when.all` (`{ field: normalized.occurred_at, op: time_between, value: { range: "08:00-20:00", timezone: Europe/Warsaw } }`) and click **Run preview**. Validation stays green.
+5. **Invalid regex:** add `{ field: msg, op: regex, value: "([" }` to `when.all` and click **Save**. Expected: HTTP 422 `validation_failed`, a field-level error on `when.all[N].value` in the editor, and no new version. Remove the line before continuing.
 
 ### Commands
 
@@ -102,24 +102,29 @@ curl -s -X POST http://localhost:8001/api/v1/ingest/rates-oms \
   -d @/tmp/demo_rates.json
 ```
 
-(Optional: generate a stream of mixed rates events with `uv run python loadtest/generator.py --rate 5 --duration 5 --mix rates:1`.)
+(Optional: generate mixed events with `uv run python loadtest/generator.py --rate 5 --duration 5 --mix rates:1`.)
 
-### UI clicks (live feed, Mailpit, and channel preferences)
+### UI clicks (live feed, runbook actions, and Mailpit)
 
-1. Open the **Alerts** tab → the new alert (`Rejected EUR 25000000 — LIMIT_BREACH_DEMO`) appears live via SSE without refreshing.
-2. Click the alert row to open the detail drawer: show **Fields**, the rendered Markdown **Runbook** (`Trade limit breach` with `T-20261120-DEMO01`, `CPTY-0042`, `jdoe`), **Deliveries**, **Audit**, and the **Propose a fix** button.
-3. Open Mailpit at http://localhost:8025 to show the delivered email (contains the full runbook steps) when outside Anna's working hours (`08:00-20:00` `Europe/Warsaw`), or open **Phone** → **Anna Kowalska** to show SMS/phone delivery during working hours.
-4. Return to **Rules** and scroll down to **Recipients** → **Anna Kowalska** (`anna`): show her preference (`08:00-20:00` `Europe/Warsaw` → `sms, phone`, otherwise `email`), adjust the working hours, and click **Save preferences** to show live preference updates.
+1. Open the **Alerts** tab → `Rejected EUR 25000000 — LIMIT_BREACH_DEMO` appears live via SSE.
+2. Click the row to open the detail drawer: **Fields**, the rendered Markdown **Runbook** (`Trade limit breach`, from `config/runbooks/trade-limit-breach.md`), **Deliveries**, **Audit**, and **Propose a fix**.
+3. In the runbook, click **Run** on the step with the inline action `open-ticket summary="Limit increase for CPTY-0042" team=risk` (`approval: none`). Expected: the action run reaches `succeeded` and appears in **Audit**.
+4. Click **Resolve** on the alert, then trigger **Run** on the same step again. Expected: refused with HTTP 409 `alert_resolved` ("the alert is already resolved"); no new action run is created.
+   - Optional API check: `curl -s -X POST http://localhost:8000/api/v1/alerts/<alert_id>/runbook/steps/<step_index>/run -H "content-type: application/json" -d '{"actor": {"id": "demo-operator"}}'` → 409 `alert_resolved`.
+5. Open Mailpit at http://localhost:8025: the delivered email lists the numbered runbook steps with the values filled in (`T-20261120-DEMO01`, `CPTY-0042`, `jdoe`). SMS and phone carry only a short link.
+6. Return to **Rules** → **Recipients** → **Anna Kowalska** (`anna`): show her working hours (`08:00-20:00` `Europe/Warsaw` → `sms, phone`, otherwise `email`) and click **Save preferences**.
 
 ### What the viewer must see
 
-- **Preview** reports events scanned, events matched, alerts that would be created, deliveries per recipient and channel, and sample titles before any alert is sent.
-- Saving a rule or channel preference takes effect immediately with no service restart.
-- The alert arrives live in **Alerts**, with full runbook steps in Mailpit email and a short link on SMS/phone.
+- **Preview** reports scanned and matched events, alerts, and deliveries per recipient and channel before anything is sent.
+- `severity_gte` and `time_between` work as rule conditions, and an invalid regex is refused with a field-level 422.
+- Saving a rule or preference takes effect with no service restart.
+- A markdown runbook step with an inline action runs from the UI and is recorded in **Audit**; the same run is refused once the alert is resolved.
+- The email lists the numbered runbook steps.
 
 ---
 
-## Scene 4 (2:15–3:15) — `WORKFLOW_FAILED` runbook, phone ringing with keypad approval, and free-text runbook
+## Scene 4 (2:20–3:10) — `WORKFLOW_FAILED` runbook, phone ringing with keypad approval, and free-text runbook
 
 ### UI setup (before posting the event)
 
@@ -155,20 +160,16 @@ curl -s -X POST http://localhost:8001/api/v1/ingest/settlements-engine \
 ### UI clicks (phone call approval and runbook audit)
 
 1. Watch the **Phone** tab:
-   - The runbook runner automatically executes Step 0 (`http-health-check` → HTTP 200 `succeeded`) and Step 1 (`retry-workflow`, 2 attempts → HTTP 502 `failed`), then pauses at Step 2 (`escalate`, `approval: required`, `run_if: previous_failed`).
+   - The runbook runner executes Step 0 (`http-health-check` → HTTP 200 `succeeded`) and Step 1 (`retry-workflow`, 2 attempts → HTTP 502 `failed`), then pauses at Step 2 (`escalate`, `approval: required`, `run_if: previous_failed`).
    - Piotr's phone starts ringing with the **Incoming call** overlay.
-2. Click **Answer**:
-   - The browser reads the alert and approval request aloud via speech synthesis and displays the transcript.
-   - Enter the 4-digit approval code on the on-screen keypad (or your keyboard; `*` rejects, `#` repeats the read-out). The simulator submits `APPROVE <code>` and shows confirmation. (You can also reply `APPROVE <code>` in the SMS reply box or approve from the **Approvals** tab.)
-3. Switch to **Alerts** (Team Settlements) and click `Workflow wf-settle-20261120-demo01 failed — UPSTREAM_TIMEOUT`:
-   - In **Runbook**, show the original YAML source side-by-side with the rendered steps (`wf-settle-20261120-demo01` filled in): Step 0 `succeeded`, Step 1 `failed`, and Step 2 `succeeded` after Piotr's approval.
-   - Scroll to **Audit** to show the full timeline (`alert_created`, `runbook_started`, action runs, `approval_requested`, `approval_decided`, and the escalated action run).
+2. Click **Answer**: the browser reads the alert and approval request aloud and shows the transcript. Enter the 4-digit approval code on the keypad (`*` rejects, `#` repeats), or reply `APPROVE <code>` in the SMS box, or approve from the **Approvals** tab.
+3. Switch to **Alerts** (Team Settlements) and open `Workflow wf-settle-20261120-demo01 failed — UPSTREAM_TIMEOUT`: the **Runbook** shows Step 0 `succeeded`, Step 1 `failed`, and Step 2 `succeeded` after approval; **Audit** shows `approval_requested`, `approval_decided`, and the escalated action run.
 
-### Free-text runbook normalization (second half of Scene 4)
+### Free-text runbook normalized at config sync
 
 1. Open the **Runbooks** tab and click **Stale price feed** (`pricing-stale-feed`).
-2. Show the original plain-English paragraph (`config/runbooks/pricing-stale-feed.txt`) next to the 4 structured steps produced at save time (`normalized by llm`, including `restart-pricing-adapter` marked `requires approval`).
-3. Optional: to trigger LLM save-time normalization live via the API (requires an active Ollama or allowlisted LLM endpoint; otherwise falls back to a single text step):
+2. Show the original plain-English text (`config/runbooks/pricing-stale-feed.txt`) next to the structured steps. The normalizer shows `llm` with the model name, and `restart-pricing-adapter` shows `requires approval`: the LLM cannot remove the gate.
+3. The file is normalized when config syncs (cached by content hash, 15 s bound, falls back to one text step if the LLM is unavailable). Optional live re-run through the same normalizer (requires an active Ollama or allowlisted LLM endpoint):
 
 ```bash
 curl -s -X PUT http://localhost:8000/api/v1/runbooks/pricing-stale-feed \
@@ -185,13 +186,13 @@ curl -s -X PUT http://localhost:8000/api/v1/runbooks/pricing-stale-feed \
 
 ### What the viewer must see
 
-- Automatic health check and 2 retries run without human intervention; the risky escalation pauses for human approval.
-- Piotr's phone rings, reads out the approval request, and accepts the 4-digit code on the keypad to execute the escalation and record it in the audit trail.
-- A free-text runbook is normalized into executable steps (preserving `requires approval` on gated actions) with the original prose kept alongside.
+- The health check and 2 retries run without human intervention; the escalation pauses for human approval.
+- Piotr's phone rings, reads out the request, and the 4-digit code on the keypad runs the escalation and records it in **Audit**.
+- A free-text runbook becomes executable steps with `requires approval` kept on gated actions, and the original prose stays alongside.
 
 ---
 
-## Scene 5 (3:15–3:45) — Deduplication (`×500`) and SMS gateway outage recovery
+## Scene 5 (3:10–3:30) — Deduplication (`×500`) and SMS gateway outage recovery
 
 ### Commands (500 identical events → one alert `×500`)
 
@@ -259,17 +260,17 @@ Expected response: `{"is_down":false,"channels":[]}`.
 
 ### UI clicks
 
-1. Pick **Team Rates** → **Alerts** tab: show the single `Rejected EUR 25000000 — DUP_STORM_DEMO` row with badge `×500`.
-2. Pick **Team Settlements** → **Alerts** tab → open `Workflow wf-settle-20261120-outage01 failed — UPSTREAM_TIMEOUT` → inspect **Deliveries**: while the outage is active, `sms` shows `failed` (retrying); after recovery, it transitions to `delivered` and appears in **Phone** → **Piotr Nowak**.
+1. Pick **Team Rates** → **Alerts**: a single `Rejected EUR 25000000 — DUP_STORM_DEMO` row with badge `×500`.
+2. Pick **Team Settlements** → **Alerts** → open `Workflow wf-settle-20261120-outage01 failed — UPSTREAM_TIMEOUT` → **Deliveries**: while the outage is active, `sms` shows `failed` (retrying); after recovery it becomes `delivered` and appears in **Phone** → **Piotr Nowak**.
 
 ### What the viewer must see
 
 - 500 identical events collapse into **one alert with `×500`** and one set of deliveries.
-- While the SMS gateway returns HTTP 503, deliveries retry cleanly without dropping alerts; once restored, every pending SMS lands in the **Phone** tab with zero loss.
+- While the SMS gateway returns HTTP 503, deliveries retry without dropping alerts; once restored, every pending SMS lands in the **Phone** tab.
 
 ---
 
-## Scene 6 (3:45–4:30) — Metrics, Grafana, load test, and horizontal scaling
+## Scene 6 (3:30–4:10) — Metrics, Grafana, load test, and horizontal scaling
 
 ### Commands
 
@@ -289,18 +290,21 @@ docker compose up -d --scale processor=4
 
 ### UI clicks
 
-1. Open the **Metrics** tab at http://localhost:5173: point out live tiles updating every 5 s (`Ingest rate`, `Processed rate`, `Events stream lag`, `Deliveries stream lag`, `End-to-end latency p50`, `End-to-end latency p99`, `Delivery retries`, `Dead-lettered`, `Open alerts`).
-2. Click **Open Grafana** (http://localhost:3000) and open the provisioned **Alerting** dashboard to show time-series throughput, stream lag, and latency percentiles.
-3. Reference the recorded saturation and recovery table in [docs/load-test-results.md](load-test-results.md) (p99 drops from 1,276 ms → 858 ms → 621 ms across 1 / 2 / 4 processors; 0 lost across all scenarios).
+1. Open the **Metrics** tab at http://localhost:5173: point out the live tiles updating every 5 s (`Ingest rate`, `Processed rate`, `Events stream lag`, `Deliveries stream lag`, `End-to-end latency p50`, `End-to-end latency p99`, `Delivery retries`, `Dead-lettered`, `Open alerts`).
+2. Click **Open Grafana** (http://localhost:3000) and open the provisioned **Alerting** dashboard.
+3. Quote the numbers from the README load table (do not re-measure on stage), see [docs/load-test-results.md](load-test-results.md) for the full method:
+   - Steady 60 s at 200 msg/s: 12,000 sent, 24,000 / 24,000 delivered, **0 lost**, p50 373 ms, p99 572 ms.
+   - After the A-24 fixes, 350 msg/s: p50 56 ms, p99 163 ms, **0 lost**.
+   - In-network generator at 500 msg/s: p50 81.8 ms, p99 1917.9 ms (about 1.9 s), **0 lost**.
 
 ### What the viewer must see
 
-- Live msg/s, low stream lag, and sub-second p50/p99 latency during steady load.
-- Clear explanation and live/recorded evidence of horizontal scaling (`--scale processor=4`) and zero lost alerts.
+- Live msg/s, stream lag, and latency tiles during load.
+- The horizontal scaling command and the README numbers, with zero lost alerts.
 
 ---
 
-## Scene 7 (4:30–5:00) — Alertmanager auto-resolve, LLM privacy, and AI usage
+## Scene 7 (4:10–5:00) — Alertmanager auto-resolve, LLM privacy, and AI usage
 
 ### Commands
 
@@ -370,20 +374,33 @@ curl -s -X POST http://localhost:8001/api/v1/ingest/alertmanager \
 
 ### UI clicks
 
-1. Pick **Team Platform** → **Alerts** tab: `ExporterDown on exporter-demo01:9100` appears as `open`.
-2. After posting the resolved webhook, switch the **Status** filter to **Resolved** (or **All**) and open the alert to show `status: resolved`, `resolution_reason: source_resolved`, and the audit entry from `system:processor`.
-3. Close with privacy and AI usage highlights from [README.md](../README.md): local Ollama default, opt-in allowlisted cloud host via `LLM_ALLOWED_HOSTS`, `redact_secrets` before every call, zero LLM calls on the hot path, synthetic data only.
+1. Pick **Team Platform** → **Alerts**: `ExporterDown on exporter-demo01:9100` appears as `open`.
+2. After posting the resolved webhook, set the **Status** filter to **Resolved** (or **All**) and open the alert: `status: resolved`, `resolution_reason: source_resolved`, and the audit entry from `system:processor`.
+3. Close with the privacy and AI points from [README.md](../README.md): local Ollama by default, an opt-in allowlisted cloud host via `LLM_ALLOWED_HOSTS`, `redact_secrets` before every call, zero LLM calls on the hot path, synthetic data only.
 
 ### What the viewer must see
 
-- An Alertmanager `firing` event opens an alert and the matching `resolved` event auto-resolves it with an audit trail.
-- Clear summary of how AI was used safely during development and inside the product.
+- A firing Alertmanager event opens an alert, and the matching resolved event auto-resolves it with an audit trail.
+- A clear summary of how the AI is used safely: it proposes, humans approve.
 
 ---
 
 ## Live-judging checklist ("judges bring a schema and runbook")
 
+Untimed; use it when judges bring their own material.
+
 1. **Onboard schema:** Paste the judge's JSON in **Schemas** → **Paste a sample JSON event** → **Propose a schema** → **Run test** → **Save schema profile**.
 2. **Create rule:** Click **Create a rule for this schema** (or save via `PUT /api/v1/rules/{rule_id}`), run **Preview**, and **Save**.
 3. **Add runbook:** Save the judge's YAML, Markdown, or free-text runbook via `PUT /api/v1/runbooks/{runbook_id}` and inspect the normalized steps in the **Runbooks** tab.
 4. **Send live event:** `POST http://localhost:8001/api/v1/ingest/generic-webhook` with the judge's JSON → watch the alert, rendered runbook, and deliveries appear live in **Alerts**.
+5. **New source by YAML only (no restart):** Copy the source file and change its id, then post a fixture to the new endpoint:
+
+```bash
+sed 's/^id: generic-webhook$/id: judges/' config/sources/generic-webhook.yaml > config/sources/judges.yaml
+
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8001/api/v1/ingest/judges \
+  -H "content-type: application/json" \
+  -d @contracts/fixtures/events/unknown_payments.json
+```
+
+   Expected: `202`, with no `docker compose restart`. Cleanup: `rm config/sources/judges.yaml`; the same POST then answers `404` because the source was removed.

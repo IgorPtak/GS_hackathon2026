@@ -1,8 +1,7 @@
 """Ingest HTTP service (track A, port 8001): accepts events and appends them to stream `events`."""
 
-import asyncio
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
@@ -10,11 +9,14 @@ from typing import Any
 import orjson
 from alerting_contracts.api import ErrorResponse, IngestAccepted
 from alerting_contracts.config import SourceConfig
-from alerting_contracts.events import EventEnvelope, SourceType
-from alerting_core.connections import create_redis_client
+from alerting_contracts.events import EventEnvelope
+from alerting_core.config.registry import ConfigRegistry
+from alerting_core.config.store import sync_config_files
+from alerting_core.connections import create_database_pool, create_redis_client
 from alerting_core.logging import configure_logging, get_logger
 from alerting_core.metrics import EVENTS_INGESTED, LATENCY_BUCKETS, render_metrics
 from alerting_core.rules.field_paths import resolve_field_path
+from alerting_core.runbooks.store import register_runbook_kind
 from alerting_core.settings import Settings, get_settings
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
@@ -28,7 +30,7 @@ from ulid import ULID
 from plugins.sources import get_source_plugin
 from plugins.sources.log_tail import LogTailRunner
 
-from .sources import load_sources
+from .sources import LogTailSet
 
 log = get_logger(__name__)
 
@@ -81,7 +83,7 @@ def parse_sent_at(raw: str | None) -> datetime | None:
 
 
 def get_source(request: Request, source_id: str) -> SourceConfig | None:
-    """Single lookup point for source config (A-03 replaces the body with the registry)."""
+    """Single lookup point: an in-memory dict that the registry callback swaps on reload."""
     return request.app.state.sources.get(source_id)
 
 
@@ -209,44 +211,63 @@ async def handle_ingest(request: Request, source_id: str, *, is_batch: bool) -> 
     return JSONResponse(accepted.model_dump(mode="json"), status_code=202)
 
 
-def start_log_tails(app: FastAPI) -> list[asyncio.Task[None]]:
-    """Start one background tail task per enabled log_tail source (one process wins the lock)."""
-    tasks = []
-    for source in app.state.sources.values():
-        if source.type != SourceType.log_tail or not source.enabled:
-            continue
+def make_tail_starter(app: FastAPI) -> Callable[[SourceConfig], Awaitable[None]]:
+    """Return the coroutine factory `LogTailSet` uses to run one source's tail (lock inside)."""
 
-        async def append(envelopes: list[EventEnvelope], source_id: str = source.id) -> None:
+    async def start_tail(source: SourceConfig) -> None:
+        async def append(envelopes: list[EventEnvelope]) -> None:
             event_ids, duplicates = await append_envelopes(
                 app.state.redis, app.state.append_script, envelopes
             )
-            EVENTS_TOTAL.labels(source_id, "accepted").inc(len(event_ids))
+            EVENTS_TOTAL.labels(source.id, "accepted").inc(len(event_ids))
             EVENTS_INGESTED.inc(len(event_ids))
             if duplicates:
-                EVENTS_TOTAL.labels(source_id, "duplicate").inc(duplicates)
+                EVENTS_TOTAL.labels(source.id, "duplicate").inc(duplicates)
 
-        runner = LogTailRunner(source, app.state.redis, append)
-        tasks.append(asyncio.create_task(runner.run(), name=f"log-tail-{source.id}"))
-    return tasks
+        await LogTailRunner(source, app.state.redis, append).run()
+
+    return start_tail
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
-    """Build the app; Settings and the Redis client live in the lifespan (app.state)."""
+def create_app(settings: Settings | None = None, registry: ConfigRegistry | None = None) -> FastAPI:
+    """Build the app; Settings, Redis and the config registry live in the lifespan (app.state).
+
+    A caller-supplied `registry` is already started and owned by the caller (tests).
+    """
     resolved = settings or get_settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         configure_logging("ingest", resolved.log_level)
         app.state.settings = resolved
-        app.state.sources = load_sources(resolved.config_dir)
         app.state.redis = create_redis_client(resolved)
         app.state.append_script = app.state.redis.register_script(APPEND_SCRIPT)
-        tail_tasks = start_log_tails(app)
+        pool = None
+        config = registry
+        if config is None:
+            pool = await create_database_pool(resolved)
+            register_runbook_kind()
+            # Atomic per document, so every replica may run it; covers a cold database.
+            await sync_config_files(pool, app.state.redis, resolved.config_dir)
+            config = ConfigRegistry()
+            await config.start(pool, app.state.redis)
+        tails = LogTailSet(make_tail_starter(app))
+
+        def apply_sources(_snapshot: object = None) -> None:
+            # Swapping the dict reference keeps the per-request lookup a plain dict get.
+            app.state.sources = dict(config.sources())
+            tails.reconcile(app.state.sources)
+            log.info("ingest_sources_applied", extra={"sources": sorted(app.state.sources)})
+
+        apply_sources()
+        config.on_reload.append(apply_sources)
         log.info("ingest_started", extra={"sources": sorted(app.state.sources)})
         yield
-        for task in tail_tasks:
-            task.cancel()
-        await asyncio.gather(*tail_tasks, return_exceptions=True)
+        config.on_reload.remove(apply_sources)
+        await tails.stop()
+        if pool is not None:
+            await config.stop()
+            await pool.close()
         await app.state.redis.aclose()
 
     app = FastAPI(lifespan=lifespan)
