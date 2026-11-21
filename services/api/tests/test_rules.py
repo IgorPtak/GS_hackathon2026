@@ -112,6 +112,21 @@ def test_put_invalid_rule_has_dot_path_details() -> None:
     assert not pool.rows
 
 
+def test_put_uncompilable_regex_is_422_and_not_stored() -> None:
+    client, pool, redis = make()
+    bad = {
+        **RULE,
+        "when": {
+            "all": [{"field": "a", "op": "exists"}, {"field": "b", "op": "regex", "value": "("}]
+        },
+    }
+    with client:
+        r = client.put("/api/v1/rules/platform-alertmanager", json={"rule": bad, "actor": ACTOR})
+    assert r.status_code == 422 and r.json()["error"] == "validation_failed"
+    assert r.json()["details"][0]["path"] == "when.all[1].value"
+    assert not pool.rows and not redis.published
+
+
 def test_delete_publishes_and_404s() -> None:
     client, pool, redis = make()
     with client:

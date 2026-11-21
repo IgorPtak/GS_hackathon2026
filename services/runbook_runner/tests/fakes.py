@@ -130,6 +130,7 @@ class FakeStore:
         params: dict[str, str],
         status: ActionRunStatus,
         attempt: int = 1,
+        requested_by: Actor | None = None,
     ) -> ActionRun:
         run = ActionRun(
             id=new_uuid7(),
@@ -140,7 +141,7 @@ class FakeStore:
             params=params,
             status=status,
             attempt=attempt,
-            requested_by=Actor(id="system:runbook-runner"),
+            requested_by=requested_by or Actor(id="system:runbook-runner"),
             created_at=NOW,
             updated_at=NOW,
         )

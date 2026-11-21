@@ -17,7 +17,12 @@ from fastapi import APIRouter, Query
 
 from .. import approvals_store as store
 from ..dependencies import PoolDep, RedisDep, RegistryDep
-from .approvals import AlreadyDecidedError, ApprovalNotFoundError, decide_approval
+from .approvals import (
+    AlertResolvedError,
+    AlreadyDecidedError,
+    ApprovalNotFoundError,
+    decide_approval,
+)
 
 log = get_logger(__name__)
 
@@ -78,6 +83,8 @@ async def reply_route(
     decision = ApprovalDecision(command)
     try:
         await decide_approval(pool, redis, request.id, decision, actor, via)
+    except AlertResolvedError:
+        return _no("Alert already resolved")
     except (ApprovalNotFoundError, AlreadyDecidedError):
         return _no(f"Approval {code} was already decided.")
     verb = "approved" if decision is ApprovalDecision.approve else "rejected"

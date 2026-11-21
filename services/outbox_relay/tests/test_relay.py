@@ -2,15 +2,11 @@
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator
-from pathlib import Path
 from typing import Any
 
 import asyncpg
 import orjson
 import pytest
-from alerting_core.connections import create_database_pool
-from alerting_core.settings import Settings
 from prometheus_client import REGISTRY
 from redis.asyncio import Redis
 
@@ -22,55 +18,6 @@ from services.outbox_relay.relay import (
     relay_batch,
     run_relay,
 )
-
-REDIS_URL = "redis://localhost:6379/11"
-
-
-@pytest.fixture
-async def redis() -> AsyncIterator[Redis]:
-    client = Redis.from_url(REDIS_URL)
-    try:
-        await client.ping()
-    except Exception:
-        pytest.skip("Redis on localhost:6379 is not running")
-    await client.flushdb()
-    yield client
-    await client.flushdb()
-    await client.aclose()
-
-
-MIGRATION = Path(__file__).parents[3] / "deploy/postgres/migrations/0001_initial.sql"
-TEST_DATABASE = "alerting_relay_test"
-
-
-async def ensure_test_database(settings: Settings) -> str:
-    """A private database built from the migration, so a running compose relay never steals rows."""
-    admin = await asyncpg.connect(settings.database_url)
-    try:
-        exists = await admin.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", TEST_DATABASE)
-        if not exists:
-            await admin.execute(f"CREATE DATABASE {TEST_DATABASE}")
-    finally:
-        await admin.close()
-    test_url = settings.database_url.rsplit("/", 1)[0] + f"/{TEST_DATABASE}"
-    connection = await asyncpg.connect(test_url)
-    try:
-        await connection.execute(MIGRATION.read_text())  # idempotent
-    finally:
-        await connection.close()
-    return test_url
-
-
-@pytest.fixture
-async def pool() -> AsyncIterator[asyncpg.Pool]:
-    try:
-        test_url = await ensure_test_database(Settings())
-    except OSError:
-        pytest.skip("Postgres on localhost:5432 is not running")
-    database_pool = await create_database_pool(Settings(database_url=test_url))
-    await database_pool.execute("TRUNCATE outbox, deliveries")
-    yield database_pool
-    await database_pool.close()
 
 
 def delivery_payload(alert_id: str, channel_id: str = "email") -> dict[str, Any]:

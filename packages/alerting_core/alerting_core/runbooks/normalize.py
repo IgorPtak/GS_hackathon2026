@@ -9,7 +9,7 @@ from alerting_contracts.runbooks import Runbook, RunbookFormat, RunbookStep
 from pydantic import BaseModel
 
 from plugins.runbook_formats import get_runbook_format
-from plugins.runbook_formats.text_format import validate_llm_steps
+from plugins.runbook_formats.text_format import guard_llm_steps
 
 from ..llm import LlmClient, LlmError
 from ..logging import get_logger
@@ -91,7 +91,7 @@ async def normalize_runbook_with_llm(
 ) -> Runbook:
     """Save-time normalization: free text goes through the LLM once, other formats are parsed.
 
-    The LLM output is a proposal: it is post-validated (`validate_llm_steps`). A missing client,
+    The LLM output is a proposal: it is post-validated (`guard_llm_steps`). A missing client,
     any LlmError, or an empty result gives the plain fallback (`normalized_by="fallback"`),
     never an exception. Empty text still raises ValueError like `normalize_runbook`.
     """
@@ -107,7 +107,7 @@ async def normalize_runbook_with_llm(
             wrap_untrusted(text), StepsResponse, system=build_system_prompt(actions)
         )
         assert isinstance(answer, StepsResponse)
-        steps = validate_llm_steps(answer.steps, actions)
+        steps = guard_llm_steps(answer.steps, actions)
     except LlmError as error:
         log.warning("runbook_llm_fallback", extra={"runbook": id, "error": str(error)})
         steps = []

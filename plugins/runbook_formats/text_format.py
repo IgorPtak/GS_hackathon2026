@@ -71,6 +71,52 @@ def validate_llm_steps(
     return [step.model_copy(update={"index": i}) for i, step in enumerate(result)]
 
 
+RISKY_ACTION_WORDS = ("restart", "escalate", "retry")
+
+
+def _is_risky(action: ActionConfig) -> bool:
+    """Restart, escalate and retry actions never run without a human, whatever their config says."""
+    name = f"{action.id} {action.type}".lower()
+    return any(word in name for word in RISKY_ACTION_WORDS)
+
+
+def _as_manual_step(step: RunbookStep) -> RunbookStep:
+    return step.model_copy(
+        update={
+            "kind": StepKind.text,
+            "action": None,
+            "params": {},
+            "approval": None,
+            "is_automatic": False,
+        }
+    )
+
+
+def guard_llm_steps(
+    steps: list[RunbookStep], actions: Mapping[str, ActionConfig]
+) -> list[RunbookStep]:
+    """Strict guard for LLM proposals: `validate_llm_steps` plus the safety rules; pure.
+
+    - an action step missing a required param becomes a manual text step (a human does it);
+    - approval is forced to required unless the action's policy is `none` and it is not risky
+      (restart/escalate/retry); a forced step is never automatic.
+    """
+    result: list[RunbookStep] = []
+    for step in validate_llm_steps(steps, actions):
+        action = actions.get(step.action) if step.action else None
+        if action is not None:
+            given = {name for name, value in step.params.items() if value.strip()}
+            required = {name for name, spec in action.params.items() if spec.is_required}
+            if not required <= given:
+                step = _as_manual_step(step)
+            elif action.approval is not ApprovalPolicy.none or _is_risky(action):
+                step = step.model_copy(
+                    update={"approval": ApprovalPolicy.required, "is_automatic": False}
+                )
+        result.append(step)
+    return result
+
+
 @register_runbook_format
 class TextRunbookFormat(RunbookFormatPlugin):
     format = RunbookFormat.text

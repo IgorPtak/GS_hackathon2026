@@ -17,6 +17,10 @@ class MySource(HttpSourcePlugin):
 register_source_plugin(SourceType.alertmanager, MySource())
 ```
 
+A new source of an existing type = YAML only: ingest reads sources from the config registry and
+applies `config/sources/<id>.yaml` changes on `config.changed` (no restart). A deleted or disabled
+source answers 404; `log_tail` tasks start, stop or (for an edited source only) restart on reload.
+
 ## Alertmanager
 
 `alertmanager.py` splits `alerts[]` into one event per alert (item `status` wins, `receiver` and

@@ -229,3 +229,13 @@ def test_put_yaml_with_loosened_approval_is_saved_as_required(
     response = client.put("/api/v1/runbooks/rb-1", json=put_body(format="yaml", source=source))
     assert response.status_code == 200
     assert saved[0].steps[0].approval.value == "required"
+
+
+def test_file_fallback_never_calls_llm(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from alerting_core.runbooks import store
+
+    def boom(cache: object) -> None:
+        raise AssertionError("LLM client must not be created on a request")
+
+    monkeypatch.setattr(store, "create_sync_llm_client", boom)
+    assert client.get("/api/v1/runbooks").status_code == 200

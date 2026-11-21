@@ -61,6 +61,14 @@ async def lock_approval(connection: asyncpg.Connection, approval_id: str) -> App
     return _approval(record) if record else None
 
 
+async def lock_alert_status(connection: asyncpg.Connection, alert_id: str) -> str | None:
+    """Select the alert's status `FOR UPDATE`, so a resolve cannot slip in between check and act."""
+    value = await connection.fetchval(
+        "SELECT status FROM alerts WHERE id = $1::uuid FOR UPDATE", alert_id
+    )
+    return str(value) if value else None
+
+
 async def find_pending_by_code(connection: asyncpg.Connection, code: str) -> ApprovalRequest | None:
     """The one pending request with this code (partial unique index), or None."""
     record = await connection.fetchrow(
@@ -95,7 +103,7 @@ async def record_decision(
 async def set_run_status(
     connection: asyncpg.Connection, run_id: str, status: ActionRunStatus
 ) -> ActionRun | None:
-    """Move an action run to `approved` or `rejected`; None when the run no longer exists."""
+    """Move an action run to `approved`, `rejected` or `skipped`; None if the run is gone."""
     record = await connection.fetchrow(
         "UPDATE action_runs SET status = $2, updated_at = now() WHERE id = $1::uuid RETURNING *",
         run_id,

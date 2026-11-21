@@ -3,7 +3,7 @@
 import asyncio
 from unittest import mock
 
-from alerting_contracts.alerts import AuditVerb
+from alerting_contracts.alerts import AlertStatus, AuditVerb
 from alerting_contracts.runbooks import ActionRunStatus, RenderedRunbook, RunIf, StepKind
 from alerting_contracts.sse import ActionRunUpdatedEvent, ApprovalRequestedEvent
 
@@ -256,3 +256,24 @@ async def test_retry_after_failure_of_an_approval_step_asks_again() -> None:
     await walker.start()
     assert plugin.calls == []
     assert store.statuses(0) == [(1, "failed"), (2, "pending_approval")]
+
+
+async def test_resolved_alert_skips_approved_run_without_calling_plugin() -> None:
+    runbook = rendered(step(0, approval=True, automatic=False), step(1))
+    plugin = ScriptedPlugin([True, True])
+    walker, store, _ = build(runbook, plugin)
+    await walker.start()
+    run = next(iter(store.runs.values()))
+    await store.update_run(run.id, ActionRunStatus.approved, run.attempt)
+    approved = await store.get_run(run.id)
+    assert approved is not None
+
+    resolved = make_alert().model_copy(update={"status": AlertStatus.resolved})
+    resume = RunbookWalker(
+        store, FakeNotifier(), resolved, runbook, {"act": action_config()}, lambda _type: plugin
+    )
+    await resume.execute_approved(approved)
+    assert plugin.calls == []
+    assert store.statuses(0) == [(1, "skipped")] and store.statuses(1) == []
+    assert verbs(store)[-1] is AuditVerb.action_run_skipped
+    assert store.audits[-1].detail["reason"] == "alert_resolved"

@@ -48,6 +48,7 @@ class RunbookStore(Protocol):
         params: dict[str, str],
         status: ActionRunStatus,
         attempt: int = 1,
+        requested_by: Actor | None = None,
     ) -> ActionRun: ...
 
     async def update_run(
@@ -129,7 +130,9 @@ class PgStore:
         params: dict[str, str],
         status: ActionRunStatus,
         attempt: int = 1,
+        requested_by: Actor | None = None,
     ) -> ActionRun:
+        """Insert a run; `requested_by` defaults to the runner (the API passes the human)."""
         record = await self._connection.fetchrow(
             "INSERT INTO action_runs (id, alert_id, runbook_id, step_index, action_id, params, "
             "status, attempt, requested_by) "
@@ -142,7 +145,7 @@ class PgStore:
             params,
             status.value,
             attempt,
-            RUNNER_ACTOR.model_dump(mode="json"),
+            (requested_by or RUNNER_ACTOR).model_dump(mode="json"),
         )
         if record is None:
             raise RuntimeError("action_runs insert returned no row")

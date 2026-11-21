@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from services.api.dependencies import get_pool, get_redis, get_registry
 from services.api.main import create_app
 from services.api.routers import phone_simulator as phone_router
-from services.api.routers.approvals import AlreadyDecidedError
+from services.api.routers.approvals import AlertResolvedError, AlreadyDecidedError
 from services.api.tests.test_approvals import APPROVAL_ID, make_approval
 
 from .test_alerts import make_alert, make_audit
@@ -164,3 +164,11 @@ def test_ack_acknowledges_latest_open_alert(client: TestClient, state: State) ->
 def test_ack_without_open_alert(client: TestClient, state: State) -> None:
     result = reply(client, "anna", "ACK")
     assert not result.is_understood and state.acked == [] and state.published == 0
+
+
+def test_approve_on_resolved_alert_replies_already_resolved(
+    client: TestClient, state: State
+) -> None:
+    state.decide_error = AlertResolvedError("x")
+    result = reply(client, "anna", "APPROVE 1234")
+    assert not result.is_understood and result.message == "Alert already resolved"

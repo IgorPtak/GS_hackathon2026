@@ -52,6 +52,7 @@ class Env:
         self.audits: list[dict[str, Any]] = []
         self.run_statuses: list[ActionRunStatus] = []
         self.current: ApprovalRequest | None = make_approval()
+        self.alert_status: str | None = "open"
 
 
 class FakeConnection:
@@ -82,6 +83,10 @@ def env(monkeypatch: pytest.MonkeyPatch) -> Env:
     async def lock(connection: Any, approval_id: str) -> ApprovalRequest | None:
         state.events.append("lock")
         return state.current
+
+    async def lock_alert(connection: Any, alert_id: str) -> str | None:
+        state.events.append("lock_alert")
+        return state.alert_status
 
     async def record(connection: Any, approval_id, decision, actor, via, comment):
         assert state.current is not None
@@ -133,6 +138,7 @@ def env(monkeypatch: pytest.MonkeyPatch) -> Env:
         state.published.append(f"{team}:{event.type}")
 
     monkeypatch.setattr(store, "lock_approval", lock)
+    monkeypatch.setattr(store, "lock_alert_status", lock_alert)
     monkeypatch.setattr(store, "record_decision", record)
     monkeypatch.setattr(store, "set_run_status", set_status)
     monkeypatch.setattr(approvals_router, "enqueue_runbook_job", enqueue)
@@ -183,7 +189,7 @@ def test_approve_enqueues_one_job_audits_and_publishes_after_commit(
         "settlements:audit.appended",
     ]
     assert env.events.index("commit") < env.events.index("publish")
-    assert env.events[:2] == ["begin", "lock"]
+    assert env.events[:3] == ["begin", "lock", "lock_alert"]
 
 
 def test_reject_enqueues_nothing(client: TestClient, env: Env) -> None:
@@ -200,6 +206,22 @@ def test_second_decision_is_409_and_publishes_nothing(client: TestClient, env: E
     assert ErrorResponse.model_validate(response.json()).error == "already_decided"
     assert env.jobs == [] and env.published == [] and env.audits == []
     assert "commit" not in env.events
+
+
+def test_approve_on_resolved_alert_is_409_closes_request_and_enqueues_nothing(
+    client: TestClient, env: Env
+) -> None:
+    env.alert_status = "resolved"
+    response = decide(client, "approve")
+    assert response.status_code == 409
+    assert ErrorResponse.model_validate(response.json()).error == "alert_resolved"
+    assert env.jobs == []
+    assert env.run_statuses == [ActionRunStatus.skipped]
+    assert env.audits[0]["detail"]["decision"] == "expired"
+    assert env.audits[0]["detail"]["reason"] == "alert_resolved"
+    # The closing is committed (not rolled back by the 409) and published afterwards.
+    assert env.events.index("commit") < env.events.index("publish")
+    assert "approval.decided" in env.published[0]
 
 
 def test_unknown_is_404(client: TestClient, env: Env) -> None:

@@ -16,3 +16,5 @@ loadtest/results/*.tmp
 .idea/
 .vscode/
 .claude/worktrees/
+loadtest/results/profiles/load.log
+loadtest/results/*.json
