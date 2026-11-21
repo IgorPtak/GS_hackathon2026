@@ -33,6 +33,7 @@ from alerting_core.storage.audit import append_audit
 from alerting_core.storage.transitions import AlertNotFoundError
 from fastapi import APIRouter, Path, Request
 from pydantic import BaseModel
+from redis.exceptions import RedisError
 
 from services.runbook_runner.approvals import OutboxApprovalNotifier
 from services.runbook_runner.store import PgStore, latest
@@ -95,6 +96,63 @@ async def _request_approval(
     return approval
 
 
+async def _create_run_and_dispatch(
+    connection: asyncpg.Connection,
+    registry: ConfigRegistry | None,
+    base_url: str,
+    alert: Alert,
+    step: RenderedRunbookStep,
+    step_index: int,
+    actor: str,
+) -> tuple[ActionRun, list[BaseModel]]:
+    """Insert the run, then ask approval or enqueue the job, and audit it (caller's transaction)."""
+    assert step.action is not None and alert.runbook_id is not None
+    store = PgStore(connection)
+    previous = latest(await store.runs_for_step(alert.id, alert.runbook_id, step_index))
+    if previous is not None and previous.status is not ActionRunStatus.failed:
+        raise ApiError(409, "step_already_run", f"step {step_index} already has a run")
+    # `approved` for a plain manual step: the runner only executes approved runs.
+    run = await store.create_run(
+        alert.id,
+        alert.runbook_id,
+        step_index,
+        step.action,
+        step.params,
+        ActionRunStatus.pending_approval if step.requires_approval else ActionRunStatus.approved,
+        previous.attempt + 1 if previous is not None else 1,
+        requested_by=actor,
+    )
+    events: list[BaseModel] = [ActionRunUpdatedEvent(at=datetime.now(UTC), action_run=run)]
+    detail = {
+        "event": "runbook_step_run_requested",
+        "runbook_id": run.runbook_id,
+        "step_index": step_index,
+        "action_id": step.action,
+        "action_run_id": run.id,
+    }
+    if step.requires_approval:
+        assert registry is not None
+        approval = await _request_approval(connection, registry, base_url, alert, run, step)
+        detail["approval_request_id"] = approval.id
+        events.append(ApprovalRequestedEvent(at=datetime.now(UTC), approval_request=approval))
+    else:
+        await enqueue_runbook_job(
+            connection,
+            RunbookJob(
+                job_type="execute_action_run",
+                alert_id=alert.id,
+                runbook_id=run.runbook_id,
+                action_run_id=run.id,
+            ),
+        )
+    # No audit verb for "step run requested" exists (contracts are frozen); action_run_started
+    # is the closest, and detail.event="runbook_step_run_requested" disambiguates it.
+    verb = AuditVerb.approval_requested if step.requires_approval else AuditVerb.action_run_started
+    entry = await append_audit(connection, alert.id, actor, verb, outcome="pending", detail=detail)
+    events.append(AuditAppendedEvent(at=datetime.now(UTC), entry=entry))
+    return run, events
+
+
 @router.post("/api/v1/alerts/{alert_id}/runbook/steps/{step_index}/run", status_code=202)
 async def run_runbook_step_route(
     alert_id: Annotated[str, Path(description="Alert id (uuid)")],
@@ -109,7 +167,6 @@ async def run_runbook_step_route(
     """Create the action run for a manual step and queue it (or ask for approval first)."""
     if not approvals_store.is_uuid(alert_id):
         raise _alert_not_found(alert_id)
-    events: list[BaseModel] = []
     async with pool.acquire() as connection, connection.transaction():
         status = await approvals_store.lock_alert_status(connection, alert_id)
         if status is None:
@@ -121,57 +178,17 @@ async def run_runbook_step_route(
         assert step.action is not None and alert.runbook_id is not None
         if step.requires_approval and registry is None:
             raise ApiError(503, "unavailable", "configuration is not loaded; cannot ask approval")
-        store = PgStore(connection)
-        previous = latest(await store.runs_for_step(alert_id, alert.runbook_id, step_index))
-        if previous is not None and previous.status is not ActionRunStatus.failed:
-            raise ApiError(409, "step_already_run", f"step {step_index} already has a run")
-        # `approved` for a plain manual step: the runner only executes approved runs.
-        run = await store.create_run(
-            alert_id,
-            alert.runbook_id,
-            step_index,
-            step.action,
-            step.params,
-            ActionRunStatus.pending_approval
-            if step.requires_approval
-            else ActionRunStatus.approved,
-            previous.attempt + 1 if previous is not None else 1,
-            requested_by=body.actor,
+        base_url = request.app.state.settings.public_base_url
+        run, events = await _create_run_and_dispatch(
+            connection, registry, base_url, alert, step, step_index, body.actor
         )
-        events.append(ActionRunUpdatedEvent(at=datetime.now(UTC), action_run=run))
-        detail = {
-            "event": "runbook_step_run_requested",
-            "runbook_id": run.runbook_id,
-            "step_index": step_index,
-            "action_id": step.action,
-            "action_run_id": run.id,
-        }
-        if step.requires_approval:
-            assert registry is not None
-            base_url = request.app.state.settings.public_base_url
-            approval = await _request_approval(connection, registry, base_url, alert, run, step)
-            detail["approval_request_id"] = approval.id
-            events.append(ApprovalRequestedEvent(at=datetime.now(UTC), approval_request=approval))
-        else:
-            await enqueue_runbook_job(
-                connection,
-                RunbookJob(
-                    job_type="execute_action_run",
-                    alert_id=alert_id,
-                    runbook_id=run.runbook_id,
-                    action_run_id=run.id,
-                ),
-            )
-        # The audit enum has no `runbook_step_run_requested`; these are the closest verbs.
-        verb = (
-            AuditVerb.approval_requested if step.requires_approval else AuditVerb.action_run_started
-        )
-        entry = await append_audit(
-            connection, alert_id, body.actor, verb, outcome="pending", detail=detail
-        )
-        events.append(AuditAppendedEvent(at=datetime.now(UTC), entry=entry))
     for event in events:
-        await publish_team_event(redis, alert.team, event)
+        try:
+            await publish_team_event(redis, alert.team, event)
+        except (RedisError, OSError):
+            # The run is committed; a missed SSE event must not turn this into a 500.
+            log.warning("step_run_event_publish_failed", extra={"alert_id": alert_id})
+            break
     log.info(
         "runbook_step_run_requested",
         extra={"alert_id": alert_id, "runbook_id": run.runbook_id, "step_index": step_index},
