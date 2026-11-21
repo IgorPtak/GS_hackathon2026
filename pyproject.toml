@@ -11,7 +11,8 @@ dependencies = [
     "pyyaml",
     "fastapi",
     "uvicorn[standard]",
-    "uvloop",
+    # uvloop has no Windows wheels; compose runs uvicorn with `--loop uvloop` on Linux containers.
+    "uvloop; sys_platform != 'win32'",
     "orjson",
     "httpx",
     # httpcore imports sniffio on every request; without it each import fails and scans sys.path
