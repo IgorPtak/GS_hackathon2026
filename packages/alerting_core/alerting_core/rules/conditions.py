@@ -30,6 +30,7 @@ from alerting_contracts.config import (
 )
 
 from .field_paths import MISSING, lookup_segments, split_field_path
+from .temporal import severity_gte_predicate, time_between_predicate
 
 CompiledCondition = Callable[[Mapping[str, Any]], bool]
 _Predicate = Callable[[Any], bool]
@@ -58,6 +59,8 @@ _COST = {
     ConditionOperator.lte: 2,
     ConditionOperator.glob: 3,
     ConditionOperator.regex: 4,
+    ConditionOperator.severity_gte: 2,
+    ConditionOperator.time_between: 3,
 }
 
 
@@ -272,13 +275,17 @@ def _regex_predicate(expected: Any) -> _Predicate:
     return lambda actual: isinstance(actual, str) and search(actual[:limit]) is not None
 
 
-def _build_predicate(op: ConditionOperator, expected: Any) -> _Predicate:
+def build_predicate(op: ConditionOperator, expected: Any) -> _Predicate:
     if op is ConditionOperator.in_:
         return _in_predicate(expected)
     if op is ConditionOperator.glob:
         return _glob_predicate(expected)
     if op is ConditionOperator.regex:
         return _regex_predicate(expected)
+    if op is ConditionOperator.severity_gte:
+        return severity_gte_predicate(expected)
+    if op is ConditionOperator.time_between:
+        return time_between_predicate(expected)
     return _compare_predicate(op, expected)
 
 
@@ -287,7 +294,7 @@ def _compile_leaf(leaf: ConditionLeaf) -> CompiledCondition:
     if leaf.op is ConditionOperator.exists:
         wants_present = True if leaf.value is None else bool(leaf.value)
         return lambda context: (lookup_segments(context, segments) is not MISSING) is wants_present
-    predicate = _build_predicate(leaf.op, leaf.value)
+    predicate = build_predicate(leaf.op, leaf.value)
 
     def matches_general(context: Mapping[str, Any]) -> bool:
         value = lookup_segments(context, segments)
