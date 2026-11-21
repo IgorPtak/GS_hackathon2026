@@ -14,6 +14,7 @@ from alerting_core.metrics import render_metrics
 from alerting_core.runbooks import register_runbook_kind
 from alerting_core.settings import Settings, get_settings
 from fastapi import FastAPI, Response
+from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from .config_source import DirectoryConfigSource, RegistryConfigSource
@@ -58,6 +59,14 @@ ROUTERS = (
 )
 
 
+async def sync_runbooks_with_llm(pool: asyncpg.Pool, redis: Redis, config_dir: str) -> None:
+    """Sync config files with LLM normalization of free-text runbooks; never raises."""
+    try:
+        await sync_config_files(pool, redis, config_dir, normalize_text_with_llm=True)
+    except (OSError, asyncpg.PostgresError, RedisError) as error:
+        log.error("config_sync_failed", extra={"error": str(error)})
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the app; pool, Redis and config source live in the lifespan (app.state).
 
@@ -73,6 +82,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.registry = None
         app.state.redis = create_redis_client(resolved)  # connects lazily
         app.state.pool = None
+        app.state.config_sync_task = None
         app.state.config_source = DirectoryConfigSource(resolved.config_dir)
         app.state.database_lock = asyncio.Lock()
         app.state.next_database_attempt = 0.0
@@ -98,13 +108,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     log.warning("config_source_fallback", extra={"reason": "database_unavailable"})
                     return None
                 app.state.pool = pool
-                try:
-                    # The only service that lets the LLM normalize free-text runbooks (A-49).
-                    await sync_config_files(
-                        pool, app.state.redis, resolved.config_dir, normalize_text_with_llm=True
-                    )
-                except (OSError, asyncpg.PostgresError, RedisError) as error:
-                    log.error("config_sync_failed", extra={"error": str(error)})
+                # The only service that lets the LLM normalize free-text runbooks (A-49). It runs
+                # in the background: an LLM call may take up to a minute per file and must not
+                # hold back startup or the healthcheck. Each write publishes config.changed, so
+                # the registry below picks the LLM steps up when they land.
+                app.state.config_sync_task = asyncio.create_task(
+                    sync_runbooks_with_llm(pool, app.state.redis, resolved.config_dir)
+                )
                 registry = ConfigRegistry()
                 try:
                     await registry.start(pool, app.state.redis)
@@ -128,6 +138,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await connect_database()
         log.info("api_started")
         yield
+        if app.state.config_sync_task is not None:
+            app.state.config_sync_task.cancel()
+            await asyncio.gather(app.state.config_sync_task, return_exceptions=True)
         if app.state.registry is not None:
             await app.state.registry.stop()
         await app.state.redis.aclose()
