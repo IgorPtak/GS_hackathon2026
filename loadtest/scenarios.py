@@ -31,6 +31,7 @@ from scenario_send import EXPECTED_PER_ALERT, LagSampler, build_event, send_even
 
 RESULTS = Path(__file__).parent / "results"
 SCENARIOS = ["steady", "saturation", "dup-storm", "gateway-down", "kill-processor"]
+DOCKER_SCENARIOS = frozenset({"saturation", "gateway-down", "kill-processor"})
 P99_LIMIT_MS = 2000.0
 DRAIN_LIMIT_S = 5.0
 
@@ -42,6 +43,8 @@ class Ctx:
     pool: asyncpg.Pool
     redis: Redis
     base_url: str
+    concurrency: int = 16
+    sync_stdin: bool = False
 
 
 def percentile(values: list[float], pct: float) -> float:
@@ -69,6 +72,9 @@ async def run_step(
     count = total if total is not None else int(rate * duration)
     since = time.time() - 30
     offset = await measure.clock_offset_s(ctx.pool)
+    if ctx.sync_stdin:
+        print(f"BENCH_READY {run_id}", flush=True)
+        await asyncio.to_thread(sys.stdin.readline)
     sampler = LagSampler(ctx.redis)
     sampler.start()
     evt = f"{run_id}-dup" if is_duplicate_storm else None
@@ -80,6 +86,7 @@ async def run_step(
             rate,
             lambda seq: build_event(run_id, seq, evt),
             batch_size=batch_size,
+            concurrency=ctx.concurrency,
         )
         if side:
             await side
@@ -91,6 +98,8 @@ async def run_step(
         if side and not side.done():
             side.cancel()
         await sampler.stop()
+    if ctx.sync_stdin:
+        print(f"BENCH_SETTLED {run_id}", flush=True)
     return await _assemble(
         ctx, run_id, rate, duration, batch_size, sent, sampler, counts, is_settled,
         expected_alerts, since, offset,
@@ -113,6 +122,7 @@ async def _assemble(
         "target_rate": rate,
         "duration_s": duration,
         "batch_size": batch_size,
+        "concurrency": ctx.concurrency,
         "sent": sent.sent,
         "accepted": sent.accepted,
         "http_errors": dict(sent.errors),
@@ -257,6 +267,13 @@ def print_step(step: dict[str, Any]) -> None:
     )
 
 
+def _positive_int(raw: str) -> int:
+    value = int(raw)
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be >= 1")
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     """CLI parser."""
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
@@ -264,6 +281,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--rate", type=float, help="msg/s (default depends on the scenario)")
     p.add_argument("--duration", type=float, help="seconds of load")
     p.add_argument("--base-url", default=os.environ.get("INGEST_URL", "http://localhost:8001"))
+    # 16 keeps Docker Desktop port forwarding error-free; inside the network more is fine.
+    p.add_argument(
+        "--concurrency", type=_positive_int, default=16, help="HTTP connections to ingest"
+    )
+    p.add_argument(
+        "--sync-stdin",
+        action="store_true",
+        help="Wait for stdin newline at BENCH_READY and emit BENCH_SETTLED after settling",
+    )
     p.add_argument("--total", type=int, default=5000, help="dup-storm: identical events")
     p.add_argument("--down-after", type=float, default=10.0, help="gateway-down: stop at t=")
     p.add_argument("--down-for", type=float, default=60.0, help="gateway-down: outage seconds")
@@ -287,8 +313,29 @@ DEFAULTS = {
 }
 
 
+async def _collect_hardware() -> dict[str, Any]:
+    return await stack.hardware(
+        {
+            # None when generated inside the compose network (no docker CLI to count with).
+            "processor": len(await stack.running_containers("processor"))
+            if stack.has_docker()
+            else None,
+            "delivery": len(await stack.running_containers("delivery"))
+            if stack.has_docker()
+            else None,
+            "ingest_workers": int(os.environ.get("INGEST_WORKERS", "2")),
+        }
+    )
+
+
 async def main_async(args: argparse.Namespace) -> int:
     """Run one scenario, always restore the stack, write the JSON; non-zero exit if lost != 0."""
+    if args.scenario in DOCKER_SCENARIOS and not stack.has_docker():
+        print(
+            f"error: scenario '{args.scenario}' requires the docker CLI on the host",
+            file=sys.stderr,
+        )
+        return 2
     rate, duration = DEFAULTS[args.scenario]
     args.rate = args.rate or rate
     args.duration = args.duration or duration
@@ -300,7 +347,7 @@ async def main_async(args: argparse.Namespace) -> int:
         os.environ.get("LOADTEST_REDIS_URL", "redis://localhost:6379/0"), decode_responses=True
     )
     pool = await asyncpg.create_pool(dsn, min_size=1, max_size=4, init=_init_connection)
-    ctx = Ctx(pool, redis, args.base_url)
+    ctx = Ctx(pool, redis, args.base_url, args.concurrency, getattr(args, "sync_stdin", False))
     started = datetime.now(UTC)
     runners = {
         "steady": steady, "saturation": saturation, "dup-storm": dup_storm,
@@ -310,13 +357,7 @@ async def main_async(args: argparse.Namespace) -> int:
         await stack.install_loadtest_config(pool, redis)
         await asyncio.sleep(2)
         result = await runners[args.scenario](ctx, args)
-        result["hardware"] = await stack.hardware(
-            {
-                "processor": len(await stack.running_containers("processor")),
-                "delivery": len(await stack.running_containers("delivery")),
-                "ingest_workers": int(os.environ.get("INGEST_WORKERS", "2")),
-            }
-        )
+        result["hardware"] = await _collect_hardware()
     finally:
         await stack.restore_stack()
         await redis.aclose()

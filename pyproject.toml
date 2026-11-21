@@ -14,6 +14,9 @@ dependencies = [
     "uvloop",
     "orjson",
     "httpx",
+    # httpcore imports sniffio on every request; without it each import fails and scans sys.path
+    # (~8 % of delivery CPU in the py-spy profile).
+    "sniffio",
     "redis>=5",
     "asyncpg",
     "prometheus-client",

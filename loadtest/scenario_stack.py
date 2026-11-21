@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import platform
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,11 @@ async def run_cmd(*args: str) -> str:
     if proc.returncode != 0:
         raise RuntimeError(f"{' '.join(args)} failed: {err.decode().strip()}")
     return out.decode().strip()
+
+
+def has_docker() -> bool:
+    """False inside the compose network, where the generator has no docker CLI."""
+    return shutil.which("docker") is not None
 
 
 async def compose(*args: str) -> str:
@@ -55,7 +61,14 @@ async def scale(service: str, replicas: int, settle_s: float = 5.0) -> None:
 
 
 async def restore_stack() -> None:
-    """Back to processor=1, delivery=2 (the compose default) and mock-gateway started."""
+    """Back to processor=1, delivery=2 (the compose default) and mock-gateway started.
+
+    Skipped without a docker CLI (generator running inside the compose network): scenarios that
+    scale or stop services must run on the host.
+    """
+    if not has_docker():
+        print("no docker CLI here: stack left as is (in-network generator)")
+        return
     await compose(
         "up", "-d", "--no-recreate", "--no-deps", "--no-build",
         "--scale", "processor=1", "--scale", "delivery=2",
@@ -70,7 +83,7 @@ async def kill_one(service: str) -> str:
     return containers[-1][:12]
 
 
-async def hardware(replicas: dict[str, int] | None = None) -> dict[str, Any]:
+async def hardware(replicas: dict[str, int | None] | None = None) -> dict[str, Any]:
     """Host and Docker details for the results table."""
     info: dict[str, Any] = {
         "os": platform.platform(),
@@ -93,7 +106,7 @@ async def hardware(replicas: dict[str, int] | None = None) -> dict[str, Any]:
             "docker_vm_cpus": int(ncpu),
             "docker_vm_ram_gb": round(int(mem) / 2**30, 1),
         }
-    except (RuntimeError, ValueError):
+    except (RuntimeError, ValueError, FileNotFoundError):  # no docker CLI inside the network
         info["docker_version"] = "unknown"
     return info
 

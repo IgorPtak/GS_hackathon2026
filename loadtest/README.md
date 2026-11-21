@@ -52,3 +52,29 @@ scenario restores the stack in a `finally` block (processor=1, delivery=1, mock-
 Method and results: `docs/load-test-results.md`.
 Modules: `scenario_send.py` (events, sender, lag sampler), `scenario_measure.py` (Postgres
 measurement), `scenario_stack.py` (docker scale/kill/restore, hardware).
+
+## Generator inside the compose network
+
+From the host, Docker Desktop port forwarding caps the generator around 420–460 msg/s and the
+queueing shows up as seconds of latency. Run steady load from inside the network instead:
+
+    docker run --rm --network alerting_default -v "$PWD":/work -w /work \
+      -e INGEST_URL=http://ingest:8001 \
+      -e LOADTEST_DATABASE_URL=postgresql://alerting:change-me-local-only@postgres:5432/alerting \
+      -e LOADTEST_REDIS_URL=redis://redis:6379/0 \
+      alerting-python:dev python loadtest/scenarios.py steady --rate 500 --duration 30
+
+There is no docker CLI in that container, so scenarios that scale, stop or kill services
+(saturation, gateway-down, kill-processor) still run on the host.
+
+## CPU time per event (`cpu_bench.py`)
+
+When the stack is near capacity, throughput varies across runs; measuring cgroup `cpu.stat`
+(`usage_usec`) per accepted event below saturation compares optimizations cleanly:
+
+    uv run python loadtest/cpu_bench.py --rate 500 --duration 30 --runs 3
+
+It drives `scenarios.py steady --sync-stdin` inside the compose network, snapshots
+`/sys/fs/cgroup/cpu.stat` on every pipeline container before and after the run, annotates each
+`steady-*.json` with `cpu_per_event`, and writes a median summary to
+`loadtest/results/cpu-bench-<timestamp>.json`.

@@ -51,8 +51,10 @@ def configure_logging(service_name: str, level: str = "INFO") -> None:
     # uvicorn installs its own handlers; route its logs through ours instead.
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         uvicorn_logger = logging.getLogger(name)
+        # `--no-access-log` leaves uvicorn.access with no handlers and propagate off; keep it so.
+        is_switched_off = not uvicorn_logger.handlers and not uvicorn_logger.propagate
         uvicorn_logger.handlers[:] = []
-        uvicorn_logger.propagate = True
+        uvicorn_logger.propagate = not (name == "uvicorn.access" and is_switched_off)
 
 
 def get_logger(name: str) -> logging.Logger:

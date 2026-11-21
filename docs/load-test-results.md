@@ -178,3 +178,43 @@ Max sustainable rate (p99 < 2 s, lag drained): **≥ 350 msg/s, below ~460 msg/s
 
 `loadtest/lost_jobs_test.sh <log>`: steady 100 msg/s for 60 s; at t = 15 s delivery is stopped for 3 s and the `deliveries` stream is trimmed to 0, wiping 717 unread jobs.
 Result (`steady-9b6d7c12`): 12 000 / 12 000 delivered, lost = 0, 755 re-published by the reconciler (717 wiped + jobs in flight at the stop, absorbed by `delivery-done`), p50 40 ms, p99 37.7 s = 30 s stale threshold + up to 10 s tick.
+
+## Host vs in-network generator
+
+Same stack (processor 1, delivery 2, AOF on), steady 30 s:
+
+| Generator | Target | Achieved msg/s | p50 | p99 | Lost | File |
+|---|---|---|---|---|---|---|
+| host (Docker Desktop port forwarding) | 500 | 423 | 3 972 ms | 5 601 ms | 0 | `steady-20261120T225111.json` |
+| inside compose network | 500 | 500 | **81 ms** | **482 ms** | 0 | `steady-20261120T225449.json` |
+| inside compose network | 1000 | 670 | 8 800 ms | 17 388 ms | 0 | `steady-20261120T225530.json` |
+
+The earlier "~460 msg/s limit" was the host-to-VM path, not the pipeline. The 1000 msg/s in-network run saw 1 HTTP 503 (`29 999 / 30 000` accepted, `59 998 / 59 998` delivered, `lost = 0`). At a 1000 msg/s target,
+CPU at t = 20 s: postgres 130 %, each delivery replica 86 %, ingest 59 % (2 workers), processor 53 %,
+mock-gateway 34 %, redis 32 %, outbox-relay 10 %.
+
+## Per-request CPU savings (`sniffio` and `--no-access-log`)
+
+`py-spy` profiles at 600 msg/s (`loadtest/results/profiles/{ingest,delivery}.svg`) pointed to two per-request overheads:
+
+1. `httpcore` imports `sniffio` on every request; without `sniffio` installed, every failed import scanned `sys.path` (~8.5 % of `delivery` CPU). Added `sniffio` to `pyproject.toml`.
+2. Uvicorn's per-request access log took ~9 % of `ingest` CPU. Added `--no-access-log` to `ingest` in `compose.yaml` and updated `alerting_core.logging.configure_logging` so it preserves an already-disabled `uvicorn.access` logger.
+
+To verify these ~8–9 % savings without the ~30 % overload variance seen at 500–1000 msg/s (where Apple M4's 4 P-cores spill onto 6 E-cores and queues build), `loadtest/cpu_bench.py` reads cgroup `/sys/fs/cgroup/cpu.stat` (`usage_usec`) across 3 in-network `steady` runs at 250 msg/s × 30 s (~1.9 cores total, `max_deliveries_lag` 32–54 on the branch, total spread 5.4 %; `delivery` 5.5 %, `ingest` 7.1 %).
+
+Same stack (`processor=1`, `delivery=2`, `ingest` 2 workers, AOF on, identical generator image), `main` (`40be0d1`, `cpu-bench-20261121T002255.json`) vs `perf/in-network-loadgen` (`cpu-bench-20261121T001239.json`):
+
+| Service (replicas) | Changed? | `main` median (`µs/evt`) | Branch median (`µs/evt`) | Raw delta | Normalized vs `mock-gateway` |
+|---|---|---|---|---|---|
+| **`delivery` (2)** | yes (`sniffio`) | 3135.5 | 2510.1 | −625.4 (−19.9 %) | **−11.5 %** (`6.21× → 5.49×`) |
+| **`ingest` (1)** | yes (`--no-access-log`) | 832.6 | 686.4 | −146.2 (−17.6 %) | **−8.7 %** (`1.65× → 1.50×`) |
+| `processor` (1) | no (control) | 1484.0 | 1322.5 | −161.5 (−10.9 %) | −2.0 % (`2.91× → 2.85×`) |
+| `mock-gateway` (1) | no (control) | 505.8 | 456.9 | −48.9 (−9.7 %) | 0.0 % (reference) |
+| `outbox-relay` (1) | no (control) | 231.7 | 205.2 | −26.5 (−11.4 %) | −8.2 % (`0.48× → 0.44×`) |
+| `postgres` (1) | no (control) | 2430.5 | 2001.7 | −428.8 (−17.6 %) | n/a (checkpoints/autovacuum) |
+| `redis` (1) | no (control) | 950.5 | 869.3 | −81.2 (−8.5 %) | n/a (AOF in background) |
+| **total (8)** | — | **9795.7** | **7950.2** | **−1845.5 (−18.8 %)** | — |
+
+- **Control-group normalization:** untouched services (`mock-gateway`, `processor`, `outbox-relay`) shifted ~10 % between sessions from host clock/P-core/E-core scheduling (plus a background spike in `main` run 3 to `p99 = 1713 ms` and `4400.6 µs` on `delivery`, absorbed by the 3-run median). Comparing the median per-run `service / mock-gateway` ratio removes that drift (`delivery / mock-gateway` stays tight: `6.24, 6.20, 6.21` on `main` vs `5.49, 5.56, 5.49` on the branch), confirming **−11.5 %** on `delivery` and **−8.7 %** on `ingest`, closely matching `py-spy`.
+- **Latency and reliability:** median `p50 / p99` fell from `53.2 / 382.5 ms` (`main`) to `47.6 / 180.1 ms` (branch), with `lost = 0` in all 6 runs (branch run 1 had 1 client `ReadError` with `7499 / 7500` accepted and `14 998 / 14 998` delivered, and 0 error logs in `ingest`).
+- **Reproduce:** `uv run python loadtest/cpu_bench.py --rate 250 --duration 30 --runs 3`.
