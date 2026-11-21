@@ -11,9 +11,11 @@ dependencies = [
     "redis>=5",
     "asyncpg",
     "prometheus-client",
+    # config/watcher.py imports watchfiles at runtime.
     "watchfiles",
-    "python-ulid",
     "orjson",
+    # llm/client.py imports httpx at runtime.
+    "httpx",
 ]
 
 [tool.uv.sources]
