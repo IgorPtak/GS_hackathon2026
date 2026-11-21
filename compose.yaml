@@ -81,6 +81,8 @@ services:
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./deploy/prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+      # Keeps metric history across restarts so the dashboard still shows the last benchmark.
+      - prometheus-data:/prometheus
     ports:
       - "9090:9090"
 
@@ -231,4 +233,5 @@ services:
 volumes:
   pgdata:
   redis-data:
+  prometheus-data:
   ollama:

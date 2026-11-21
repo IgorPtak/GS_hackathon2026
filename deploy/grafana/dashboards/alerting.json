@@ -6,7 +6,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "5s",
   "time": {
     "from": "now-15m",
@@ -16,7 +16,8 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Current p99 latency",
+      "title": "p99 latency (5m)",
+      "description": "End-to-end p99 (producer send to delivered), all channels, last 5 minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -24,8 +25,47 @@
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 6,
+        "w": 4,
         "h": 5
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "idle",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
       },
       "targets": [
         {
@@ -33,31 +73,58 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "A",
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(alert_e2e_latency_seconds_bucket[1m])))",
-          "legendFormat": "p99"
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(alert_e2e_latency_seconds_bucket[5m])))",
+          "legendFormat": "p99 latency (5m)",
+          "refId": "A"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
-        },
-        "overrides": []
-      }
+      ]
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "Current msg/s in",
+      "title": "msg/s in (5m)",
+      "description": "Events accepted by every ingest replica.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 6,
+        "x": 4,
         "y": 0,
-        "w": 6,
+        "w": 4,
         "h": 5
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
       },
       "targets": [
         {
@@ -65,22 +132,76 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "A",
-          "expr": "sum(rate(events_ingested_total[1m]))",
-          "legendFormat": "msg/s"
+          "expr": "sum(rate(events_ingested_total[5m]))",
+          "legendFormat": "msg/s in (5m)",
+          "refId": "A"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops"
-        },
-        "overrides": []
-      }
+      ]
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Current alerts/s",
+      "title": "alerts/s (5m)",
+      "description": "New alerts; duplicates fold into an existing alert and do not count.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(alerts_created_total[5m]))",
+          "legendFormat": "alerts/s (5m)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "deliveries/s (5m)",
+      "description": "Successful channel sends.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -88,8 +209,40 @@
       "gridPos": {
         "x": 12,
         "y": 0,
-        "w": 6,
+        "w": 4,
         "h": 5
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
       },
       "targets": [
         {
@@ -97,31 +250,65 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "A",
-          "expr": "sum(rate(alerts_created_total[1m]))",
-          "legendFormat": "alerts/s"
+          "expr": "sum(rate(deliveries_total{status=\"delivered\"}[5m]))",
+          "legendFormat": "deliveries/s (5m)",
+          "refId": "A"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops"
-        },
-        "overrides": []
-      }
+      ]
     },
     {
-      "id": 4,
+      "id": 5,
       "type": "stat",
-      "title": "Dead letters (total)",
+      "title": "Outbox relay lag",
+      "description": "Age of the oldest outbox row in the last relayed batch; near zero means no backlog.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 18,
+        "x": 16,
         "y": 0,
-        "w": 6,
+        "w": 4,
         "h": 5
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
       },
       "targets": [
         {
@@ -129,20 +316,80 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "A",
-          "expr": "sum(dead_lettered_total)",
-          "legendFormat": "dead letters"
+          "expr": "max(outbox_relay_lag_seconds)",
+          "legendFormat": "Outbox relay lag",
+          "refId": "A"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      }
+      ]
     },
     {
-      "id": 5,
+      "id": 6,
+      "type": "stat",
+      "title": "Dead letters (in range)",
+      "description": "Entries and deliveries moved to a *-dlq stream within the dashboard time range.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(dead_lettered_total[$__range]))",
+          "legendFormat": "Dead letters (in range)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
       "type": "timeseries",
-      "title": "msg/s in",
+      "title": "msg/s: ingested, processed, alerts",
+      "description": "Ingested and processed should overlap; a gap means the processors fall behind.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -153,28 +400,67 @@
         "w": 8,
         "h": 8
       },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "A",
           "expr": "sum(rate(events_ingested_total[1m]))",
-          "legendFormat": "ingested"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops"
+          "legendFormat": "ingested",
+          "refId": "A"
         },
-        "overrides": []
-      }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(events_processed_total[1m]))",
+          "legendFormat": "processed",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(alerts_created_total[1m]))",
+          "legendFormat": "alerts",
+          "refId": "C"
+        }
+      ]
     },
     {
-      "id": 6,
+      "id": 8,
       "type": "timeseries",
-      "title": "msg/s processed",
+      "title": "msg/s processed by replica",
+      "description": "One line per replica: after `--scale processor=N` the load spreads across N lines.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -185,28 +471,58 @@
         "w": 8,
         "h": 8
       },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "A",
-          "expr": "sum(rate(events_processed_total[1m]))",
-          "legendFormat": "processed"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops"
+          "expr": "sum by (instance) (rate(events_processed_total{job=\"processor\"}[1m]))",
+          "legendFormat": "processor {{instance}}",
+          "refId": "A"
         },
-        "overrides": []
-      }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (instance) (rate(events_ingested_total{job=\"ingest\"}[1m]))",
+          "legendFormat": "ingest {{instance}}",
+          "refId": "B"
+        }
+      ]
     },
     {
-      "id": 7,
+      "id": 9,
       "type": "timeseries",
-      "title": "alerts/s",
+      "title": "Stream lag",
+      "description": "Entries not yet read or acknowledged per consumer group.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -217,37 +533,32 @@
         "w": 8,
         "h": 8
       },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "refId": "A",
-          "expr": "sum(rate(alerts_created_total[1m]))",
-          "legendFormat": "alerts"
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      ],
+      },
       "fieldConfig": {
         "defaults": {
-          "unit": "ops"
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "decimals": 0
         },
         "overrides": []
-      }
-    },
-    {
-      "id": 8,
-      "type": "timeseries",
-      "title": "deliveries/s by channel",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 13,
-        "w": 12,
-        "h": 8
       },
       "targets": [
         {
@@ -255,61 +566,52 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "A",
-          "expr": "sum by (channel, status) (rate(deliveries_total[1m]))",
-          "legendFormat": "{{channel}} {{status}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops"
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 9,
-      "type": "timeseries",
-      "title": "Stream lag",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 13,
-        "w": 12,
-        "h": 8
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "refId": "A",
           "expr": "max by (stream, group) (stream_lag)",
-          "legendFormat": "{{stream}} / {{group}}"
+          "legendFormat": "{{stream}} / {{group}}",
+          "refId": "A"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      }
+      ]
     },
     {
       "id": 10,
       "type": "timeseries",
-      "title": "End-to-end latency p50 / p95 / p99",
+      "title": "deliveries/s by channel",
+      "description": "Delivery outcomes per attempt; failed attempts are retried.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 0,
-        "y": 21,
+        "y": 13,
         "w": 12,
         "h": 8
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
       },
       "targets": [
         {
@@ -317,40 +619,150 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(alert_e2e_latency_seconds_bucket[1m])))",
-          "legendFormat": "p50"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(alert_e2e_latency_seconds_bucket[1m])))",
-          "legendFormat": "p95"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "refId": "C",
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(alert_e2e_latency_seconds_bucket[1m])))",
-          "legendFormat": "p99"
+          "expr": "sum by (channel, status) (rate(deliveries_total[1m]))",
+          "legendFormat": "{{channel}} {{status}}",
+          "refId": "A"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
-        },
-        "overrides": []
-      }
+      ]
     },
     {
       "id": 11,
       "type": "timeseries",
       "title": "Retries/s and dead letters/s",
+      "description": "Retries rise while a channel is down; dead letters only after the retry budget is spent.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(delivery_retries_total[1m]))",
+          "legendFormat": "retries/s",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(dead_lettered_total[1m]))",
+          "legendFormat": "dead letters/s",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "End-to-end latency p50 / p95 / p99",
+      "description": "Producer send time to delivered, all channels together.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(alert_e2e_latency_seconds_bucket[1m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(alert_e2e_latency_seconds_bucket[1m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(alert_e2e_latency_seconds_bucket[1m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "End-to-end p99 by channel",
+      "description": "A slow or down channel (sms during an outage) shows here without hiding the fast ones.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -361,37 +773,49 @@
         "w": 12,
         "h": 8
       },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "A",
-          "expr": "sum(rate(delivery_retries_total[1m]))",
-          "legendFormat": "retries/s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "refId": "B",
-          "expr": "sum(rate(dead_lettered_total[1m]))",
-          "legendFormat": "dead letters/s"
+          "expr": "histogram_quantile(0.99, sum by (le, channel_type) (rate(alert_e2e_latency_seconds_bucket[1m])))",
+          "legendFormat": "{{channel_type}}",
+          "refId": "A"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops"
-        },
-        "overrides": []
-      }
+      ]
     },
     {
-      "id": 12,
+      "id": 14,
       "type": "timeseries",
-      "title": "Per-Stage Latency (p99)",
+      "title": "Per-stage latency (p99)",
+      "description": "Where the end-to-end time goes.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -399,8 +823,34 @@
       "gridPos": {
         "x": 0,
         "y": 29,
-        "w": 24,
+        "w": 12,
         "h": 8
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
       },
       "targets": [
         {
@@ -408,44 +858,91 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "A",
           "expr": "histogram_quantile(0.99, sum by (le) (rate(processor_event_to_alert_seconds_bucket[1m])))",
-          "legendFormat": "processor (event to alert)"
+          "legendFormat": "processor (event to alert)",
+          "refId": "A"
         },
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "B",
           "expr": "histogram_quantile(0.99, sum by (le) (rate(outbox_relay_wait_seconds_bucket[1m])))",
-          "legendFormat": "outbox relay wait"
+          "legendFormat": "outbox relay wait",
+          "refId": "B"
         },
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "C",
           "expr": "histogram_quantile(0.99, sum by (le) (rate(delivery_post_relay_seconds_bucket[1m])))",
-          "legendFormat": "delivery (post-relay)"
+          "legendFormat": "delivery (post-relay)",
+          "refId": "C"
         },
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "D",
           "expr": "histogram_quantile(0.99, sum by (le) (rate(alert_e2e_latency_seconds_bucket[1m])))",
-          "legendFormat": "e2e total"
+          "legendFormat": "e2e total",
+          "refId": "D"
         }
-      ],
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Outbox relay lag",
+      "description": "Grows when the relay cannot keep up or Redis is unavailable; alerts stay safe in Postgres.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "fieldConfig": {
         "defaults": {
-          "unit": "s"
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": true
+          }
         },
         "overrides": []
-      }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(outbox_relay_lag_seconds)",
+          "legendFormat": "oldest row age",
+          "refId": "A"
+        }
+      ]
     }
   ],
   "templating": {

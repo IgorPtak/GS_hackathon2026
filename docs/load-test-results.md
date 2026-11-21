@@ -75,7 +75,7 @@ Live `docker stats --no-stream` snapshot during `final-r800` (`4:4:3:2` step) an
 
 *(Historical baseline preserved below; current A-41 measurements are in [Final measurement (A-41)](#final-measurement-a-41) above.)*
 
-Current max sustainable rate is **≥ 350 msg/s** (p99 < 2 s, lag drained, zero lost; A-24 re-measurement at
+The max sustainable rate at that time was **≥ 350 msg/s** (p99 < 2 s, lag drained, zero lost; A-24 re-measurement at
 350 msg/s: p99 163 ms). Saturation with the host generator plateaus at **~420 msg/s** regardless of processor count
 (1, 2 or 4 processors all stop at 400–428 msg/s). The in-network generator later reached **500 msg/s** with
 p99 1.9 s and zero lost (see the 500 msg/s row and "Host vs in-network generator"), so the ~420 plateau is the

@@ -170,7 +170,7 @@ person's team.
 
 Full methodology, historical baselines, and raw result references are in [docs/load-test-results.md](docs/load-test-results.md); detailed per-benchmark tables, Postgres per-stage latency, backend query profiles, and interactive `py-spy` CPU flame graphs are in [docs/benchmarks.md](docs/benchmarks.md).
 
-Headline (measured **2026-11-21**, commit `15dbce7`, Apple M4 10 cores / 16 GB RAM, Docker Desktop VM 10 CPUs / 7.75 GiB RAM): **800.0 msg/s sustained (1,600 deliveries/s) with p50 416.9 ms / p99 1,000.7 ms (`2:2:2:1` behind `proxy`), peak 983.8 msg/s (`1:2:1:1`), steady 200 msg/s at p50 41.1 ms / p99 83.8 ms, and 0 lost alerts across every scenario**, including a 60 s gateway outage, `docker kill` of a processor mid-load, and a 120 s soak test.
+Headline (measured **2026-11-21**, commit `15dbce7`, Apple M4 10 cores / 16 GB RAM, Docker Desktop VM 10 CPUs / 7.75 GiB RAM): **800.0 msg/s sustained (1,600 deliveries/s) with p50 416.9 ms / p99 1,000.7 ms (`2:2:2:1` behind `proxy`), peak 983.8 msg/s (`1:2:1:1`, not sustainable: p99 10.9 s), steady 200 msg/s at p50 41.1 ms / p99 83.8 ms, and 0 lost alerts across every scenario**, including a 60 s gateway outage, `docker kill` of a processor mid-load, and a 120 s soak test.
 
 | Scenario | Target msg/s | Config (`p:d:i:r`) | Sent | Delivered | Lost | p50 | p99 | Achieved msg/s |
 |---|---:|---|---:|---:|---:|---:|---:|---:|
