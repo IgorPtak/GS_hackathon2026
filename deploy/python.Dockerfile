@@ -38,6 +38,10 @@ COPY tests ./tests
 
 RUN uv sync --frozen --no-dev
 
+# Byte-compile now, as root: the code is root-owned and read-only for appuser, so Python could not
+# write __pycache__ at runtime and would recompile on every start.
+RUN python -m compileall -q /app/services /app/plugins /app/packages /app/contracts
+
 # Code stays root-owned (read-only for the app user); only mounts that the services write to
 # are made writable for appuser in compose.yaml.
 USER appuser
