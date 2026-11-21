@@ -298,8 +298,18 @@ def main() -> None:
     for i, (start, path, gain) in enumerate(audio_parts):
         inputs += ["-i", str(path)]
         ms = int(start * 1000)
+        # Recorded voices: cut rumble and hiss, even out peaks, and bring every segment to the
+        # same loudness, so two speakers and quiet takes match. Synth voices are already clean.
+        is_recorded = OUT / "guide" not in path.parents and OUT / "phone" not in path.parents
+        voice_chain = (
+            "highpass=f=80,afftdn=nf=-30,"
+            "acompressor=threshold=-24dB:ratio=3:attack=10:release=200,"
+            "loudnorm=I=-18:TP=-2:LRA=7,aresample=48000,"
+            if is_recorded
+            else ""
+        )
         mixes.append(
-            f"[{i + 1}:a]silenceremove=start_periods=1:start_threshold=-45dB,"
+            f"[{i + 1}:a]silenceremove=start_periods=1:start_threshold=-45dB,{voice_chain}"
             f"aformat=sample_rates=48000:channel_layouts=stereo,volume={gain},"
             f"adelay={ms}|{ms}[a{i}]"
         )
