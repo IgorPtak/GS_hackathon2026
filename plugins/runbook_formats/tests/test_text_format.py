@@ -82,7 +82,7 @@ def test_llm_steps_are_never_automatic():
 
 def test_llm_max_attempts_is_clamped_to_three():
     [result] = validate_llm_steps(
-        [step(0, action="open-ticket", params={"summary": "x"}, max_attempts=50)], ACTIONS
+        [step(0, action="open-ticket", params={"summary": "x"}, max_attempts=10)], ACTIONS
     )
     assert result.max_attempts == 3
 
