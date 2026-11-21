@@ -41,7 +41,9 @@ class RunbookStep(ContractModel):
     )
     is_automatic: bool = Field(default=False, description="Runs without a click when the alert opens.")
     run_if: RunIf = RunIf.always
-    max_attempts: int = Field(default=1, ge=1)
+    max_attempts: int = Field(
+        default=1, ge=1, le=10, description="Capped so a runbook (or an LLM proposal) cannot retry an action without bound."
+    )
 
 
 class RunbookYamlDocument(ContractModel):
@@ -79,7 +81,9 @@ class RenderedRunbookStep(ContractModel):
     requires_approval: bool = False
     is_automatic: bool = False
     run_if: RunIf = RunIf.always
-    max_attempts: int = Field(default=1, ge=1)
+    max_attempts: int = Field(
+        default=1, ge=1, le=10, description="Capped so a runbook (or an LLM proposal) cannot retry an action without bound."
+    )
     missing_fields: list[str] = Field(default_factory=list, description="Placeholders that had no value.")
 
 
