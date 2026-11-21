@@ -40,8 +40,21 @@ ON CONFLICT (kind, id) DO UPDATE SET
 {guard}
 RETURNING version
 """
+# Runbook normalization is LLM-backed only in the api service (A-49), so other services sync free
+# text as a parser fallback. Two extra rules keep those syncs from fighting the api:
+#  - a sync never replaces an `llm` row with a non-llm one while the source text is unchanged;
+#  - an `llm` result may replace a `fallback` row of the same source even if that row is newer
+#    than the file (another service wrote the fallback first).
 _FILE_GUARD = """WHERE config_documents.document IS DISTINCT FROM EXCLUDED.document
-    AND config_documents.updated_at < $7"""
+    AND (config_documents.updated_at < $7
+         OR COALESCE(config_documents.document->>'normalized_by' = 'fallback'
+                     AND EXCLUDED.document->>'normalized_by' = 'llm'
+                     AND config_documents.document->>'source' = EXCLUDED.document->>'source',
+                     false))
+    AND NOT COALESCE(config_documents.document->>'normalized_by' = 'llm'
+                     AND EXCLUDED.document->>'normalized_by' IS DISTINCT FROM 'llm'
+                     AND config_documents.document->>'source' = EXCLUDED.document->>'source',
+                     false)"""
 
 
 def canonical_document(model: BaseModel) -> dict[str, Any]:
@@ -135,8 +148,8 @@ async def save_config_document(
 NORMALIZE_TEXT_WITH_LLM: ContextVar[bool] = ContextVar("normalize_text_with_llm", default=False)
 
 
-def _load_with_llm(config_dir: Path | str) -> LoadResult:
-    NORMALIZE_TEXT_WITH_LLM.set(True)  # only affects this worker thread's context copy
+def _load_config(config_dir: Path | str, normalize_text_with_llm: bool) -> LoadResult:
+    NORMALIZE_TEXT_WITH_LLM.set(normalize_text_with_llm)  # only this worker thread's context copy
     return load_config_directory(config_dir)
 
 
@@ -149,11 +162,16 @@ async def sync_config_files(
     redis: Redis,
     config_dir: Path | str,
     actor: Actor | None = None,
+    normalize_text_with_llm: bool = False,
 ) -> LoadResult:
-    """Upsert files that win over the DB (see module docstring); invalid files are logged."""
+    """Upsert files that win over the DB (see module docstring); invalid files are logged.
+
+    Only the api service passes `normalize_text_with_llm=True`; every other service keeps the
+    parser fallback so the hot-path services never log LLM calls.
+    """
     actor = actor or Actor(id="system:config-loader")
     # Off the event loop: free-text runbook files may wait on the LLM (only config sync allows it).
-    result = await asyncio.to_thread(_load_with_llm, config_dir)
+    result = await asyncio.to_thread(_load_config, config_dir, normalize_text_with_llm)
     for error in result.errors:
         log.error(
             "config_file_invalid",

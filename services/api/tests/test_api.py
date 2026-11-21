@@ -191,6 +191,7 @@ def test_pool_reconnects_after_database_comes_back(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(api_main, "create_database_pool", failing_then_ok)
     monkeypatch.setattr(api_main, "ConfigRegistry", FakeRegistry)
+    monkeypatch.setattr(api_main, "sync_config_files", _recording_sync([]))
     app = create_app(Settings(database_url="postgresql://x@127.0.0.1:1/x"))
 
     with TestClient(app) as client:
@@ -200,3 +201,49 @@ def test_pool_reconnects_after_database_comes_back(monkeypatch: pytest.MonkeyPat
         assert isinstance(pool, FakePool)
         assert client.app.state.registry is not None  # type: ignore[attr-defined]
     assert len(attempts) == 2
+
+
+def _recording_sync(calls: list[dict[str, Any]]) -> Any:
+    async def fake_sync(pool: Any, redis: Any, config_dir: Any, **kwargs: Any) -> None:
+        calls.append(kwargs)
+
+    return fake_sync
+
+
+def test_api_syncs_config_with_llm_normalization_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    import services.api.main as api_main
+
+    class FakePool:
+        async def close(self) -> None:
+            return None
+
+    class FakeRegistry:
+        async def start(self, pool: Any, redis: Any) -> None:
+            return None
+
+        async def stop(self) -> None:
+            return None
+
+    async def fake_pool(settings: Settings) -> Any:
+        return FakePool()
+
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(api_main, "create_database_pool", fake_pool)
+    monkeypatch.setattr(api_main, "ConfigRegistry", FakeRegistry)
+    monkeypatch.setattr(api_main, "sync_config_files", _recording_sync(calls))
+    with TestClient(create_app(Settings(database_url="postgresql://x@127.0.0.1:1/x"))):
+        pass
+    assert calls == [{"normalize_text_with_llm": True}]
+
+
+def test_other_services_sync_with_llm_normalization_off() -> None:
+    import inspect
+
+    from alerting_core.config.store import sync_config_files
+
+    assert (
+        inspect.signature(sync_config_files).parameters["normalize_text_with_llm"].default is False
+    )
+    for service in ("ingest", "processor", "runbook_runner"):
+        source = (ROOT / "services" / service / "main.py").read_text()
+        assert "normalize_text_with_llm" not in source  # they keep the default (off)

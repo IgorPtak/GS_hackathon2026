@@ -96,6 +96,7 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-40 outbox relay: reconciler also re-publishes `runbook_job` rows relayed > 300 s ago whose work never started (start_runbook: no action run / `runbook_started` audit; execute_action_run: run still `approved`), once per 660 s guard, skipped while `runbook-runners` has lag; per-replica id floor keeps the scan short, rows unstarted after 1 h are logged `runbook_job_abandoned`
 - A-43 api: PUT /rules and POST /rules/preview return 422 with field-level errors from validate_rule before storing
 - A-48 demo: docs/demo.md scenes for the audit fixes (judges YAML-only source, severity_gte and time_between rules, invalid regex 422, markdown Run and resolved-alert refusal, numbered email steps, free-text runbook normalized at config sync, README load numbers; timed scenes total 5:00)
+- A-49 config sync: only the api syncs with LLM runbook normalization; other services use the parser fallback and a flag-off sync never overwrites an LLM-normalized runbook with unchanged source
 
 - D-01 README load-test section updated with A-24 numbers (≥350 msg/s, p50 56 ms, p99 163 ms, lost 0) and A-23 recovery tests.
 - D-03 judges_path rehearsal scene: unknown schema → LLM profile → rule with preview → free-text runbook (escalate needs approval) → live events dedup to count 2 → cleanup; full rehearsal 9/9 on the rebuilt stack (written by Gemini, reviewed).
