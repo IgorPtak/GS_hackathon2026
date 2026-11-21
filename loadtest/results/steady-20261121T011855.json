@@ -1,0 +1,1054 @@
+{
+  "steps": [
+    {
+      "run_id": "steady-5413952e",
+      "target_rate": 250.0,
+      "duration_s": 30.0,
+      "batch_size": 1,
+      "concurrency": 16,
+      "sent": 7500,
+      "accepted": 7500,
+      "http_errors": {},
+      "ingest_http_ms": {
+        "p50": 1.8,
+        "p99": 199.3
+      },
+      "achieved_ingest_msg_s": 250.0,
+      "processed_alerts": 7500,
+      "processed_events": 7500,
+      "processed_msg_s": "250.2",
+      "expected_deliveries": 15000,
+      "delivered": 15000,
+      "covered_by_fallback": 0,
+      "lost": 0,
+      "lost_strict_without_fallback": 0,
+      "is_settled": true,
+      "counts": {
+        "alerts": 7500,
+        "folded_events": 7500,
+        "first_alert_at": "1795223938.080880",
+        "last_alert_at": "1795223968.056239",
+        "delivered_primary": 15000,
+        "dead_lettered_covered_by_delivered_fallback": 0,
+        "fallback_rows": 0,
+        "fallback_delivered": 0,
+        "non_terminal_rows": 0,
+        "rows_by_channel_status": {
+          "primary/sms/delivered": 7500,
+          "primary/ui/delivered": 7500
+        }
+      },
+      "latency_ms": {
+        "sms": {
+          "n": 7500,
+          "p50": 70.7,
+          "p95": 1647.9,
+          "p99": 1777.6,
+          "max": 2350.0
+        },
+        "ui": {
+          "n": 7500,
+          "p50": 56.1,
+          "p95": 1548.3,
+          "p99": 1688.8,
+          "max": 2282.8
+        },
+        "all": {
+          "n": 15000,
+          "p50": 63.2,
+          "p95": 1594.6,
+          "p99": 1741.3,
+          "max": 2350.0
+        }
+      },
+      "lag": {
+        "max_events_lag": 24.0,
+        "max_events_pending": 37.0,
+        "max_deliveries_lag": 774.0,
+        "max_deliveries_pending": 100.0,
+        "events_drained_after_s": 0.03,
+        "samples": [
+          {
+            "t": 1795223938.06,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223938.33,
+            "events_lag": 1.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 39.0
+          },
+          {
+            "t": 1795223938.58,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223938.84,
+            "events_lag": 2.0,
+            "events_pending": 4.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223939.09,
+            "events_lag": 3.0,
+            "events_pending": 6.0,
+            "deliveries_lag": 40.0,
+            "deliveries_pending": 51.0
+          },
+          {
+            "t": 1795223939.34,
+            "events_lag": 1.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 60.0
+          },
+          {
+            "t": 1795223939.6,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223939.85,
+            "events_lag": 1.0,
+            "events_pending": 11.0,
+            "deliveries_lag": 10.0,
+            "deliveries_pending": 53.0
+          },
+          {
+            "t": 1795223940.12,
+            "events_lag": 3.0,
+            "events_pending": 10.0,
+            "deliveries_lag": 60.0,
+            "deliveries_pending": 82.0
+          },
+          {
+            "t": 1795223940.39,
+            "events_lag": 11.0,
+            "events_pending": 3.0,
+            "deliveries_lag": 74.0,
+            "deliveries_pending": 90.0
+          },
+          {
+            "t": 1795223940.87,
+            "events_lag": 0.0,
+            "events_pending": 20.0,
+            "deliveries_lag": 80.0,
+            "deliveries_pending": 90.0
+          },
+          {
+            "t": 1795223941.31,
+            "events_lag": 24.0,
+            "events_pending": 20.0,
+            "deliveries_lag": 110.0,
+            "deliveries_pending": 90.0
+          },
+          {
+            "t": 1795223941.59,
+            "events_lag": 2.0,
+            "events_pending": 37.0,
+            "deliveries_lag": 50.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223941.89,
+            "events_lag": 3.0,
+            "events_pending": 8.0,
+            "deliveries_lag": 152.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223942.17,
+            "events_lag": 2.0,
+            "events_pending": 5.0,
+            "deliveries_lag": 336.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223942.43,
+            "events_lag": 23.0,
+            "events_pending": 12.0,
+            "deliveries_lag": 390.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223942.7,
+            "events_lag": 2.0,
+            "events_pending": 12.0,
+            "deliveries_lag": 290.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223942.96,
+            "events_lag": 1.0,
+            "events_pending": 7.0,
+            "deliveries_lag": 558.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223943.25,
+            "events_lag": 4.0,
+            "events_pending": 5.0,
+            "deliveries_lag": 664.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223943.54,
+            "events_lag": 3.0,
+            "events_pending": 6.0,
+            "deliveries_lag": 738.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223943.81,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 774.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223944.07,
+            "events_lag": 3.0,
+            "events_pending": 2.0,
+            "deliveries_lag": 706.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223944.32,
+            "events_lag": 1.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 692.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223944.57,
+            "events_lag": 0.0,
+            "events_pending": 3.0,
+            "deliveries_lag": 554.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223944.83,
+            "events_lag": 0.0,
+            "events_pending": 2.0,
+            "deliveries_lag": 448.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223945.08,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 256.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223945.34,
+            "events_lag": 2.0,
+            "events_pending": 3.0,
+            "deliveries_lag": 190.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223945.6,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 164.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223945.86,
+            "events_lag": 1.0,
+            "events_pending": 4.0,
+            "deliveries_lag": 102.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223946.11,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223946.36,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 42.0
+          },
+          {
+            "t": 1795223946.62,
+            "events_lag": 0.0,
+            "events_pending": 7.0,
+            "deliveries_lag": 35.0,
+            "deliveries_pending": 32.0
+          },
+          {
+            "t": 1795223946.9,
+            "events_lag": 5.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 42.0,
+            "deliveries_pending": 84.0
+          },
+          {
+            "t": 1795223947.15,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223947.4,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223947.66,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223947.91,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 34.0
+          },
+          {
+            "t": 1795223948.16,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223948.41,
+            "events_lag": 1.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223948.66,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 36.0
+          },
+          {
+            "t": 1795223948.91,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 22.0
+          },
+          {
+            "t": 1795223949.16,
+            "events_lag": 0.0,
+            "events_pending": 6.0,
+            "deliveries_lag": 18.0,
+            "deliveries_pending": 2.0
+          },
+          {
+            "t": 1795223949.42,
+            "events_lag": 2.0,
+            "events_pending": 5.0,
+            "deliveries_lag": 18.0,
+            "deliveries_pending": 73.0
+          },
+          {
+            "t": 1795223949.67,
+            "events_lag": 1.0,
+            "events_pending": 2.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 19.0
+          },
+          {
+            "t": 1795223949.92,
+            "events_lag": 2.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 33.0
+          },
+          {
+            "t": 1795223950.18,
+            "events_lag": 1.0,
+            "events_pending": 2.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223950.44,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223950.69,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 27.0
+          },
+          {
+            "t": 1795223950.94,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 34.0
+          },
+          {
+            "t": 1795223951.19,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223951.44,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223951.69,
+            "events_lag": 3.0,
+            "events_pending": 2.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223951.95,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 46.0
+          },
+          {
+            "t": 1795223952.2,
+            "events_lag": 1.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 22.0
+          },
+          {
+            "t": 1795223952.45,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 24.0,
+            "deliveries_pending": 2.0
+          },
+          {
+            "t": 1795223952.7,
+            "events_lag": 1.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223953.0,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223953.25,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223953.5,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223953.75,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223954.0,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223954.25,
+            "events_lag": 1.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 28.0
+          },
+          {
+            "t": 1795223954.5,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223954.76,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223955.01,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223955.26,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223955.51,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223955.76,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223956.01,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 28.0
+          },
+          {
+            "t": 1795223956.26,
+            "events_lag": 0.0,
+            "events_pending": 2.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223956.51,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223956.77,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223957.02,
+            "events_lag": 1.0,
+            "events_pending": 4.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 25.0
+          },
+          {
+            "t": 1795223957.27,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223957.52,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 28.0
+          },
+          {
+            "t": 1795223957.77,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223958.02,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223958.28,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223958.53,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 24.0,
+            "deliveries_pending": 2.0
+          },
+          {
+            "t": 1795223958.78,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223959.03,
+            "events_lag": 1.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223959.28,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223959.53,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223959.78,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 28.0
+          },
+          {
+            "t": 1795223960.03,
+            "events_lag": 1.0,
+            "events_pending": 2.0,
+            "deliveries_lag": 22.0,
+            "deliveries_pending": 2.0
+          },
+          {
+            "t": 1795223960.29,
+            "events_lag": 0.0,
+            "events_pending": 3.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 67.0
+          },
+          {
+            "t": 1795223960.54,
+            "events_lag": 1.0,
+            "events_pending": 2.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223960.79,
+            "events_lag": 1.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223961.04,
+            "events_lag": 2.0,
+            "events_pending": 2.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 19.0
+          },
+          {
+            "t": 1795223961.3,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223961.55,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223961.8,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 30.0
+          },
+          {
+            "t": 1795223962.05,
+            "events_lag": 1.0,
+            "events_pending": 2.0,
+            "deliveries_lag": 44.0,
+            "deliveries_pending": 49.0
+          },
+          {
+            "t": 1795223962.3,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 178.0,
+            "deliveries_pending": 49.0
+          },
+          {
+            "t": 1795223962.56,
+            "events_lag": 1.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 38.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223962.81,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223963.06,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223963.31,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223963.56,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223963.81,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223964.06,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223964.31,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223964.56,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223964.82,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223965.07,
+            "events_lag": 1.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 24.0
+          },
+          {
+            "t": 1795223965.32,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223965.57,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 22.0,
+            "deliveries_pending": 2.0
+          },
+          {
+            "t": 1795223965.82,
+            "events_lag": 24.0,
+            "events_pending": 11.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 31.0
+          },
+          {
+            "t": 1795223966.08,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 48.0,
+            "deliveries_pending": 100.0
+          },
+          {
+            "t": 1795223966.33,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223966.58,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223966.83,
+            "events_lag": 1.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 36.0
+          },
+          {
+            "t": 1795223967.08,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223967.34,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223967.59,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223967.84,
+            "events_lag": 0.0,
+            "events_pending": 1.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 26.0
+          },
+          {
+            "t": 1795223968.09,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223968.34,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223968.59,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223968.84,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          },
+          {
+            "t": 1795223969.1,
+            "events_lag": 0.0,
+            "events_pending": 0.0,
+            "deliveries_lag": 0.0,
+            "deliveries_pending": 0.0
+          }
+        ]
+      },
+      "is_drained_within_limit": true,
+      "is_p99_under_limit": true,
+      "prometheus_e2e_p99_s": null,
+      "cpu_per_event": {
+        "wall_s": 31.258,
+        "total_delta_usec": 88604103,
+        "total_usec_per_event": 11813.9,
+        "by_service": {
+          "delivery": {
+            "replicas": 2,
+            "delta_usec": 29712586,
+            "usec_per_event": 3961.7,
+            "avg_cpu_pct": 95.1
+          },
+          "ingest": {
+            "replicas": 1,
+            "delta_usec": 7266360,
+            "usec_per_event": 968.8,
+            "avg_cpu_pct": 23.2
+          },
+          "mock-gateway": {
+            "replicas": 1,
+            "delta_usec": 5552568,
+            "usec_per_event": 740.3,
+            "avg_cpu_pct": 17.8
+          },
+          "outbox-relay": {
+            "replicas": 1,
+            "delta_usec": 2562406,
+            "usec_per_event": 341.7,
+            "avg_cpu_pct": 8.2
+          },
+          "postgres": {
+            "replicas": 1,
+            "delta_usec": 26030331,
+            "usec_per_event": 3470.7,
+            "avg_cpu_pct": 83.3
+          },
+          "processor": {
+            "replicas": 1,
+            "delta_usec": 11555726,
+            "usec_per_event": 1540.8,
+            "avg_cpu_pct": 37.0
+          },
+          "redis": {
+            "replicas": 1,
+            "delta_usec": 5924126,
+            "usec_per_event": 789.9,
+            "avg_cpu_pct": 19.0
+          }
+        },
+        "by_container": {
+          "alerting-delivery-1": {
+            "service": "delivery",
+            "delta_usec": 14973669,
+            "usec_per_event": 1996.5,
+            "avg_cpu_pct": 47.9,
+            "user_usec": 12796532,
+            "system_usec": 2177137
+          },
+          "alerting-delivery-2": {
+            "service": "delivery",
+            "delta_usec": 14738917,
+            "usec_per_event": 1965.2,
+            "avg_cpu_pct": 47.2,
+            "user_usec": 12569696,
+            "system_usec": 2169220
+          },
+          "alerting-ingest-1": {
+            "service": "ingest",
+            "delta_usec": 7266360,
+            "usec_per_event": 968.8,
+            "avg_cpu_pct": 23.2,
+            "user_usec": 6365479,
+            "system_usec": 900881
+          },
+          "alerting-mock-gateway-1": {
+            "service": "mock-gateway",
+            "delta_usec": 5552568,
+            "usec_per_event": 740.3,
+            "avg_cpu_pct": 17.8,
+            "user_usec": 4803741,
+            "system_usec": 748828
+          },
+          "alerting-outbox-relay-1": {
+            "service": "outbox-relay",
+            "delta_usec": 2562406,
+            "usec_per_event": 341.7,
+            "avg_cpu_pct": 8.2,
+            "user_usec": 2072851,
+            "system_usec": 489554
+          },
+          "alerting-postgres-1": {
+            "service": "postgres",
+            "delta_usec": 26030331,
+            "usec_per_event": 3470.7,
+            "avg_cpu_pct": 83.3,
+            "user_usec": 14013710,
+            "system_usec": 12016622
+          },
+          "alerting-processor-1": {
+            "service": "processor",
+            "delta_usec": 11555726,
+            "usec_per_event": 1540.8,
+            "avg_cpu_pct": 37.0,
+            "user_usec": 9955161,
+            "system_usec": 1600565
+          },
+          "alerting-redis-1": {
+            "service": "redis",
+            "delta_usec": 5924126,
+            "usec_per_event": 789.9,
+            "avg_cpu_pct": 19.0,
+            "user_usec": 3156259,
+            "system_usec": 2767866
+          }
+        }
+      }
+    }
+  ],
+  "hardware": {
+    "os": "Linux-7.0.14-linuxkit-aarch64-with-glibc2.41",
+    "machine": "aarch64",
+    "cpu_cores": 10,
+    "replicas": {
+      "processor": null,
+      "delivery": null,
+      "ingest_workers": 2
+    },
+    "cpu_model": "unknown",
+    "docker_version": "unknown"
+  },
+  "scenario": "steady",
+  "started_at": "2026-11-21T01:18:55.813291+00:00"
+}
