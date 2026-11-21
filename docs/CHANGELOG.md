@@ -89,3 +89,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-47 api/runbook-runner: decisions and action runs refuse resolved alerts (409 alert_resolved, SMS "Alert already resolved", runner skips without calling the plugin; alert row locked FOR UPDATE)
 - A-36 processor: delivery content now carries numbered, filled-in runbook steps (email prints them; SMS/phone stay link-only)
 - A-38 rules: severity_gte and time_between operators, validate_rule with dot-path errors, processor logs rule_invalid once per rule version
+- A-44 api/runbook-runner: manual runbook step run route (runRunbookStep) creates the action run (or approval request) in one transaction; the runner executes it once without restarting the walk
