@@ -22,10 +22,14 @@ export function writeStoredTeamId(teamId: string): void {
 
 const PERSON_STORAGE_KEY = "alerting.person_id";
 
-/** Who signed in (a recipient id). There is no real authentication: this only picks a view. */
+/**
+ * Who signed in (a recipient id). There is no real authentication: this only picks a view. It is
+ * kept for this tab's session only, so opening Beacon afresh starts at "choose who you are",
+ * while a reload keeps you signed in.
+ */
 export function readStoredPersonId(): string | null {
   try {
-    return window.localStorage.getItem(PERSON_STORAGE_KEY);
+    return window.sessionStorage.getItem(PERSON_STORAGE_KEY);
   } catch {
     return null;
   }
@@ -33,11 +37,13 @@ export function readStoredPersonId(): string | null {
 
 export function writeStoredPersonId(personId: string | null): void {
   try {
+    // Older builds kept the person across sessions; drop that copy so it cannot linger.
+    window.localStorage.removeItem(PERSON_STORAGE_KEY);
     if (personId === null) {
-      window.localStorage.removeItem(PERSON_STORAGE_KEY);
+      window.sessionStorage.removeItem(PERSON_STORAGE_KEY);
       window.localStorage.removeItem(TEAM_STORAGE_KEY);
     } else {
-      window.localStorage.setItem(PERSON_STORAGE_KEY, personId);
+      window.sessionStorage.setItem(PERSON_STORAGE_KEY, personId);
     }
   } catch {
     // Not persisted: the choice still applies for this page view.

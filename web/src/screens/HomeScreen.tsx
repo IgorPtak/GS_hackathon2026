@@ -1,5 +1,6 @@
 import { HomeTile } from "../components/home/HomeTile";
 import { useHomeSummary } from "../components/home/useHomeSummary";
+import { GettingStartedCard } from "../components/onboarding/GettingStartedCard";
 import { LivePipelineCard } from "../components/alerts/LivePipelineCard";
 import { splitAlertTitle } from "../components/alerts/alertText";
 import { SeverityDot } from "../components/ui/SeverityDot";
@@ -26,6 +27,7 @@ export function HomeScreen({ teamId, teamLabel, person, onNavigate }: ScreenProp
   return (
     <PageFrame title={firstName ? `${greeting()}, ${firstName}` : greeting()} context={teamLabel}>
       <div className="flex flex-col gap-6">
+        <GettingStartedCard teamId={teamId} teamLabel={teamLabel} onNavigate={onNavigate} />
         <LivePipelineCard
           onOpenDetails={() => {
             onNavigate("insights");
