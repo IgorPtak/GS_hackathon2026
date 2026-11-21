@@ -162,6 +162,7 @@ def test_metrics_endpoint_exposes_counters(client: TestClient) -> None:
     assert "ingest_request_seconds" in text
 
 
+@pytest.mark.slow  # wall-clock threshold: informational in CI
 def test_p50_latency_note(client: TestClient) -> None:
     durations = []
     for _ in range(200):

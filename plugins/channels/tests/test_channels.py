@@ -262,7 +262,7 @@ async def test_email_concurrent_sends_beyond_default_executor_do_not_block(
     import time
 
     sends = 40  # more than the default executor's min(32, cpu + 4) threads
-    delay = 0.3
+    delay = 0.5  # 0.4 s of headroom for slow CI runners; a regression still needs >= 2 * delay
 
     class SlowSmtp(FakeSmtp):
         def send_message(self, message: Any) -> None:
@@ -280,3 +280,20 @@ async def test_email_concurrent_sends_beyond_default_executor_do_not_block(
     )
     # Serialised in a 32-thread pool this would take two rounds (>= 2 * delay).
     assert time.monotonic() - started < delay * 1.8
+
+
+def test_render_body_escapes_values_and_blanks_missing_fields() -> None:
+    from plugins.channels.webhook import render_body
+
+    context = {"a": {"text": 'say "hi"\nnow', "n": 2.0, "obj": {"k": "v"}, "flag": True}}
+    rendered = render_body(
+        '{"t":"{{ a.text }}","n":"{{a.n}}","o":"{{a.obj}}","f":"{{a.flag}}","m":"{{a.nope}}"}',
+        context,
+    )
+    assert json.loads(rendered) == {
+        "t": 'say "hi"\nnow',
+        "n": "2",
+        "o": '{"k":"v"}',
+        "f": "true",
+        "m": "",
+    }

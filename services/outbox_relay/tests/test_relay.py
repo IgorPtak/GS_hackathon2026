@@ -11,6 +11,7 @@ import orjson
 import pytest
 from alerting_core.connections import create_database_pool
 from alerting_core.settings import Settings
+from prometheus_client import REGISTRY
 from redis.asyncio import Redis
 
 from services.outbox_relay import reconcile
@@ -284,3 +285,63 @@ async def test_reconcile_pages_past_guarded_rows(
         await redis.set(reconcile.reconciled_key(delivery_id), 1)
 
     assert await republish_stale_deliveries(pool, redis) == 3
+
+
+def test_parsed_delivery_body_round_trips_through_the_contract() -> None:
+    from alerting_contracts.alerts import DeliveryJob
+
+    from services.outbox_relay.relay import _parse_row
+
+    payload = DeliveryJob(
+        delivery_id=0,
+        alert_id="a1",
+        team="ops",
+        recipient_id="r1",
+        channel_id="c1",
+        channel_type="ui",
+        purpose="alert",
+        content={
+            "title": "t",
+            "body": "b",
+            "severity": "info",
+            "fields": [],
+            "alert_url": "http://x/a",
+        },
+    ).model_dump(mode="json")
+    job = _parse_row({"id": 7, "kind": "delivery", "payload": payload})  # type: ignore[arg-type]
+    assert DeliveryJob.model_validate_json(job.body) == job.delivery
+    assert orjson.loads(job.body)["delivery_id"] == 7
+
+
+async def test_outbox_wait_seconds_observes_relayed_rows(pool: asyncpg.Pool, redis: Redis) -> None:
+    def wait_stats() -> tuple[float, float]:
+        count = REGISTRY.get_sample_value("outbox_relay_wait_seconds_count") or 0.0
+        total = REGISTRY.get_sample_value("outbox_relay_wait_seconds_sum") or 0.0
+        return count, total
+
+    before_count, before_sum = wait_stats()
+    assert await relay_batch(pool, redis) == 0
+    assert wait_stats() == (before_count, before_sum)
+
+    aged_ids = [
+        await insert_outbox(pool, "delivery", delivery_payload(str(uuid.uuid4()))) for _ in range(2)
+    ]
+    await pool.execute(
+        "UPDATE outbox SET created_at = now() - interval '2 seconds' WHERE id = ANY($1::bigint[])",
+        aged_ids,
+    )
+    assert await relay_batch(pool, redis) == 2
+
+    mid_count, mid_sum = wait_stats()
+    assert mid_count - before_count == 2.0
+    assert mid_sum - before_sum >= 3.0
+
+    skewed_id = await insert_outbox(pool, "delivery", delivery_payload(str(uuid.uuid4())))
+    await pool.execute(
+        "UPDATE outbox SET created_at = now() + interval '10 seconds' WHERE id = $1", skewed_id
+    )
+    assert await relay_batch(pool, redis) == 1
+
+    after_count, after_sum = wait_stats()
+    assert after_count - mid_count == 1.0
+    assert after_sum - mid_sum == pytest.approx(0.0)

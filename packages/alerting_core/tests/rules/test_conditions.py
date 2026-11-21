@@ -273,6 +273,7 @@ def _benchmark_rules() -> list[Any]:
     ]
 
 
+@pytest.mark.slow  # wall-clock threshold: informational in CI
 def test_benchmark_100k_events_against_all_50_rules_without_index() -> None:
     rules = _benchmark_rules()
     contexts = [
@@ -317,6 +318,7 @@ def test_index_rules_by_type_returns_ordered_candidates() -> None:
     assert index.candidates("zzz") == ["any_type", "complex_glob"]
 
 
+@pytest.mark.slow  # wall-clock threshold: informational in CI
 def test_benchmark_100k_events_through_type_index_under_two_seconds() -> None:
     """Realistic shape: 10 event types, 5 rules each; 3 of a type's 5 rules fully match."""
     entries = []

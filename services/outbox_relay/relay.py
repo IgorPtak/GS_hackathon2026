@@ -43,6 +43,11 @@ INVALID = Counter("outbox_invalid_total", "Outbox rows skipped because their pay
 BATCH_SECONDS = Histogram(
     "outbox_relay_batch_seconds", "Duration of one relay transaction.", buckets=LATENCY_BUCKETS
 )
+OUTBOX_WAIT_SECONDS = Histogram(
+    "outbox_relay_wait_seconds",
+    "From outbox row creation to relay XADD.",
+    buckets=LATENCY_BUCKETS,
+)
 LAG_SECONDS = Gauge("outbox_relay_lag_seconds", "Age of the oldest row in the last relayed batch.")
 
 _SELECT_BATCH = """
@@ -77,7 +82,7 @@ class _Job:
     __slots__ = ("outbox_id", "stream", "body", "delivery")
 
     def __init__(
-        self, outbox_id: int, stream: str, body: bytes, delivery: DeliveryJob | None
+        self, outbox_id: int, stream: str, body: str, delivery: DeliveryJob | None
     ) -> None:
         self.outbox_id = outbox_id
         self.stream = stream
@@ -92,10 +97,10 @@ def _parse_row(row: asyncpg.Record) -> _Job:
         # The producer cannot know the outbox id inside its INSERT; the relay stamps it so the
         # id is the delivery's idempotency key end to end.
         job = DeliveryJob.model_validate({**payload, "delivery_id": row["id"]})
-        return _Job(row["id"], DELIVERIES_STREAM, orjson.dumps(job.model_dump(mode="json")), job)
+        return _Job(row["id"], DELIVERIES_STREAM, job.model_dump_json(), job)
     if row["kind"] == OutboxKind.runbook_job:
         runbook_job = RunbookJob.model_validate(payload)
-        body = orjson.dumps(runbook_job.model_dump(mode="json"))
+        body = runbook_job.model_dump_json()
         return _Job(row["id"], RUNBOOK_JOBS_STREAM, body, None)
     raise ValueError(f"unknown outbox kind {row['kind']!r}")
 
@@ -151,6 +156,17 @@ async def relay_batch(pool: asyncpg.Pool, redis: Redis, batch_size: int = 500) -
             await pipeline.execute()
         await connection.execute(_MARK_RELAYED, [row["id"] for row in rows])
 
+    _record_batch_metrics(rows, jobs, invalid, started)
+    return len(rows)
+
+
+def _record_batch_metrics(
+    rows: list[asyncpg.Record],
+    jobs: list[_Job],
+    invalid: list[tuple[asyncpg.Record, str]],
+    started: float,
+) -> None:
+    """Count and time a committed batch; runs after commit so a rollback never records it."""
     for row, error in invalid:
         INVALID.inc()
         log.error(
@@ -159,9 +175,11 @@ async def relay_batch(pool: asyncpg.Pool, redis: Redis, batch_size: int = 500) -
         )
     for job in jobs:
         RELAYED.labels("delivery" if job.delivery is not None else "runbook_job").inc()
-    LAG_SECONDS.set((datetime.now(UTC) - rows[0]["created_at"]).total_seconds())
+    now = datetime.now(UTC)
+    for row in rows:
+        OUTBOX_WAIT_SECONDS.observe(max((now - row["created_at"]).total_seconds(), 0.0))
+    LAG_SECONDS.set((now - rows[0]["created_at"]).total_seconds())
     BATCH_SECONDS.observe(time.perf_counter() - started)
-    return len(rows)
 
 
 async def run_relay(
