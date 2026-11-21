@@ -76,6 +76,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tasks = [
             asyncio.create_task(consumer.run(stop)),
             asyncio.create_task(folds.run(stop)),
+            asyncio.create_task(folds.run_orphan_sweeper(stop)),
             asyncio.create_task(GroupFlusher(pool, redis, registry, resolved).run(stop)),
             asyncio.create_task(trim_events(redis, stop)),
             asyncio.create_task(

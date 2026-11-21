@@ -76,3 +76,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-26 email channel: SMTP sends run in a dedicated 50-thread `email-smtp` pool (matches delivery concurrency) instead of asyncio's default executor; socket timeout still frees hung threads
 - A-27 docker hardening: python image runs as non-root appuser (10001) with dependency layer cached on source changes (rebuild after touching ingest main.py: 4.5 s); root .dockerignore; Grafana anonymous role Viewer and grafana 11.6.16; mailpit v1.34.0, ollama 0.40.16 replace :latest.
 - Contracts: runbook step `max_attempts` capped at 10 (`RunbookStep`, `RenderedRunbookStep`) so a runbook or an LLM proposal cannot retry an action without bound
+- A-32 orphan folds: processor adopts `dedup-count:*` counters idle for 10 s (a killed replica's unflushed folds) every 30 s and applies them to the latest alert of their rule + fingerprint, exactly once via GETDEL

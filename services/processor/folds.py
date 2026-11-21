@@ -3,9 +3,14 @@
 Counts live in Redis (`dedup-count:*`, INCRBY per batch) so every processor replica adds to the
 same counter; the flusher GETDELs it, so a delta is applied exactly once whichever replica
 flushes. Last-seen and last-event are tracked in memory and applied with the delta.
+
+A replica killed between INCRBY and its flush leaves a counter nobody tracks. `adopt_orphans`
+picks up counters idle for ORPHAN_IDLE_SECONDS (a live tracker flushes every second) and maps
+them back to the latest alert of their rule + fingerprint; the normal flush then applies them.
 """
 
 import asyncio
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -19,6 +24,19 @@ from alerting_core.storage.alerts_write import FoldUpdate, apply_folds
 from redis.asyncio import Redis
 
 log = get_logger(__name__)
+
+ORPHAN_IDLE_SECONDS = 10
+ORPHAN_SWEEP_SECONDS = 30.0
+_COUNT_PREFIX = "dedup-count:"
+# Latest alert per (rule, fingerprint): folds belong to it even if it was resolved meanwhile.
+_LATEST_ALERTS = """
+    SELECT DISTINCT ON (a.rule_id, a.fingerprint)
+           a.rule_id, a.fingerprint, a.id::text AS id, a.last_seen, a.last_event
+    FROM alerts a
+    JOIN unnest($1::text[], $2::text[]) AS k(rule_id, fingerprint)
+      ON a.rule_id = k.rule_id AND a.fingerprint = k.fingerprint
+    ORDER BY a.rule_id, a.fingerprint, a.first_seen DESC
+"""
 
 
 @dataclass(slots=True)
@@ -86,6 +104,61 @@ class FoldTracker:
             )
         )
         return len(alerts)
+
+    async def adopt_orphans(self) -> int:
+        """Track counters no live tracker flushes; returns how many were adopted."""
+        tracked = {fold.count_key for fold in self._pending.values()}
+        keys = [
+            key.decode() if isinstance(key, bytes) else key
+            async for key in self._redis.scan_iter(match=f"{_COUNT_PREFIX}*", count=500)
+        ]
+        keys = [key for key in keys if key not in tracked]
+        if not keys:
+            return 0
+        async with self._redis.pipeline(transaction=False) as pipeline:
+            for key in keys:
+                pipeline.object("idletime", key)
+            idle = await pipeline.execute(raise_on_error=False)
+        orphans = [
+            k
+            for k, i in zip(keys, idle, strict=True)
+            if isinstance(i, int) and i >= ORPHAN_IDLE_SECONDS
+        ]
+        # rule ids never contain ':'; fingerprints are hex, so the last ':' splits the two.
+        pairs = [key.removeprefix(_COUNT_PREFIX).rsplit(":", 1) for key in orphans]
+        rows = await self._pool.fetch(
+            _LATEST_ALERTS, [rule for rule, _ in pairs], [fingerprint for _, fingerprint in pairs]
+        )
+        by_pair = {(row["rule_id"], row["fingerprint"]): row for row in rows}
+        adopted = 0
+        for key, (rule_id, fingerprint) in zip(orphans, pairs, strict=True):
+            row = by_pair.get((rule_id, fingerprint))
+            if row is None:
+                continue  # no alert committed for it: the counter expires with its grace TTL
+            last_event = row["last_event"]
+            if isinstance(last_event, str):
+                last_event = json.loads(last_event)
+            self.add(row["id"], key, row["last_seen"], last_event)
+            adopted += 1
+        if adopted:
+            log.warning("fold_orphans_adopted", extra={"count": adopted})
+        return adopted
+
+    async def run_orphan_sweeper(
+        self, stop: asyncio.Event, interval_seconds: float = ORPHAN_SWEEP_SECONDS
+    ) -> None:
+        """Adopt orphaned counters every interval; errors are logged and retried next tick."""
+        while not stop.is_set():
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=interval_seconds)
+            except TimeoutError:
+                pass
+            try:
+                await self.adopt_orphans()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("fold_orphan_sweep_failed")
 
     def _restore(self, pending: dict[str, _PendingFold]) -> None:
         for alert_id, fold in pending.items():
