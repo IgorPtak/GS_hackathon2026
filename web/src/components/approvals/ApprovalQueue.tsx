@@ -8,7 +8,7 @@ import { useToast } from "../ui/toastContext";
 import { ApprovalCard } from "./ApprovalCard";
 import { RecentDecisionsList } from "./RecentDecisionsList";
 import { useApprovalDecision, type DecisionKind } from "./useApprovalDecision";
-import { useLingeringRequests, type Outcome } from "./useLingeringRequests";
+import { useLingeringItems, type Outcome } from "./useLingeringItems";
 
 interface ApprovalQueueProps {
   readonly team: string;
@@ -46,7 +46,7 @@ export function ApprovalQueue({
     const done = decided.find((request) => request.id === id);
     return done?.decision === "reject" ? "reject" : "approve";
   };
-  const shown = useLingeringRequests(items, outcomeOf);
+  const shown = useLingeringItems(items, outcomeOf);
 
   async function handleDecide(id: string, kind: DecisionKind, comment: string) {
     localOutcomes.set(id, kind);
@@ -95,7 +95,7 @@ export function ApprovalQueue({
 
       {shown.length > 0 ? (
         <ul className="flex flex-col">
-          {shown.map(({ request, outcome, isFolding }) => (
+          {shown.map(({ item: request, outcome, isFolding }) => (
             <ApprovalCard
               key={request.id}
               outcome={outcome}

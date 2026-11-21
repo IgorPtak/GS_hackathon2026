@@ -5,10 +5,10 @@ import { formatDateTime, formatRelativeTime } from "../alerts/alertFormat";
 import { Avatar } from "../ui/Avatar";
 import { Button } from "../ui/Button";
 import { cx } from "../../lib/cx";
-import { Icon } from "../ui/icons";
 import { TextInput } from "../ui/TextInput";
 import type { DecisionKind } from "./useApprovalDecision";
-import type { Outcome } from "./useLingeringRequests";
+import { OutcomeVeil } from "./OutcomeVeil";
+import type { Outcome } from "./useLingeringItems";
 
 interface ApprovalCardProps {
   readonly request: ApprovalRequest;
@@ -63,7 +63,17 @@ export function ApprovalCard({
                 : "border-hairline",
           )}
         >
-          {outcome ? <OutcomeVeil outcome={outcome} /> : null}
+          {outcome ? (
+            <OutcomeVeil
+              isPositive={outcome === "approve"}
+              title={outcome === "approve" ? "Approved" : "Rejected"}
+              detail={
+                outcome === "approve"
+                  ? "The runbook carries on with this step."
+                  : "This step will be skipped."
+              }
+            />
+          ) : null}
           <div className="flex items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-3.5">
               <Avatar name={request.team} team={request.team} size="md" className="mt-0.5" />
@@ -155,31 +165,5 @@ export function ApprovalCard({
         </div>
       </div>
     </li>
-  );
-}
-
-/** Covers a decided card with its outcome for a moment, so the change is seen, not missed. */
-function OutcomeVeil({ outcome }: { outcome: Outcome }) {
-  const isApproved = outcome === "approve";
-  return (
-    <div
-      role="status"
-      className="absolute inset-0 z-10 flex animate-fade-in items-center justify-center gap-3 rounded-card bg-card/85 backdrop-blur-[2px]"
-    >
-      <span
-        className={cx(
-          "flex size-10 animate-pop items-center justify-center rounded-full",
-          isApproved ? "bg-success text-white" : "bg-fill text-ink-2",
-        )}
-      >
-        <Icon name={isApproved ? "check" : "cross"} size={20} strokeWidth={2.6} />
-      </span>
-      <span className="text-row font-semibold">
-        {isApproved ? "Approved" : "Rejected"}
-        <span className="block text-meta font-normal text-ink-2">
-          {isApproved ? "The runbook carries on with this step." : "This step will be skipped."}
-        </span>
-      </span>
-    </div>
   );
 }
