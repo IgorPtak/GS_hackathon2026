@@ -52,19 +52,21 @@ def test_every_demo_action_resolves(path):
 @respx.mock
 async def test_http_get_ok_and_non2xx():
     c = cfg("http_get", {"url": {}})
-    respx.get("http://x/ok").respond(200)
-    respx.get("http://x/bad").respond(503)
-    r = await get_action_plugin("http_get").execute({"url": "http://x/ok"}, c)
+    respx.get("http://localhost/ok").respond(200)
+    respx.get("http://localhost/bad").respond(503)
+    r = await get_action_plugin("http_get").execute({"url": "http://localhost/ok"}, c)
     assert r.is_success and r.data["status_code"] == 200 and "elapsed_ms" in r.data
-    r = await get_action_plugin("http_get").execute({"url": "http://x/bad"}, c)
+    r = await get_action_plugin("http_get").execute({"url": "http://localhost/bad"}, c)
     assert not r.is_success and r.data["status_code"] == 503
 
 
 @pytest.mark.asyncio
 @respx.mock
 async def test_timeout_is_failure():
-    respx.get("http://x/slow").mock(side_effect=httpx.ReadTimeout("t"))
-    r = await get_action_plugin("http_get").execute({"url": "http://x/slow"}, cfg("http_get"))
+    respx.get("http://localhost/slow").mock(side_effect=httpx.ReadTimeout("t"))
+    r = await get_action_plugin("http_get").execute(
+        {"url": "http://localhost/slow"}, cfg("http_get")
+    )
     assert not r.is_success and "timeout" in r.detail
 
 
@@ -98,8 +100,8 @@ async def test_restart_service_default_and_url():
         {"service": "pricing"}, cfg("restart_service", {"service": {}})
     )
     assert r.is_success and route.called
-    route2 = respx.post("http://h/r").respond(200)
-    c = cfg("restart_service", settings={"url": "http://h/r"})
+    route2 = respx.post("http://localhost/r").respond(200)
+    c = cfg("restart_service", settings={"url": "http://localhost/r"})
     assert (await get_action_plugin("restart_service").execute({}, c)).is_success
     assert route2.called
 
@@ -118,10 +120,10 @@ async def test_open_ticket_default():
 @pytest.mark.asyncio
 @respx.mock
 async def test_escalate_with_url_and_failure():
-    route = respx.post("http://h/esc").respond(200)
+    route = respx.post("http://localhost/esc").respond(200)
     c = cfg(
         "escalate",
-        settings={"url": "http://h/esc", "body_template": '{"r": "{{reason}}"}'},
+        settings={"url": "http://localhost/esc", "body_template": '{"r": "{{reason}}"}'},
     )
     r = await get_action_plugin("escalate").execute({"reason": "x"}, c)
     assert r.is_success and json.loads(route.calls[0].request.content) == {"r": "x"}
@@ -132,12 +134,12 @@ async def test_escalate_with_url_and_failure():
 @pytest.mark.asyncio
 @respx.mock
 async def test_webhook_template_json_escaping_and_url_param():
-    route = respx.post("http://h/hook/a%20b").respond(200)
+    route = respx.post("http://localhost/hook/a%20b").respond(200)
     c = cfg(
         "webhook",
         {"msg": {}, "name": {}},
         {
-            "url": "http://h/hook/{{name}}",
+            "url": "http://localhost/hook/{{name}}",
             "headers": {"X-Token": "t"},
             "body_template": '{"msg": "{{msg}}"}',
         },
@@ -152,12 +154,12 @@ async def test_webhook_template_json_escaping_and_url_param():
 @pytest.mark.asyncio
 @respx.mock
 async def test_webhook_default_method_plain_body_and_get():
-    route = respx.post("http://h/p").respond(200)
-    c = cfg("webhook", {"a": {}}, {"url": "http://h/p", "body_template": "a={{a}}"})
+    route = respx.post("http://localhost/p").respond(200)
+    c = cfg("webhook", {"a": {}}, {"url": "http://localhost/p", "body_template": "a={{a}}"})
     await get_action_plugin("webhook").execute({"a": '"q"'}, c)
     assert route.calls[0].request.content == b'a="q"'
-    g = respx.get("http://h/g").respond(200)
-    c = cfg("webhook", settings={"url": "http://h/g", "method": "GET"})
+    g = respx.get("http://localhost/g").respond(200)
+    c = cfg("webhook", settings={"url": "http://localhost/g", "method": "GET"})
     assert (await get_action_plugin("webhook").execute({}, c)).is_success and g.called
 
 
@@ -176,3 +178,38 @@ async def test_demo_webhook_actions_execute():
         respx.post(url).respond(200)
         c = ActionConfig.model_validate(yaml.safe_load((CONFIG_DIR / f"{name}.yaml").read_text()))
         assert (await get_action_plugin(c.type).execute(p, c)).is_success, name
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://169.254.169.254/latest/meta-data",
+        "file:///etc/passwd",
+        "ftp://mock-gateway/x",
+        "http://evil.example.com/",
+    ],
+)
+@respx.mock
+async def test_ssrf_blocked_url_makes_no_request(url):
+    route = respx.route().respond(200)
+    r = await get_action_plugin("http_get").execute({"url": url}, cfg("http_get", {"url": {}}))
+    assert r.is_success is False and r.detail.startswith("blocked:")
+    assert not route.called
+
+
+@respx.mock
+async def test_ssrf_redirect_is_not_followed():
+    respx.get(f"{GW}/r").respond(302, headers={"location": "http://169.254.169.254/x"})
+    evil = respx.get("http://169.254.169.254/x").respond(200)
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        plugin = type(get_action_plugin("http_get"))(client)
+        r = await plugin.execute({"url": f"{GW}/r"}, cfg("http_get"))
+    assert r.is_success is False and r.detail == "HTTP 302"
+    assert not evil.called
+
+
+@respx.mock
+async def test_ssrf_allowed_mock_gateway_url_works():
+    respx.get(f"{GW}/ok").respond(200)
+    r = await get_action_plugin("http_get").execute({"url": f"{GW}/ok"}, cfg("http_get"))
+    assert r.is_success is True

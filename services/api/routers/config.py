@@ -11,6 +11,7 @@ from alerting_contracts.api import (
 )
 from alerting_contracts.runbooks import RunbookYamlDocument
 from alerting_core.config import get_kind
+from alerting_core.rules.conditions import compile_condition
 from fastapi import APIRouter
 from pydantic import BaseModel, ValidationError
 
@@ -51,6 +52,11 @@ async def validate_config(body: ConfigValidationRequest) -> ConfigValidationResu
         return _fail(*validation_errors(exc))
     except KeyError:
         return _fail(ConfigValidationError(path="", message=f"unknown kind {body.kind!r}"))
+    if body.kind == "rule":
+        try:
+            compile_condition(model.when)  # type: ignore[attr-defined]
+        except (ValueError, TypeError) as exc:
+            return _fail(ConfigValidationError(path="when", message=str(exc)))
     return ConfigValidationResult(
         is_valid=True, document=model.model_dump(mode="json", by_alias=True, exclude_none=True)
     )

@@ -130,3 +130,13 @@ def test_503_without_database() -> None:
     with TestClient(app) as client:
         r = client.get("/api/v1/rules")
     assert r.status_code == 503 and r.json()["error"] == "unavailable"
+
+
+def test_put_invalid_regex_is_422_and_not_saved() -> None:
+    client, pool, _ = make()
+    bad = {**RULE, "when": {"all": [{"field": "a", "op": "regex", "value": "("}]}}
+    with client:
+        r = client.put("/api/v1/rules/platform-alertmanager", json={"rule": bad, "actor": ACTOR})
+    assert r.status_code == 422
+    assert r.json()["details"][0]["path"] == "rule.when"
+    assert not pool.rows

@@ -5,6 +5,7 @@ version, updated_at and updated_by that `RuleRecord` needs, and it is what `save
 writes. `POST /rules/preview` (B-16) is read-only: Redis reads and pure simulation.
 """
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -22,6 +23,7 @@ from alerting_core.config import publish_config_changed, save_config_document
 from alerting_core.durations import parse_duration
 from alerting_core.event_log import read_event_log
 from alerting_core.logging import get_logger
+from alerting_core.rules.conditions import compile_condition
 from alerting_core.rules.preview import preview_rule
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
@@ -116,7 +118,9 @@ async def preview_rule_route(request: Request, redis: RedisDep, registry: Regist
     window_start = window_end - timedelta(seconds=parse_duration(body.window))
     event_read = await read_event_log(redis, window_start, body.max_events)
     try:
-        return preview_rule(
+        # CPU-bound pure simulation: keep it off the event loop.
+        return await asyncio.to_thread(
+            preview_rule,
             body.rule,
             event_read.envelopes,
             registry.snapshot,
@@ -163,6 +167,13 @@ async def save_rule(rule_id: str, request: Request, pool: PoolDep, redis: RedisD
                     path="rule.id", message=f"expected {rule_id!r}, got {write.rule.id!r}"
                 )
             ],
+        )
+    try:
+        compile_condition(write.rule.when)
+    except (ValueError, TypeError) as exc:
+        return validation_failed(
+            "rule condition cannot be compiled",
+            [ConfigValidationError(path="rule.when", message=str(exc))],
         )
     await save_config_document(pool, redis, "rule", write.rule, write.actor)
     return await _fetch(pool, rule_id)
