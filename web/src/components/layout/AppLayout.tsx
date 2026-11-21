@@ -86,7 +86,7 @@ export function AppLayout() {
             <PageBackContext.Provider value={pageBack}>
               <div className="relative isolate my-3 mr-3 flex min-w-0 flex-1 overflow-hidden rounded-[24px] border border-hairline bg-panel max-sm:m-0 max-sm:rounded-none max-sm:border-0">
                 <AsciiSky tone="panel" />
-                <div className="main-panel flex min-w-0 flex-1 flex-col">
+                <div className="main-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-[23px] max-sm:rounded-none">
                   <ShellPage
                     tabId={route.tabId}
                     teamId={teamId}

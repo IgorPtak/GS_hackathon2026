@@ -104,6 +104,14 @@ export function friendlyMessage(path: string, message: string): string {
   if (path === "id" && /pattern|match/i.test(message)) {
     return "Use lowercase letters, digits and dashes, starting with a letter or digit.";
   }
+  if (/invalid YAML/i.test(message)) {
+    // The parser's own words are for engineers; point at the line instead.
+    const lines = [...message.matchAll(/line (\d+), column (\d+)/g)];
+    const last = lines.at(-1);
+    return last
+      ? `The text cannot be read yet. Check line ${last[1] ?? ""} near column ${last[2] ?? ""}.`
+      : "The text cannot be read yet. Check the indentation and colons.";
+  }
   if (/field required|missing/i.test(message)) return "This is required.";
   if (/at least 1 character/i.test(message)) return "This cannot be empty.";
   return message;

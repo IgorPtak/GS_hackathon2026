@@ -75,8 +75,8 @@ export function ProposeFixDialog({ alert, onClose, onCreated }: ProposeFixDialog
       width="lg"
       subtitle={
         <>
-          For rule <span className="font-medium text-ink">{alert.rule_id}</span>. A teammate reviews
-          it before anything changes.
+          For rule <span className="font-medium text-ink">{alert.rule_id}</span>. It waits in
+          Approvals, and nothing changes until a teammate accepts it.
         </>
       }
       footer={

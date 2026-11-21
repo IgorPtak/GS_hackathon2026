@@ -1,3 +1,4 @@
+import { autocompletion } from "@codemirror/autocomplete";
 import { yaml } from "@codemirror/lang-yaml";
 import { Facet, Prec } from "@codemirror/state";
 import { Decoration, EditorView, GutterMarker, gutter } from "@codemirror/view";
@@ -5,6 +6,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { useMemo } from "react";
 
 import { useIsDarkTheme } from "../../lib/useIsDarkTheme";
+import { completeRuleYaml } from "./ruleYamlCompletions";
 
 const errorLineFacet = Facet.define<readonly number[], readonly number[]>({
   combine: (values) => values.flat(),
@@ -29,6 +31,24 @@ const beaconTheme = EditorView.theme({
   ".cm-content": { caretColor: "var(--ink)" },
   ".cm-cursor": { borderLeftColor: "var(--ink)" },
   "&.cm-focused": { outline: "2px solid var(--accent)", outlineOffset: "2px" },
+  ".cm-tooltip.cm-tooltip-autocomplete": {
+    border: "1px solid var(--hairline)",
+    borderRadius: "12px",
+    backgroundColor: "var(--card)",
+    boxShadow: "0 12px 32px -10px rgb(0 0 0 / 0.25)",
+    padding: "4px",
+    overflow: "hidden",
+  },
+  ".cm-tooltip-autocomplete > ul > li": {
+    borderRadius: "8px",
+    padding: "4px 10px !important",
+    fontFamily: "var(--font-sans)",
+  },
+  ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
+    backgroundColor: "var(--fill)",
+    color: "var(--ink)",
+  },
+  ".cm-completionDetail": { color: "var(--ink-2)", fontStyle: "normal", marginLeft: "12px" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
     backgroundColor: "color-mix(in srgb, var(--accent) 25%, transparent)",
   },
@@ -55,7 +75,7 @@ interface YamlEditorProps {
   readonly onChange: (value: string) => void;
 }
 
-/** CodeMirror 6 YAML editor with line numbers; lines with validation errors are marked. */
+/** CodeMirror 6 YAML editor: line numbers, marked error lines, and hints for keys and values. */
 export function YamlEditor({ value, errorLines, onChange }: YamlEditorProps) {
   const isDark = useIsDarkTheme();
   const extensions = useMemo(
@@ -65,6 +85,7 @@ export function YamlEditor({ value, errorLines, onChange }: YamlEditorProps) {
       EditorView.lineWrapping,
       ...errorExtensions,
       errorLineFacet.of(errorLines),
+      autocompletion({ override: [completeRuleYaml], icons: false }),
     ],
     [errorLines],
   );

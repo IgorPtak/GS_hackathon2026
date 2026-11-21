@@ -7,6 +7,7 @@ import { CountBadge } from "../ui/CountBadge";
 import { SeverityDot } from "../ui/SeverityDot";
 import { Skeleton } from "../ui/Skeleton";
 import { StatusChip } from "../ui/StatusChip";
+import { Tooltip } from "../ui/Tooltip";
 import { ProposeFixButton } from "../proposals/ProposeFixButton";
 import { AlertTechnicalDetails } from "./AlertTechnicalDetails";
 import { AlertTimeline } from "./AlertTimeline";
@@ -71,32 +72,47 @@ interface AlertActionsProps {
 
 function AlertActions({ alert, pendingTransition, onTransition }: AlertActionsProps) {
   const isBusy = pendingTransition !== null;
+  const team = humanizeId(alert.team);
   return (
-    <div className="mt-6 flex flex-wrap gap-2">
-      <Button
-        variant="primary"
-        isLoading={pendingTransition === "acknowledge"}
-        disabled={alert.status !== "open" || isBusy}
-        onClick={() => {
-          onTransition("acknowledge");
-        }}
-      >
-        Acknowledge
-      </Button>
-      <Button
-        isLoading={pendingTransition === "resolve"}
-        disabled={alert.status === "resolved" || isBusy}
-        onClick={() => {
-          onTransition("resolve");
-        }}
-      >
-        Resolve
-      </Button>
-      <ProposeFixButton
-        alert={alert}
-        className="inline-flex h-9 items-center rounded-full bg-fill px-4 text-body font-medium whitespace-nowrap text-ink transition-colors hover:bg-hairline"
-      />
-    </div>
+    <>
+      <div className="mt-6 flex flex-wrap gap-2">
+        <Tooltip side="bottom" label="Tell the team you are on it">
+          <Button
+            variant="primary"
+            isLoading={pendingTransition === "acknowledge"}
+            disabled={alert.status !== "open" || isBusy}
+            onClick={() => {
+              onTransition("acknowledge");
+            }}
+          >
+            Acknowledge
+          </Button>
+        </Tooltip>
+        <Tooltip side="bottom" label="It is fixed: close the alert">
+          <Button
+            isLoading={pendingTransition === "resolve"}
+            disabled={alert.status === "resolved" || isBusy}
+            onClick={() => {
+              onTransition("resolve");
+            }}
+          >
+            Resolve
+          </Button>
+        </Tooltip>
+        <Tooltip side="bottom" label={`Suggest a rule or runbook change for ${team} to approve`}>
+          <ProposeFixButton
+            alert={alert}
+            className="inline-flex h-9 items-center rounded-full bg-fill px-4 text-body font-medium whitespace-nowrap text-ink transition-[background-color,scale] select-none hover:bg-hairline active:scale-[0.97]"
+          />
+        </Tooltip>
+      </div>
+      <p className="mt-3 text-meta text-ink-3">
+        <span className="text-ink-2">Acknowledge</span> tells the team you are on it.{" "}
+        <span className="text-ink-2">Resolve</span> closes the alert once it is fixed. A{" "}
+        <span className="text-ink-2">proposed fix</span> waits in Approvals until someone on {team}{" "}
+        accepts it.
+      </p>
+    </>
   );
 }
 

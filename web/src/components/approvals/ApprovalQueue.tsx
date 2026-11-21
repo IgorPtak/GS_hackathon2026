@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type { ApprovalRequest } from "../../api/types";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
@@ -6,6 +8,7 @@ import { useToast } from "../ui/toastContext";
 import { ApprovalCard } from "./ApprovalCard";
 import { RecentDecisionsList } from "./RecentDecisionsList";
 import { useApprovalDecision, type DecisionKind } from "./useApprovalDecision";
+import { useLingeringRequests, type Outcome } from "./useLingeringRequests";
 
 interface ApprovalQueueProps {
   readonly team: string;
@@ -35,14 +38,26 @@ export function ApprovalQueue({
 }: ApprovalQueueProps) {
   const toast = useToast();
   const decision = useApprovalDecision(team, onApply);
+  // Decisions made here are known right away; ones from the phone come with the decided list.
+  const [localOutcomes] = useState(() => new Map<string, Outcome>());
+  const outcomeOf = (id: string): Outcome => {
+    const local = localOutcomes.get(id);
+    if (local) return local;
+    const done = decided.find((request) => request.id === id);
+    return done?.decision === "reject" ? "reject" : "approve";
+  };
+  const shown = useLingeringRequests(items, outcomeOf);
 
   async function handleDecide(id: string, kind: DecisionKind, comment: string) {
+    localOutcomes.set(id, kind);
     const ok = await decision.decide(id, kind, comment);
     if (ok) {
       toast.show(
-        kind === "approve" ? "Approved" : "Rejected",
+        kind === "approve" ? "Approved. The runbook carries on." : "Rejected. The step is skipped.",
         kind === "approve" ? "success" : "info",
       );
+    } else {
+      localOutcomes.delete(id);
     }
   }
 
@@ -78,11 +93,13 @@ export function ApprovalQueue({
         </Card>
       ) : null}
 
-      {items.length > 0 ? (
-        <ul className="space-y-4">
-          {items.map((request) => (
+      {shown.length > 0 ? (
+        <ul className="flex flex-col">
+          {shown.map(({ request, outcome, isFolding }) => (
             <ApprovalCard
               key={request.id}
+              outcome={outcome}
+              isFolding={isFolding}
               request={request}
               alertTitle={getAlertTitle(request.alert_id)}
               runbookTitle={getRunbookTitle(request.runbook_id)}

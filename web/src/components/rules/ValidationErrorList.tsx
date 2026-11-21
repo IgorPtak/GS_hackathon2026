@@ -24,12 +24,24 @@ export function ValidationErrorList({
     );
   }
   if (errors.length > 0) {
+    // Several paths can read the same once named in plain words; say each thing once.
+    const lines = [
+      ...new Map(
+        errors.map((error) => {
+          const label = humanPath(error.path);
+          const text = friendlyMessage(error.path, error.message);
+          return [`${label}\u0000${text}`, { label, text }] as const;
+        }),
+      ).values(),
+    ];
     return (
-      <ul role="alert" className="space-y-1 rounded-tile bg-critical/12 px-4 py-3 text-body">
-        {errors.map((error, index) => (
-          <li key={`${error.path}-${String(index)}`} className="break-words text-critical-ink">
-            <span className="font-medium">{humanPath(error.path)}:</span>{" "}
-            {friendlyMessage(error.path, error.message)}
+      <ul
+        role="alert"
+        className="animate-fade-in space-y-1 rounded-tile bg-critical/12 px-4 py-3 text-body"
+      >
+        {lines.map(({ label, text }) => (
+          <li key={`${label}-${text}`} className="break-words text-critical-ink">
+            <span className="font-medium">{label}:</span> {text}
           </li>
         ))}
       </ul>
