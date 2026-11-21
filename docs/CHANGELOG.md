@@ -82,3 +82,5 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-31 cleanups: webhook render_body reuses alerting_core.templating, relay uses model_dump_json, postgres/redis/python base images pinned to patch tags
 - A-33 ingest cleanups: idempotency key paths use `alerting_core.rules.field_paths` (temporary `lookup_path` removed), envelopes serialize in one `model_dump_json()` pass
 - A-34 swarm port: per-stage latency (outbox wait, post-relay) + Grafana panel, Postgres-restart and backend-profiler load tools, pg_stat_statements, team events in one pipeline, delivery claim/complete in one Lua call (−11 % total CPU per event, lost 0)
+
+- A-45 runbook formats: markdown inline `action key=value` params and approval, "needs approval" prose, actions with missing required params become text steps
