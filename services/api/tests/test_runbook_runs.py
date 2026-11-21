@@ -12,6 +12,7 @@ from alerting_contracts.config import ActionConfig
 from alerting_contracts.runbooks import ActionRun, ActionRunStatus, ApprovalRequest, Runbook
 from alerting_core.settings import Settings
 from fastapi.testclient import TestClient
+from redis.exceptions import RedisError
 
 from services.api.dependencies import get_pool, get_redis, get_registry
 from services.api.main import create_app
@@ -251,3 +252,15 @@ def test_approval_required_step_creates_approval_and_no_job(env: Env) -> None:
     assert env.jobs == []
     assert env.audits == [(AuditVerb.approval_requested, "pending")]
     assert "approval.requested" in env.published
+
+
+def test_event_publish_failure_still_returns_202(
+    client: TestClient, env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def boom(redis: Any, team: str, event: Any) -> None:
+        raise RedisError("down")
+
+    monkeypatch.setattr(runbook_runs, "publish_team_event", boom)
+    response = post(client)
+    assert response.status_code == 202
+    assert len(env.runs) == 1
