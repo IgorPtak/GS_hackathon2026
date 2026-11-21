@@ -85,6 +85,7 @@ class Env:
         self.fail_mark = False
         self.stored: dict[str, Any] | None = None
         self.rule_team: str | None = "rates"
+        self.rule_deleted = False
         self.listed: list[tuple[Any, Any]] = []
 
 
@@ -184,6 +185,8 @@ def env(monkeypatch: pytest.MonkeyPatch) -> Env:
         return 7
 
     async def get_stored(pool: Any, rule_id: str) -> Any:
+        if state.stored is None and state.rule_team is not None and not state.rule_deleted:
+            return canonical_document(Rule.model_validate(rule_doc(team=state.rule_team))), 6
         return (state.stored, 7) if state.stored is not None else None
 
     async def save_rb(pool: Any, redis: Any, runbook: Runbook, actor: Any) -> int:
@@ -208,6 +211,11 @@ def env(monkeypatch: pytest.MonkeyPatch) -> Env:
     monkeypatch.setattr(fixr, "save_runbook", save_rb)
     monkeypatch.setattr(fixr, "publish_team_event", publish)
     return state
+
+
+def _registry_with_rule() -> Any:
+    rule = Rule.model_validate(rule_doc())
+    return SimpleNamespace(rules=lambda: {"r1": rule})
 
 
 @pytest.fixture
@@ -393,7 +401,7 @@ def test_save_failure_marks_nothing_and_publishes_nothing(env: Env) -> None:
     app = create_app(Settings(database_url="postgresql://x@127.0.0.1:1/x"))
     app.dependency_overrides[get_pool] = lambda: FakePool(env)
     app.dependency_overrides[get_redis] = lambda: object()
-    app.dependency_overrides[get_registry] = lambda: None
+    app.dependency_overrides[get_registry] = _registry_with_rule
     app.dependency_overrides[get_catalog] = lambda: SimpleNamespace(
         get=lambda _id: env.runbook, actions=dict
     )
@@ -418,7 +426,7 @@ def _crashing_client(env: Env) -> TestClient:
     app = create_app(Settings(database_url="postgresql://x@127.0.0.1:1/x"))
     app.dependency_overrides[get_pool] = lambda: FakePool(env)
     app.dependency_overrides[get_redis] = lambda: object()
-    app.dependency_overrides[get_registry] = lambda: None
+    app.dependency_overrides[get_registry] = _registry_with_rule
     app.dependency_overrides[get_catalog] = lambda: SimpleNamespace(
         get=lambda _id: env.runbook, actions=dict
     )
@@ -592,6 +600,44 @@ def test_rule_kind_cannot_change_id_or_team_even_with_other_changes(
         client, kind="fields", proposed_rule=changed_rule(team="other", enabled=False)
     )
     assert response.status_code == 422 and "proposed_rule.team" in paths(response)
+
+
+def test_stale_proposal_keeps_edits_made_after_it_was_created(client: TestClient, env: Env) -> None:
+    threshold = changed_rule(when={"field": "normalized.type", "op": "glob", "value": "x.*"})
+    assert create(client, kind="threshold", proposed_rule=threshold).status_code == 201
+    edited = Rule.model_validate(rule_doc() | {"route": {"channels": ["email"]}})
+    env.stored = canonical_document(edited)  # route changed elsewhere after the proposal
+    assert decide(client, "accept").status_code == 200
+    saved = env.saved_rules[-1]
+    assert saved.route.channels == ["email"]
+    assert saved.when.value == "x.*"  # type: ignore[union-attr]
+
+
+def test_accept_is_idempotent_when_allowed_fields_already_match(
+    client: TestClient, env: Env
+) -> None:
+    threshold = changed_rule(when={"field": "normalized.type", "op": "glob", "value": "x.*"})
+    create(client, kind="threshold", proposed_rule=threshold)
+    env.stored = canonical_document(Rule.model_validate(threshold))
+    assert decide(client, "accept").status_code == 200
+    assert env.saved_rules == []
+
+
+def test_rule_proposal_for_missing_rule_is_422_at_create(client: TestClient, env: Env) -> None:
+    env.rule_team = None
+    response = create(client, kind="fields", proposed_rule=rule_doc("New"))
+    assert response.status_code == 422 and paths(response) == ["proposed_rule.id"]
+    assert env.rows == {} and env.published == []
+
+
+def test_accept_after_rule_disappeared_saves_nothing(client: TestClient, env: Env) -> None:
+    create(client, kind="fields", proposed_rule=rule_doc("New"))
+    env.rule_deleted = True
+    env.published.clear()
+    response = decide(client, "accept")
+    assert response.status_code == 422
+    assert env.saved_rules == [] and "mark" not in env.events and env.published == []
+    assert env.rows[PROPOSAL_ID].status is ProposalStatus.pending
 
 
 def _client_with_actions(env: Env, actions: dict[str, Any]) -> TestClient:

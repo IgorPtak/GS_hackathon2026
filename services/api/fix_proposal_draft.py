@@ -95,7 +95,10 @@ async def draft_fix_proposal(
     rule: Rule | None,
     runbook: Runbook | None,
     actions: Mapping[str, ActionConfig],
-    validate: Callable[[Alert, FixProposalCreate, Rule | None], list[ConfigValidationError]],
+    validate: Callable[
+        [Alert, FixProposalCreate, Rule | None, Mapping[str, ActionConfig]],
+        list[ConfigValidationError],
+    ],
 ) -> FixProposalCreate:
     """Ask the model for one proposal and check it with `validate` (same as the create route).
 
@@ -115,7 +118,7 @@ async def draft_fix_proposal(
         raise DraftUnavailableError(str(error)) from error
     assert isinstance(answer, FixProposalCreate)
     answer = _harden_draft_step(answer, actions)
-    errors = validate(alert, answer, rule)
+    errors = validate(alert, answer, rule, actions)
     if errors:
         raise DraftInvalidError("LLM draft failed validation", errors)
     log.info("fix_proposal_drafted", extra={"alert_id": alert.id, "kind": answer.kind.value})

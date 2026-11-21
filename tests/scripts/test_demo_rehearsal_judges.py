@@ -21,6 +21,7 @@ from alerting_contracts.config import (
 from alerting_contracts.events import NormalizedFields
 from alerting_contracts.proposals import SchemaProfileProposal
 from alerting_contracts.runbooks import Runbook, RunbookFormat, RunbookStep, StepKind
+from alerting_core.runbooks.approval_policy import step_requires_approval
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -39,7 +40,6 @@ from demo_rehearsal_judges import (  # noqa: E402
     judges_discriminator,
     judges_resource_id,
     prepare_proposed_profile,
-    step_requires_approval,
 )
 
 
@@ -74,23 +74,24 @@ def _sample_runbook() -> Runbook:
     )
 
 
-def test_build_judges_samples_uses_fresh_suffix_and_distinct_levels() -> None:
+def test_build_judges_samples_uses_fresh_robot_ids_and_stable_discriminator() -> None:
     sample_a, live_a = build_judges_samples("ab12cd34")
-    sample_b, _ = build_judges_samples("ef567890")
-    assert sample_a[DISCRIMINATOR_FIELD] == "warehouse-robot-ab12cd34"
-    assert sample_a[DISCRIMINATOR_FIELD] != sample_b[DISCRIMINATOR_FIELD]
+    sample_b, live_b = build_judges_samples("ef567890")
+    assert sample_a[DISCRIMINATOR_FIELD] == sample_b[DISCRIMINATOR_FIELD] == "warehouse-robot"
     assert sample_a["robot"]["id"] == "bot-ab12cd34-sample"
+    assert sample_a["robot"]["id"] != sample_b["robot"]["id"]
     assert sample_a["site"] == "wh-ab12cd34"
     assert sample_a["fault"]["level"] == "FATAL"
     assert [e["fault"]["level"] for e in live_a] == ["FATAL", "WARN", "FATAL"]
     assert {e["robot"]["id"] for e in live_a} == {"bot-ab12cd34-live"}
-    assert {e[DISCRIMINATOR_FIELD] for e in live_a} == {"warehouse-robot-ab12cd34"}
+    assert {e["robot"]["id"] for e in live_b} == {"bot-ef567890-live"}
+    assert {e[DISCRIMINATOR_FIELD] for e in live_a} == {"warehouse-robot"}
 
 
 def test_build_robot_event_preserves_custom_fields() -> None:
     event = build_robot_event("aa11", "bot-42", "WARN", "SENSOR_DRIFT", "2026-11-20T12:00:00Z")
     assert event == {
-        DISCRIMINATOR_FIELD: "warehouse-robot-aa11",
+        DISCRIMINATOR_FIELD: "warehouse-robot",
         "robot": {"id": "bot-42", "bay": "B4"},
         "fault": {"code": "SENSOR_DRIFT", "level": "WARN"},
         "ts": "2026-11-20T12:00:00Z",
@@ -143,24 +144,24 @@ def test_prepare_proposed_profile_wraps_leaf_match() -> None:
 
 
 def test_build_judges_rule_sets_conditions_dedup_route_and_runbook() -> None:
-    rule = build_judges_rule("ab12")
-    assert rule.id == judges_resource_id("ab12") == "judges-ab12"
-    assert rule.team == "platform" and rule.enabled is True and rule.runbook == "judges-ab12"
+    rule = build_judges_rule()
+    assert rule.id == judges_resource_id() == "judges-demo"
+    assert rule.team == "platform" and rule.enabled is True and rule.runbook == "judges-demo"
     assert rule.dedup.fingerprint == ["robot.id"]
     assert rule.route.recipients == ["marek"] and rule.route.channels == ["ui", "email"]
     assert isinstance(rule.when, ConditionAll)
     assert rule.when.all == [
         ConditionLeaf(field="fault.level", op=ConditionOperator.eq, value="FATAL"),
         ConditionLeaf(
-            field=DISCRIMINATOR_FIELD, op=ConditionOperator.eq, value=judges_discriminator("ab12")
+            field=DISCRIMINATOR_FIELD, op=ConditionOperator.eq, value=judges_discriminator()
         ),
     ]
-    assert build_judges_rule("ab12", enabled=False).enabled is False
+    assert build_judges_rule(enabled=False).enabled is False
 
 
 def test_build_judges_runbook_write_uses_text_format() -> None:
-    payload = build_judges_runbook_write("ab12").model_dump(mode="json")
-    assert payload["id"] == "judges-ab12" and payload["team"] == "platform"
+    payload = build_judges_runbook_write().model_dump(mode="json")
+    assert payload["id"] == "judges-demo" and payload["team"] == "platform"
     assert payload["format"] == "text" and "page" in payload["source"].lower()
 
 

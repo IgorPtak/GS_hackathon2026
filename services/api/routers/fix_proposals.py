@@ -138,13 +138,14 @@ def _step_errors(
 def validate_create(
     alert: Alert,
     body: FixProposalCreate,
-    current_rule: Rule | None = None,
-    actions: Mapping[str, ActionConfig] | None = None,
+    current_rule: Rule | None,
+    actions: Mapping[str, ActionConfig],
 ) -> list[ConfigValidationError]:
     """Check the kind/payload pairing and scope; returns dot-path errors (empty = valid).
 
-    With `current_rule`, a rule kind may change only its own fields. With `actions`, a runbook
-    step must name a known action and not loosen its approval.
+    A rule kind needs the current rule and may change only its own fields. A runbook step must
+    name a known action and not loosen its approval. Both arguments are required so no caller
+    can skip these checks.
     """
     errors: list[ConfigValidationError] = []
     if body.kind in _RULE_KINDS:
@@ -157,7 +158,9 @@ def validate_create(
                     f"expected {alert.rule_id!r}, got {body.proposed_rule.id!r}",
                 )
             )
-        elif current_rule is not None and body.proposed_rule.team != current_rule.team:
+        elif current_rule is None:
+            errors.append(_detail("proposed_rule.id", f"rule {alert.rule_id!r} not found"))
+        elif body.proposed_rule.team != current_rule.team:
             errors.append(
                 _detail(
                     "proposed_rule.team",
@@ -165,7 +168,7 @@ def validate_create(
                     f"got {body.proposed_rule.team!r}",
                 )
             )
-        elif current_rule is not None:
+        else:
             errors.extend(_rule_scope_errors(body.kind, current_rule, body.proposed_rule))
         if body.proposed_runbook_step is not None:
             errors.append(
@@ -178,8 +181,7 @@ def validate_create(
             errors.append(_detail("kind", "the alert has no runbook to change"))
         if body.proposed_rule is not None:
             errors.append(_detail("proposed_rule", "not allowed for kind runbook_step"))
-        if actions is not None:
-            errors.extend(_step_errors(body, actions))
+        errors.extend(_step_errors(body, actions))
     else:
         if body.proposed_rule is not None:
             errors.append(_detail("proposed_rule", "not allowed for kind other"))
@@ -206,7 +208,7 @@ async def create_proposal(
     alert_id: str,
     body: FixProposalCreate,
     current_rule_of: Any,
-    actions: Mapping[str, ActionConfig] | None = None,
+    actions: Mapping[str, ActionConfig],
 ) -> FixProposal:
     """Insert + audit in one transaction, then publish.
 
@@ -270,7 +272,7 @@ async def decide_proposal(
     proposal_id: str,
     body: FixProposalDecisionRequest,
     get_runbook: Any,
-    actions: Mapping[str, ActionConfig] | None = None,
+    actions: Mapping[str, ActionConfig],
 ) -> FixProposal:
     """Decide atomically (see module docstring for ordering), then publish after commit."""
     if not store.is_uuid(proposal_id):
@@ -314,25 +316,42 @@ async def decide_proposal(
     return updated
 
 
+def _rebuild_rule(current: Rule, proposal: FixProposal) -> Rule:
+    """The current rule with only the proposal kind's allowed fields taken from the proposal."""
+    proposed = proposal.proposed_rule
+    assert proposed is not None
+    merged = current.model_dump(mode="python")
+    for name in _ALLOWED_RULE_FIELDS.get(proposal.kind, frozenset()):
+        merged[name] = getattr(proposed, name)
+    return Rule.model_validate(merged)
+
+
 async def _apply(
     pool: asyncpg.Pool,
     redis: Redis,
     proposal: FixProposal,
     body: FixProposalDecisionRequest,
     get_runbook: Any,
-    actions: Mapping[str, ActionConfig] | None = None,
+    actions: Mapping[str, ActionConfig],
 ) -> dict[str, Any]:
     """Save the proposed rule or runbook step; returns audit detail. Raises on invalid."""
     try:
         if proposal.proposed_rule is not None:
-            stored = await store.get_rule_document(pool, proposal.proposed_rule.id)
-            if stored is not None and stored[0] == canonical_document(proposal.proposed_rule):
-                version = stored[1]  # already saved (crash before mark): no extra version
-            else:
-                version = await save_config_document(
-                    pool, redis, "rule", proposal.proposed_rule, body.actor
+            rule_id = proposal.proposed_rule.id
+            stored = await store.get_rule_document(pool, rule_id)
+            if stored is None:
+                raise ProposalInvalidError(
+                    "rule no longer exists",
+                    [_detail("proposed_rule.id", f"rule {rule_id!r} not found")],
                 )
-            return {"saved": "rule", "id": proposal.proposed_rule.id, "version": version}
+            # Rebuilt from the rule as it is now, so edits made since the proposal was created
+            # survive; only the fields of the proposal's kind come from the proposal.
+            wanted = _rebuild_rule(Rule.model_validate(stored[0]), proposal)
+            if stored[0] == canonical_document(wanted):
+                version = stored[1]  # already applied (or crash before mark): no extra version
+            else:
+                version = await save_config_document(pool, redis, "rule", wanted, body.actor)
+            return {"saved": "rule", "id": rule_id, "version": version}
         if proposal.proposed_runbook_step is not None:
             if proposal.runbook_id is None:
                 raise ProposalInvalidError(
@@ -344,20 +363,19 @@ async def _apply(
                     "runbook no longer exists",
                     [_detail("runbook_id", f"runbook {proposal.runbook_id!r} not found")],
                 )
-            if actions is not None:
-                problems = _step_errors(
-                    FixProposalCreate(
-                        kind=FixKind.runbook_step,
-                        description=proposal.description,
-                        proposed_runbook_step=proposal.proposed_runbook_step,
-                        proposed_by=proposal.proposed_by,
-                    ),
-                    actions,
-                )
-                if problems:
-                    raise ProposalInvalidError("proposal cannot be applied", problems)
-                tightened = tighten_steps([proposal.proposed_runbook_step], actions)[0]
-                proposal = proposal.model_copy(update={"proposed_runbook_step": tightened})
+            problems = _step_errors(
+                FixProposalCreate(
+                    kind=FixKind.runbook_step,
+                    description=proposal.description,
+                    proposed_runbook_step=proposal.proposed_runbook_step,
+                    proposed_by=proposal.proposed_by,
+                ),
+                actions,
+            )
+            if problems:
+                raise ProposalInvalidError("proposal cannot be applied", problems)
+            tightened = tighten_steps([proposal.proposed_runbook_step], actions)[0]
+            proposal = proposal.model_copy(update={"proposed_runbook_step": tightened})
             if step_already_applied(runbook, proposal):
                 version = runbook.version  # already saved (crash before mark): no extra version
             else:

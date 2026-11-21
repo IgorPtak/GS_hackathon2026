@@ -226,6 +226,9 @@ class RunbookWalker:
 
         `approved` is the existing approved row, reused for the first attempt; `last` is a
         failed earlier attempt (max_attempts was raised since), after which numbering continues.
+
+        One approval covers every internal retry of this attempt series: retries do not ask
+        again, because a human approved the step, not a single try.
         """
         assert step.action is not None
         if step.requires_approval and approved is None:

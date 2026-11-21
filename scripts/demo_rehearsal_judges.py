@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
-import demo_rehearsal_helpers as h
-import httpx
-from alerting_contracts import alerts, api, config
-from alerting_contracts.common import Actor
-from alerting_contracts.proposals import SchemaProfileProposal
-from alerting_contracts.runbooks import Runbook, RunbookFormat, RunbookStep
-from alerting_core.events.shape import shape_hash
-from pydantic import BaseModel
+# alerting_core.runbooks imports the top-level `plugins` package, which is not installed.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import demo_rehearsal_helpers as h  # noqa: E402
+import httpx  # noqa: E402
+from alerting_contracts import alerts, api, config  # noqa: E402
+from alerting_contracts.common import Actor  # noqa: E402
+from alerting_contracts.proposals import SchemaProfileProposal  # noqa: E402
+from alerting_contracts.runbooks import Runbook, RunbookFormat  # noqa: E402
+from alerting_core.events.shape import shape_hash  # noqa: E402
+from alerting_core.runbooks.approval_policy import step_requires_approval  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
 
 DISCRIMINATOR_FIELD, JUDGES_TEAM, JUDGES_RECIPIENT = "schema_kind", "platform", "marek"
 LLM_TIMEOUT, ESCALATE_KEYWORDS = 60.0, ("escalat", "page", "paging")
@@ -24,14 +30,21 @@ JUDGES_RUNBOOK_SOURCE = (
 )
 
 
-def judges_resource_id(run_id: str) -> str:
-    """Return the per-run config id (`judges-<sfx>`) shared by profile, rule, and runbook."""
-    return f"judges-{run_id.lower()}"
+JUDGES_ID = "judges-demo"
+JUDGES_DISCRIMINATOR = "warehouse-robot"
 
 
-def judges_discriminator(run_id: str) -> str:
-    """Return the per-run top-level discriminator value so no prior profile matches."""
-    return f"warehouse-robot-{run_id.lower()}"
+def judges_resource_id() -> str:
+    """Return the fixed config id shared by profile, rule, and runbook (PUT replaces them).
+
+    Fixed so repeated runs do not fill the demo config with one set of documents per run.
+    """
+    return JUDGES_ID
+
+
+def judges_discriminator() -> str:
+    """Return the stable discriminator the profile matches on; freshness lives in `robot.id`."""
+    return JUDGES_DISCRIMINATOR
 
 
 def build_robot_event(
@@ -39,7 +52,7 @@ def build_robot_event(
 ) -> dict[str, Any]:
     """Build a synthetic warehouse-robot event in an unseen nested schema."""
     return {
-        DISCRIMINATOR_FIELD: judges_discriminator(run_id),
+        DISCRIMINATOR_FIELD: judges_discriminator(),
         "robot": {"id": robot_id, "bay": "B4"},
         "fault": {"code": fault_code, "level": fault_level},
         "ts": ts or datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -77,9 +90,9 @@ def prepare_proposed_profile(
     return config.SchemaProfile.model_validate(scoped.model_dump(mode="json"))
 
 
-def build_judges_rule(run_id: str, *, enabled: bool = True) -> config.Rule:
-    """Build the `judges-<sfx>` rule matching FATAL robot faults with dedup on `robot.id`."""
-    rid, disc = judges_resource_id(run_id), judges_discriminator(run_id)
+def build_judges_rule(*, enabled: bool = True) -> config.Rule:
+    """Build the `judges-demo` rule matching FATAL robot faults with dedup on `robot.id`."""
+    rid, disc = judges_resource_id(), judges_discriminator()
     when = [
         {"field": "fault.level", "op": "eq", "value": "FATAL"},
         {"field": DISCRIMINATOR_FIELD, "op": "eq", "value": disc},
@@ -90,7 +103,7 @@ def build_judges_rule(run_id: str, *, enabled: bool = True) -> config.Rule:
             "team": JUDGES_TEAM,
             "enabled": enabled,
             "runbook": rid,
-            "description": f"Judges path warehouse robot fatal faults ({run_id})",
+            "description": "Judges path warehouse robot fatal faults",
             "when": {"all": when},
             "present": {
                 "title": "Robot {{robot.id}} fault {{fault.code}} at {{site}}",
@@ -104,11 +117,11 @@ def build_judges_rule(run_id: str, *, enabled: bool = True) -> config.Rule:
     )
 
 
-def build_judges_runbook_write(run_id: str) -> api.RunbookWrite:
+def build_judges_runbook_write() -> api.RunbookWrite:
     """Build the PUT `/api/v1/runbooks/{id}` request model for the free-text runbook."""
     return api.RunbookWrite(
-        id=judges_resource_id(run_id),
-        title=f"Warehouse robot recovery ({run_id})",
+        id=judges_resource_id(),
+        title="Warehouse robot recovery",
         team=JUDGES_TEAM,
         format=RunbookFormat.text,
         source=JUDGES_RUNBOOK_SOURCE,
@@ -120,16 +133,6 @@ def assert_profile_test_matched_sample(result: api.SchemaProfileTestResult) -> N
     """Assert `/schema-profiles/test` matched the submitted `sample_event` (`event_id is None`)."""
     if not any(sample.event_id is None for sample in result.samples):
         raise h.RehearsalError(f"schema-profiles/test did not match sample_event ({result})")
-
-
-def step_requires_approval(
-    step: RunbookStep, known_actions: Mapping[str, config.ActionConfig]
-) -> bool:
-    """Return True if a runbook step requires approval explicitly or via its action config."""
-    if step.approval is config.ApprovalPolicy.required:
-        return True
-    action = known_actions.get(step.action) if step.approval is None and step.action else None
-    return action is not None and action.approval is config.ApprovalPolicy.required
 
 
 def assert_normalized_runbook(
@@ -178,6 +181,8 @@ def _step_unknown_and_profile(
     ctx: h.RehearsalContext, sample: dict[str, Any], rid: str, disc: str
 ) -> tuple[str, list[str]]:
     target, url = shape_hash(sample), f"{ctx.api_url}/api/v1/unknown-schemas"
+    profiles = h.get_json(ctx, f"{ctx.api_url}/api/v1/schema-profiles")
+    is_known = any(x["id"] == rid for x in profiles)  # left by an earlier run
     before = ctx.client.get(url)
     if before.status_code not in (200, 404):
         raise h.RehearsalError(f"GET /api/v1/unknown-schemas returned {before.status_code}")
@@ -187,7 +192,9 @@ def _step_unknown_and_profile(
     if len(acc.event_ids) != 1 or acc.duplicate_count != 0:
         raise h.RehearsalError(f"unexpected sample ingest: {acc.model_dump()}")
     warns: list[str] = []
-    if before.status_code == 404:
+    if is_known:
+        warns.append(f"profile {rid} already existed; inbox step skipped")
+    elif before.status_code == 404:
         warns.append("unknown-schemas inbox endpoint unavailable")
     else:
 
@@ -209,13 +216,13 @@ def _step_unknown_and_profile(
     return prop.generated_by, warns
 
 
-def _step_rule_runbook_reload(ctx: h.RehearsalContext, run_id: str, cln: dict[str, Any]) -> Runbook:
-    rule = build_judges_rule(run_id)
+def _step_rule_runbook_reload(ctx: h.RehearsalContext, cln: dict[str, Any]) -> Runbook:
+    rule = build_judges_rule()
     _api(ctx, "POST", "/rules/preview", api.RulePreviewRequest(rule=rule), api.RulePreview)
     wreq = api.RuleWrite(rule=rule, actor=JUDGES_ACTOR)
     cln["rule"] = _api(ctx, "PUT", f"/rules/{rule.id}", wreq, api.RuleRecord).rule
     cfg = api.ConfigLists.model_validate(h.get_json(ctx, f"{ctx.api_url}/api/v1/config"))
-    rb_w = build_judges_runbook_write(run_id)
+    rb_w = build_judges_runbook_write()
     rb = _api(ctx, "PUT", f"/runbooks/{rule.id}", rb_w, Runbook, LLM_TIMEOUT)
     assert_normalized_runbook(rb, {a.id: a for a in cfg.actions})
 
@@ -271,12 +278,12 @@ def scene_judges_path(ctx: h.RehearsalContext) -> h.SceneResult:
     """Scene 9: simulate judges bringing an unseen schema and free-text runbook end-to-end."""
 
     def body() -> str:
-        rid, disc = judges_resource_id(ctx.run_id), judges_discriminator(ctx.run_id)
+        rid, disc = judges_resource_id(), judges_discriminator()
         sample, live = build_judges_samples(ctx.run_id)
         cln: dict[str, Any] = {"rule": None, "alert_id": None}
         try:
             gen, warns = _step_unknown_and_profile(ctx, sample, rid, disc)
-            rb = _step_rule_runbook_reload(ctx, ctx.run_id, cln)
+            rb = _step_rule_runbook_reload(ctx, cln)
             alert = _step_live_events(ctx, rid, live, cln)
             return format_judges_detail(
                 rid, gen, len(rb.steps), rb.normalized_by, alert.count, warnings=warns
