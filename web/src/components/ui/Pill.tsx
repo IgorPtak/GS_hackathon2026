@@ -17,7 +17,7 @@ export function Pill({ isActive, count, onToggle, children, className, ...rest }
       aria-pressed={isActive}
       onClick={onToggle}
       className={cx(
-        "inline-flex h-9 shrink-0 items-center gap-2 rounded-full border px-3.5 text-body font-medium whitespace-nowrap transition-colors",
+        "inline-flex h-9 shrink-0 items-center gap-2 rounded-full border px-3.5 text-body font-medium whitespace-nowrap transition-[background-color,color,border-color,box-shadow,scale] select-none active:scale-[0.97]",
         isActive
           ? "border-hairline bg-card text-ink shadow-tile"
           : "border-transparent bg-fill text-ink-2 hover:text-ink",

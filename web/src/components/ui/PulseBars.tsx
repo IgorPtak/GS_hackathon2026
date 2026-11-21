@@ -25,27 +25,31 @@ export function PulseBars({ samples, slots = 60, className }: PulseBarsProps) {
   return (
     <div
       aria-hidden="true"
-      className={cx("flex h-14 items-end gap-0.5 sm:gap-[3px]", className)}
+      className={cx("relative flex h-14 items-end gap-0.5 sm:gap-[3px]", className)}
       data-testid="pulse-bars"
     >
+      {/* A calm baseline: quiet seconds sit on it instead of drawing a dashed row of dots. */}
+      <span className="absolute inset-x-0 bottom-0 h-px rounded-full bg-hairline" />
       {Array.from({ length: padding }, (_, index) => (
-        <span
-          key={`empty-${String(index)}`}
-          className="h-[6%] min-w-px flex-1 rounded-full bg-hairline"
-        />
+        <span key={`empty-${String(index)}`} className="min-w-px flex-1" />
       ))}
-      {visible.map((sample, index) => (
-        <span
-          key={index}
-          style={{
-            height: `${String(Math.max(MIN_BAR_PERCENT, (sample.rate / peak) * 100))}%`,
-          }}
-          className={cx(
-            "min-w-px flex-1 rounded-full transition-[height] duration-500",
-            sample.hasLoss ? "bg-critical" : sample.rate > 0 ? "bg-ink/85" : "bg-ink-3/50",
-          )}
-        />
-      ))}
+      {visible.map((sample, index) => {
+        const isQuiet = sample.rate <= 0 && !sample.hasLoss;
+        return (
+          <span
+            key={index}
+            style={{
+              height: isQuiet
+                ? "0%"
+                : `${String(Math.max(MIN_BAR_PERCENT, (sample.rate / peak) * 100))}%`,
+            }}
+            className={cx(
+              "relative min-w-px flex-1 rounded-full transition-[height] duration-500",
+              sample.hasLoss ? "bg-critical" : "bg-ink/80",
+            )}
+          />
+        );
+      })}
     </div>
   );
 }

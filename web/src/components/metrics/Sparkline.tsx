@@ -58,8 +58,8 @@ export function Sparkline({ values, tone = "default", height = 28, className }: 
           stroke="currentColor"
           strokeWidth="1.5"
           strokeLinecap="round"
-          strokeOpacity={numeric.length === 1 ? 0.55 : 0.2}
-          strokeDasharray={numeric.length === 0 ? "3 4" : undefined}
+          strokeOpacity={numeric.length === 1 ? 0.55 : 0.18}
+          vectorEffect="non-scaling-stroke"
         />
       </svg>
     );

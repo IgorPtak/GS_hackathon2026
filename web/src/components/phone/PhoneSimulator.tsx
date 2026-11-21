@@ -54,10 +54,16 @@ function pickDefaultRecipient(
 interface PhoneSimulatorProps {
   readonly teamId: string | null;
   readonly isFullScreen?: boolean;
+  /** Only the device, no side card (the test console). */
+  readonly isDeviceOnly?: boolean;
 }
 
 /** iPhone-like phone simulator: live SMS lock screen, incoming calls, keypad approvals, and speech. */
-export function PhoneSimulator({ teamId, isFullScreen = false }: PhoneSimulatorProps) {
+export function PhoneSimulator({
+  teamId,
+  isFullScreen = false,
+  isDeviceOnly = false,
+}: PhoneSimulatorProps) {
   const { recipients, isLoading: isLoadingRecipients, error: recipientsError } = useRecipients();
   const [picked, setPicked] = useState<string | null>(readUrlRecipientId);
   const selectedRecipient =
@@ -165,6 +171,8 @@ export function PhoneSimulator({ teamId, isFullScreen = false }: PhoneSimulatorP
       ) : null}
     </PhoneDeviceFrame>
   );
+
+  if (isDeviceOnly) return device;
 
   if (isFullScreen) {
     if (isNarrow) return device;

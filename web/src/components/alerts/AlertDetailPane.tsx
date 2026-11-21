@@ -3,9 +3,7 @@ import { useEffect } from "react";
 import type { Alert, AlertDetail } from "../../api/types";
 import { Avatar } from "../ui/Avatar";
 import { Button } from "../ui/Button";
-import { Card } from "../ui/Card";
 import { CountBadge } from "../ui/CountBadge";
-import { Icon } from "../ui/icons";
 import { SeverityDot } from "../ui/SeverityDot";
 import { Skeleton } from "../ui/Skeleton";
 import { StatusChip } from "../ui/StatusChip";
@@ -14,6 +12,7 @@ import { AlertTechnicalDetails } from "./AlertTechnicalDetails";
 import { AlertTimeline } from "./AlertTimeline";
 import { GroupMembers } from "./GroupMembers";
 import { RunbookChecklist } from "./RunbookChecklist";
+import { readableText, splitAlertTitle } from "./alertText";
 import { humanizeId } from "./timelineWords";
 import type { AlertDetailApi } from "./useAlertDetail";
 import type { AlertTransition } from "./useAlertTransition";
@@ -34,8 +33,10 @@ const STATUS_WORDS: Record<Alert["status"], string> = {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mt-7">
-      <h3 className="mb-3 text-row font-semibold">{title}</h3>
+    <section className="mt-9">
+      <h3 className="mb-3 text-caption font-semibold tracking-wide text-ink-2 uppercase">
+        {title}
+      </h3>
       {children}
     </section>
   );
@@ -43,7 +44,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function AlertMeta({ alert }: { alert: Alert }) {
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-meta text-ink-2">
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-meta text-ink-2">
       <span className="inline-flex items-center gap-2">
         <SeverityDot severity={alert.severity} />
         <span className="capitalize">{alert.severity}</span>
@@ -71,7 +72,7 @@ interface AlertActionsProps {
 function AlertActions({ alert, pendingTransition, onTransition }: AlertActionsProps) {
   const isBusy = pendingTransition !== null;
   return (
-    <div className="mt-5 flex flex-wrap gap-2">
+    <div className="mt-6 flex flex-wrap gap-2">
       <Button
         variant="primary"
         isLoading={pendingTransition === "acknowledge"}
@@ -111,9 +112,11 @@ function AlertDetailBody({
   onTransition,
 }: AlertDetailBodyProps) {
   const { alert } = loaded;
+  const text = splitAlertTitle(alert.title);
   return (
     <>
-      <h2 className="text-card-title font-semibold break-words">{alert.title}</h2>
+      <h2 className="text-card-title font-semibold tracking-tight break-words">{text.title}</h2>
+      {text.reason ? <p className="mt-1 text-body text-ink-2">{text.reason}</p> : null}
       <AlertMeta alert={alert} />
       <AlertActions
         alert={alert}
@@ -129,7 +132,9 @@ function AlertDetailBody({
         </p>
       ) : null}
       {alert.body ? (
-        <p className="mt-5 text-body break-words whitespace-pre-wrap text-ink-2">{alert.body}</p>
+        <p className="mt-6 rounded-tile bg-fill/70 px-4 py-3 text-body break-words whitespace-pre-wrap">
+          {readableText(alert.body)}
+        </p>
       ) : null}
 
       <Section title="What happened">
@@ -152,7 +157,7 @@ function AlertDetailBody({
           <GroupMembers members={alert.group_members ?? []} />
         </Section>
       ) : null}
-      <div className="mt-7">
+      <div className="mt-9">
         <AlertTechnicalDetails detail={loaded} />
       </div>
     </>
@@ -180,14 +185,7 @@ export function AlertDetailPane({
   const loaded = detail.detail;
 
   return (
-    <Card className="min-[1100px]:sticky min-[1100px]:top-0 min-[1100px]:max-h-[calc(100dvh-9rem)] min-[1100px]:self-start min-[1100px]:overflow-y-auto">
-      <Button variant="ghost" className="-ml-3 mb-3 min-[1100px]:hidden" onClick={onClose}>
-        <span className="rotate-90">
-          <Icon name="chevron" size={16} />
-        </span>
-        Inbox
-      </Button>
-
+    <article className="mx-auto w-full max-w-[820px] animate-fade-up px-10 py-9 max-sm:px-5 max-sm:py-6">
       {detail.error ? (
         <p
           role="alert"
@@ -216,6 +214,6 @@ export function AlertDetailPane({
           onTransition={onTransition}
         />
       ) : null}
-    </Card>
+    </article>
   );
 }

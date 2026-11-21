@@ -6,6 +6,8 @@
  */
 :root {
   color-scheme: light dark;
+  /* Lets <details> and other panels animate to their natural height (progressive). */
+  interpolate-size: allow-keywords;
 
   --canvas: light-dark(#e9e9ec, #0e0e10);
   --window: light-dark(#ffffff, #1c1c1e);
@@ -106,8 +108,36 @@
   --shadow-card: var(--elev-card);
   --shadow-tile: var(--elev-tile);
 
-  --animate-row-in: row-in 200ms ease-out;
-  --animate-pop: pop 160ms ease-out;
+  /* Motion: calm, never instant. Hover/press states ease over ~220 ms on a soft curve. */
+  --default-transition-duration: 220ms;
+  --default-transition-timing-function: cubic-bezier(0.25, 0.8, 0.25, 1);
+  --ease-soft: cubic-bezier(0.25, 0.8, 0.25, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --animate-row-in: row-in 320ms cubic-bezier(0.25, 0.8, 0.25, 1);
+  --animate-pop: pop 220ms cubic-bezier(0.25, 0.8, 0.25, 1);
+  --animate-fade-up: fade-up 320ms cubic-bezier(0.25, 0.8, 0.25, 1) both;
+  --animate-fade-in: fade-in 260ms ease-out both;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 
   @keyframes row-in {
     from {
@@ -171,6 +201,157 @@
     overflow: hidden;
     overscroll-behavior: contain;
   }
+
+  /* Disclosures open and close smoothly, so whatever sits below them glides instead of jumping. */
+  details::details-content {
+    block-size: 0;
+    overflow-y: clip;
+    transition:
+      block-size 340ms var(--ease-soft),
+      content-visibility 340ms allow-discrete;
+  }
+
+  details[open]::details-content {
+    block-size: auto;
+  }
+}
+
+/* Dialogs fade and rise in, and fade out again; the backdrop dims with them. */
+dialog.modal-dialog {
+  opacity: 0;
+  transform: translateY(10px) scale(0.985);
+  transition:
+    opacity 220ms var(--ease-soft),
+    transform 320ms var(--ease-spring),
+    overlay 320ms allow-discrete,
+    display 320ms allow-discrete;
+}
+
+dialog.modal-dialog[open] {
+  opacity: 1;
+  transform: none;
+}
+
+@starting-style {
+  dialog.modal-dialog[open] {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+}
+
+dialog.modal-dialog::backdrop {
+  background: rgb(0 0 0 / 0);
+  backdrop-filter: blur(0);
+  transition:
+    background 260ms ease,
+    backdrop-filter 260ms ease,
+    overlay 320ms allow-discrete,
+    display 320ms allow-discrete;
+}
+
+dialog.modal-dialog[open]::backdrop {
+  background: rgb(0 0 0 / 0.28);
+  backdrop-filter: blur(3px);
+}
+
+@starting-style {
+  dialog.modal-dialog[open]::backdrop {
+    background: rgb(0 0 0 / 0);
+    backdrop-filter: blur(0);
+  }
+}
+
+/* The side sheet slides in from the right edge instead. */
+dialog.sheet-dialog {
+  transform: translateX(32px);
+}
+
+dialog.sheet-dialog[open] {
+  transform: none;
+}
+
+@starting-style {
+  dialog.sheet-dialog[open] {
+    transform: translateX(32px);
+  }
+}
+
+/*
+ * Selects: where the browser supports it, the picker is our own rounded card (top layer, full
+ * keyboard support, native semantics). Elsewhere the OS picker is a fine fallback.
+ */
+@supports (appearance: base-select) {
+  .select-base,
+  .select-base::picker(select) {
+    appearance: base-select;
+  }
+
+  .select-base {
+    display: flex;
+    align-items: center;
+  }
+
+  .select-base::picker-icon {
+    display: none;
+  }
+
+  .select-base::picker(select) {
+    margin-block: 6px;
+    padding: 6px;
+    border: 1px solid var(--hairline);
+    border-radius: 16px;
+    background: light-dark(var(--card), #2a2a2d);
+    color: var(--ink);
+    box-shadow:
+      0 18px 40px -12px rgb(0 0 0 / 0.22),
+      0 2px 8px rgb(0 0 0 / 0.06);
+    opacity: 0;
+    translate: 0 -4px;
+    transition:
+      opacity 180ms ease,
+      translate 240ms var(--ease-spring),
+      overlay 240ms allow-discrete,
+      display 240ms allow-discrete;
+  }
+
+  .select-base:open::picker(select) {
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  @starting-style {
+    .select-base:open::picker(select) {
+      opacity: 0;
+      translate: 0 -4px;
+    }
+  }
+
+  .select-base option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-block-size: 38px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 15px;
+    transition: background-color 160ms ease;
+  }
+
+  .select-base option:hover,
+  .select-base option:focus-visible {
+    background: var(--fill);
+    outline: none;
+  }
+
+  .select-base option:checked {
+    font-weight: 500;
+  }
+
+  .select-base option::checkmark {
+    order: 1;
+    margin-inline-start: auto;
+    color: var(--accent-ink);
+  }
 }
 
 @utility num {
@@ -213,11 +394,11 @@ dialog:not([open]) {
 }
 
 ::view-transition-old(main-panel) {
-  animation: panel-out 140ms ease-in both;
+  animation: panel-out 180ms ease-in both;
 }
 
 ::view-transition-new(main-panel) {
-  animation: panel-in 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: panel-in 380ms var(--ease-soft) 60ms both;
 }
 
 @keyframes panel-out {
@@ -229,7 +410,7 @@ dialog:not([open]) {
 @keyframes panel-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
 }
 
@@ -244,6 +425,19 @@ dialog:not([open]) {
 
 .ascii-sky [data-level="2"] {
   color: light-dark(rgb(29 29 31 / 0.5), rgb(245 245 247 / 0.72));
+}
+
+/* The page backdrop: the same sky, much quieter, so it fills the grey without competing. */
+.ascii-sky-panel {
+  color: light-dark(rgb(29 29 31 / 0.05), rgb(245 245 247 / 0.04));
+}
+
+.ascii-sky-panel [data-level="1"] {
+  color: light-dark(rgb(29 29 31 / 0.13), rgb(245 245 247 / 0.12));
+}
+
+.ascii-sky-panel [data-level="2"] {
+  color: light-dark(rgb(29 29 31 / 0.085), rgb(245 245 247 / 0.075));
 }
 
 .ascii-twinkle {
@@ -266,4 +460,33 @@ dialog:not([open]) {
     light-dark(rgb(10 132 255 / 0.08), rgb(120 160 255 / 0.12)),
     transparent 70%
   );
+}
+
+/*
+ * The white header band casts a soft shadow only once the page scrolls under it (scroll-driven,
+ * progressive: browsers without it simply show no shadow).
+ */
+@supports (animation-timeline: scroll()) {
+  .page-frame {
+    timeline-scope: --page-scroll;
+  }
+
+  .page-scroll {
+    scroll-timeline: --page-scroll y;
+  }
+
+  .page-header {
+    animation: header-lift linear both;
+    animation-timeline: --page-scroll;
+    animation-range: 0 48px;
+  }
+
+  @keyframes header-lift {
+    from {
+      box-shadow: 0 0 0 transparent;
+    }
+    to {
+      box-shadow: 0 10px 24px -18px rgb(0 0 0 / 0.35);
+    }
+  }
 }

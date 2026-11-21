@@ -39,11 +39,27 @@ function markChar(value: number, edge: number): string | null {
   return "#";
 }
 
-export function buildSky(cols: number, rows: number, seed = 7): SkyCell[][] {
+export interface SkyOptions {
+  /** Centre of the big mark as a fraction of the width and height. */
+  readonly x?: number;
+  readonly y?: number;
+  /** Size of the big mark relative to the login sky. */
+  readonly scale?: number;
+  /** Fraction of cells that hold dust. */
+  readonly dust?: number;
+}
+
+export function buildSky(
+  cols: number,
+  rows: number,
+  seed = 7,
+  options: SkyOptions = {},
+): SkyCell[][] {
+  const { x = 0.72, y = 0.48, scale = 1, dust = 0.07 } = options;
   const next = random(seed);
-  const centerX = Math.round(cols * 0.72);
-  const centerY = Math.round(rows * 0.48);
-  const edge = Math.sqrt(Math.min(cols, rows * 2.1) * 0.42) * 1.5;
+  const centerX = Math.round(cols * x);
+  const centerY = Math.round(rows * y);
+  const edge = Math.sqrt(Math.min(cols, rows * 2.1) * 0.42) * 1.5 * scale;
   const grid: SkyCell[][] = [];
   for (let row = 0; row < rows; row += 1) {
     const line: SkyCell[] = [];
@@ -58,7 +74,7 @@ export function buildSky(cols: number, rows: number, seed = 7): SkyCell[][] {
           level: 1,
           delay: next() * 6,
         });
-      } else if (roll < 0.07) {
+      } else if (roll < dust) {
         line.push({ char: DUST[Math.floor(next() * DUST.length)] ?? ".", level: 0, delay: null });
       } else {
         line.push({ char: " ", level: 0, delay: null });

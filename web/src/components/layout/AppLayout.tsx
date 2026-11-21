@@ -11,12 +11,13 @@ import { teamShortName } from "../../lib/teams";
 import { PageBackContext } from "../../lib/backContext";
 import { ALL_PAGES } from "../../lib/tabs";
 import { pathForTab, useRoute } from "../../lib/useRoute";
+import { AsciiSky } from "../login/AsciiSky";
 import { LoginScreen } from "../login/LoginScreen";
 import { useTeams } from "../team/useTeams";
 import { ToastProvider } from "../ui/ToastProvider";
 import { AppRail } from "./AppRail";
 import { AppWindow } from "./AppWindow";
-import { DemoSheet } from "../../screens/DemoScreen";
+import { TestConsole } from "../console/TestConsole";
 import { DemoPlaceholder, ShellPage } from "./ShellPage";
 
 /** Routes between the shell (rail + page), the full-screen phone and the reserved demo panel. */
@@ -83,22 +84,27 @@ export function AppLayout() {
               onSelectTeam={selectTeam}
             />
             <PageBackContext.Provider value={pageBack}>
-              <div className="main-panel my-3 mr-3 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-hairline bg-panel max-sm:m-0 max-sm:rounded-none max-sm:border-0">
-                <ShellPage
-                  tabId={route.tabId}
-                  teamId={teamId}
-                  teamLabel={teamLabel(teams, teamId)}
-                  onNavigate={(tab) => {
-                    navigate(pathForTab(tab), { isDeepLink: true });
-                  }}
-                  person={person}
-                  teams={teams}
-                  onSelectTeam={selectTeam}
-                  onSignOut={signOut}
-                />
+              <div className="relative isolate my-3 mr-3 flex min-w-0 flex-1 overflow-hidden rounded-[24px] border border-hairline bg-panel max-sm:m-0 max-sm:rounded-none max-sm:border-0">
+                <AsciiSky tone="panel" />
+                <div className="main-panel flex min-w-0 flex-1 flex-col">
+                  <ShellPage
+                    tabId={route.tabId}
+                    teamId={teamId}
+                    teamLabel={teamLabel(teams, teamId)}
+                    onNavigate={(tab) => {
+                      navigate(pathForTab(tab), { isDeepLink: true });
+                    }}
+                    person={person}
+                    teams={teams}
+                    onSelectTeam={selectTeam}
+                    onSignOut={signOut}
+                  />
+                </div>
               </div>
             </PageBackContext.Provider>
-            <DemoSheet
+            <TestConsole
+              teamId={teamId}
+              teamLabel={teamLabel(teams, teamId)}
               onNavigate={(tab) => {
                 navigate(pathForTab(tab));
               }}

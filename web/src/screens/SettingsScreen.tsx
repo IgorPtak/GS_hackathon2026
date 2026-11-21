@@ -5,6 +5,7 @@ import { Card } from "../components/ui/Card";
 import { PageFrame } from "../components/ui/PageFrame";
 import { Segmented } from "../components/ui/Segmented";
 import { PRODUCT_NAME } from "../lib/brand";
+import { TEST_CONSOLE_SHORTCUT, openTestConsole } from "../lib/testConsole";
 import { isThemeValue } from "../lib/theme";
 import { teamShortName } from "../lib/teams";
 import { useTheme } from "../lib/useTheme";
@@ -97,13 +98,25 @@ export function SettingsScreen({
           hint="For engineers who want to look under the hood."
         >
           <ul className="flex flex-col divide-y divide-hairline">
+            <li>
+              <button
+                type="button"
+                onClick={openTestConsole}
+                className="flex w-full items-center justify-between py-3 text-left text-body transition-colors hover:text-accent-ink"
+              >
+                Test console
+                <kbd className="rounded-md border border-hairline bg-fill px-1.5 py-px font-sans text-caption font-medium text-ink-2">
+                  {TEST_CONSOLE_SHORTCUT}
+                </kbd>
+              </button>
+            </li>
             {LINKS.map((link) => (
               <li key={link.href}>
                 <a
                   href={link.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-between py-3 text-body hover:text-accent-ink"
+                  className="flex items-center justify-between py-3 text-body transition-colors hover:text-accent-ink"
                 >
                   {link.label}
                   <span className="text-meta text-ink-3">{new URL(link.href).host}</span>

@@ -30,7 +30,7 @@ export function RailItem({ label, icon, href, isActive, badge = 0, onSelect }: R
         aria-current={isActive ? "page" : undefined}
         aria-label={badge > 0 ? `${label}, ${String(badge)} pending` : label}
         className={cx(
-          "relative flex size-11 items-center justify-center rounded-tile border transition-colors",
+          "relative flex size-11 items-center justify-center rounded-tile border transition-[background-color,color,border-color,box-shadow,scale] duration-300 active:scale-95",
           isActive
             ? "border-hairline bg-card text-ink shadow-tile"
             : "border-transparent text-ink-2 hover:bg-fill hover:text-ink",

@@ -22,7 +22,6 @@ export interface TabDefinition {
 export const TABS: readonly TabDefinition[] = [
   { id: "inbox", label: "Inbox", path: "/inbox" },
   { id: "approvals", label: "Approvals", path: "/approvals" },
-  { id: "phone", label: "Phone", path: "/simulator" },
   { id: "rules", label: "Rules", path: "/rules" },
   { id: "connect", label: "Connect a system", path: "/connect" },
   { id: "runbooks", label: "Runbooks", path: "/runbooks" },
@@ -34,6 +33,8 @@ export const TABS: readonly TabDefinition[] = [
 export const EXTRA_PAGES: readonly TabDefinition[] = [
   { id: "home", label: "Home", path: "/home" },
   { id: "settings", label: "Settings", path: "/settings" },
+  /** Still reachable by URL; in the app the phone lives in the test console (Shift+D). */
+  { id: "phone", label: "Phone", path: "/simulator" },
 ];
 
 export const ALL_PAGES: readonly TabDefinition[] = [...EXTRA_PAGES, ...TABS];

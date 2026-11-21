@@ -90,14 +90,14 @@ export function HomeScreen({ teamId, teamLabel, person, onNavigate }: ScreenProp
             }}
           />
           <HomeTile
-            icon="phone"
-            title="Phone"
-            caption="See what reaches the on-call phone"
+            icon="people"
+            title="People & channels"
+            caption="Who is told, and how"
             onOpen={() => {
-              onNavigate("phone");
+              onNavigate("people");
             }}
           >
-            <p className="text-body text-ink-2">Calls, texts and approval codes.</p>
+            <p className="text-body text-ink-2">Email, text or a call, within working hours.</p>
           </HomeTile>
         </div>
       </div>

@@ -4,6 +4,7 @@ import type { ConfigValidationError, RuleRecord } from "../../api/types";
 import { useConfigLists } from "../recipients/useConfigLists";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
+import { Icon } from "../ui/icons";
 import { Segmented } from "../ui/Segmented";
 import { StatusChip } from "../ui/StatusChip";
 import { RulePreviewPanel } from "./RulePreviewPanel";
@@ -16,6 +17,8 @@ import { useRuleDraft, type RuleSource } from "./useRuleDraft";
 import { parseWhenFromRuleYaml } from "./conditionYaml";
 
 type Step = "when" | "route" | "preview";
+
+const NO_LINES: readonly number[] = [];
 
 const STEPS = [
   { value: "when", label: "When" },
@@ -36,8 +39,11 @@ export function RuleEditor({ source, version, team, onSaved }: RuleEditorProps) 
   const draft = useRuleDraft(source, team, onSaved);
   const { config } = useConfigLists();
   const { text, validation } = draft;
-  const errors = draft.shownErrors;
   const isNew = source.id === null;
+  // A blank new rule should not greet anyone in red: show problems once they start or move on.
+  const [hasMovedOn, setHasMovedOn] = useState(false);
+  const isQuiet = isNew && !draft.isChanged && !hasMovedOn;
+  const errors = isQuiet ? [] : draft.shownErrors;
   const hasForm = parseWhenFromRuleYaml(text).kind === "form";
   const isShownAtField = (e: ConfigValidationError) =>
     step === "when" && (e.path === "id" || e.path === "description");
@@ -59,22 +65,25 @@ export function RuleEditor({ source, version, team, onSaved }: RuleEditorProps) 
         options={STEPS}
         value={step}
         onChange={(value) => {
+          setHasMovedOn(true);
           setStep(value as Step);
         }}
       />
-      {step === "when" ? (
-        <RuleWhenStep yaml={text} isNew={isNew} errors={errors} onChange={draft.edit} />
-      ) : null}
-      {step === "route" ? (
-        <RuleRouteStep yaml={text} ownerTeam={team} config={config} onChange={draft.edit} />
-      ) : null}
-      {step === "preview" ? (
-        <RulePreviewPanel
-          draftYaml={text}
-          rule={draft.isValid ? validation.rule : null}
-          names={names}
-        />
-      ) : null}
+      <div key={step} className="animate-fade-up">
+        {step === "when" ? (
+          <RuleWhenStep yaml={text} isNew={isNew} errors={errors} onChange={draft.edit} />
+        ) : null}
+        {step === "route" ? (
+          <RuleRouteStep yaml={text} ownerTeam={team} config={config} onChange={draft.edit} />
+        ) : null}
+        {step === "preview" ? (
+          <RulePreviewPanel
+            draftYaml={text}
+            rule={draft.isValid ? validation.rule : null}
+            names={names}
+          />
+        ) : null}
+      </div>
       <ValidationErrorList
         errors={listed}
         isChecking={validation.isChecking}
@@ -89,15 +98,25 @@ export function RuleEditor({ source, version, team, onSaved }: RuleEditorProps) 
           {draft.saveMessage}
         </p>
       ) : null}
-      <details className="rounded-tile border border-hairline">
-        <summary className="cursor-pointer px-4 py-3 text-body font-medium">
-          Advanced (YAML)
+      <details className="group rounded-tile border border-hairline transition-colors open:bg-fill/30">
+        <summary className="flex list-none items-center gap-2 rounded-tile px-4 py-3 text-body font-medium transition-colors hover:bg-fill/60">
+          <Icon
+            name="chevron"
+            size={16}
+            className="-rotate-90 text-ink-2 transition-transform duration-300 group-open:rotate-0"
+          />
+          Advanced
+          <span className="text-meta font-normal text-ink-2">edit as YAML</span>
         </summary>
         <div className="space-y-2 px-4 pb-4">
           <p className="text-meta text-ink-2">
             The same rule as text. Changes here show up in the steps above, and the other way round.
           </p>
-          <YamlEditor value={text} errorLines={draft.lines} onChange={draft.edit} />
+          <YamlEditor
+            value={text}
+            errorLines={isQuiet ? NO_LINES : draft.lines}
+            onChange={draft.edit}
+          />
         </div>
       </details>
       <StepFooter
@@ -112,7 +131,10 @@ export function RuleEditor({ source, version, team, onSaved }: RuleEditorProps) 
         }
         isSaving={draft.isSaving}
         isChanged={draft.isChanged}
-        onStep={setStep}
+        onStep={(next) => {
+          setHasMovedOn(true);
+          setStep(next);
+        }}
         onSave={() => void draft.save()}
         onRevert={() => {
           draft.edit(source.yaml);
@@ -146,7 +168,7 @@ function StepFooter({
   const back: Step | null = step === "route" ? "when" : step === "preview" ? "route" : null;
   const next: Step | null = step === "when" ? "route" : step === "route" ? "preview" : null;
   return (
-    <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-wrap items-center gap-2 rounded-b-card border-t border-hairline bg-card px-6 py-4">
+    <div className="-mx-6 -mb-6 flex flex-wrap items-center gap-2 rounded-b-card border-t border-hairline px-6 py-4">
       {back ? (
         <Button
           onClick={() => {

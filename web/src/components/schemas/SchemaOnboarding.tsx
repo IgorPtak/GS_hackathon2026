@@ -4,7 +4,7 @@ import { IllustratedBanner } from "../ui/IllustratedBanner";
 
 import { useEventStream } from "../../hooks/useEventStream";
 import { Icon } from "../ui/icons";
-import { Segmented } from "../ui/Segmented";
+import { Stepper } from "../ui/Stepper";
 import { ConnectDraftSteps } from "./ConnectDraftSteps";
 import { SampleStep } from "./SampleStep";
 import type { SampleEvent } from "./schemaDraft";
@@ -23,11 +23,7 @@ interface Picked {
 
 type Step = 1 | 2 | 3;
 
-const STEP_OPTIONS = [
-  { value: "1", label: "1\u00a0Sample" },
-  { value: "2", label: "2\u00a0Mapping" },
-  { value: "3", label: "3\u00a0Test\u00a0&\u00a0save" },
-];
+const STEP_NAMES = ["Pick a sample", "Check the mapping", "Test and save"];
 
 /** Sample -> mapping -> test & save, with the saved mappings listed under "Advanced". */
 export function SchemaOnboarding({ teamId, onCreateRule }: SchemaOnboardingProps) {
@@ -51,8 +47,6 @@ export function SchemaOnboarding({ teamId, onCreateRule }: SchemaOnboardingProps
     inbox.reload();
   }
 
-  // Later steps are only reachable once a sample is picked; going back is always allowed.
-  const highest = picked ? 3 : 1;
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {step === 1 ? (
@@ -61,36 +55,37 @@ export function SchemaOnboarding({ teamId, onCreateRule }: SchemaOnboardingProps
           alerts can use it right away.
         </IllustratedBanner>
       ) : null}
-      <Segmented
-        label="Steps"
-        value={String(step)}
-        options={STEP_OPTIONS}
-        onChange={(value) => {
-          const next = Number(value);
-          if (next <= highest && (next === 1 || next === 2 || next === 3)) setStep(next);
+      <Stepper
+        label="Connect a system"
+        steps={STEP_NAMES}
+        current={step}
+        onBack={(next) => {
+          if (next === 1 || next === 2) setStep(next);
         }}
       />
-      {step === 1 || !picked ? (
-        <SampleStep
-          samples={inbox.items}
-          isLoading={inbox.isLoading}
-          error={inbox.error}
-          onPick={(sample) => {
-            setPicked((p) => ({ sample, nonce: (p?.nonce ?? 0) + 1 }));
-            setStep(2);
-          }}
-        />
-      ) : (
-        <ConnectDraftSteps
-          key={picked.nonce}
-          step={step === 3 ? 3 : 2}
-          sample={picked.sample}
-          team={teamId}
-          onStep={setStep}
-          onSaved={reset}
-          onCreateRule={onCreateRule}
-        />
-      )}
+      <div key={step} className="animate-fade-up">
+        {step === 1 || !picked ? (
+          <SampleStep
+            samples={inbox.items}
+            isLoading={inbox.isLoading}
+            error={inbox.error}
+            onPick={(sample) => {
+              setPicked((p) => ({ sample, nonce: (p?.nonce ?? 0) + 1 }));
+              setStep(2);
+            }}
+          />
+        ) : (
+          <ConnectDraftSteps
+            key={picked.nonce}
+            step={step === 3 ? 3 : 2}
+            sample={picked.sample}
+            team={teamId}
+            onStep={setStep}
+            onSaved={reset}
+            onCreateRule={onCreateRule}
+          />
+        )}
+      </div>
       <details className="group rounded-card border border-hairline bg-card px-6 py-4">
         <summary className="flex cursor-pointer list-none items-center gap-2 text-body font-semibold">
           <Icon

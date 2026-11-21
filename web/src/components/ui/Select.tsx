@@ -15,16 +15,23 @@ interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "onC
   readonly onChange: (value: string) => void;
 }
 
-/** Native <select> with our chevron; keyboard and mobile pickers come for free. */
+/**
+ * Native <select> with our chevron. Where `appearance: base-select` is supported the picker is a
+ * rounded card from index.css; elsewhere the OS picker shows. Keyboard and a11y stay native.
+ */
 export function Select({ options, value, onChange, className, ...rest }: SelectProps) {
   return (
-    <span className="relative block">
+    <span className="group/select relative block">
       <select
         value={value}
         onChange={(event) => {
           onChange(event.target.value);
         }}
-        className={cx(CONTROL_CLASS, "appearance-none pr-10", className)}
+        className={cx(
+          CONTROL_CLASS,
+          "select-base appearance-none pr-10 transition-[background-color,border-color] hover:bg-hairline/60 focus-visible:border-accent",
+          className,
+        )}
         {...rest}
       >
         {options.map((option) => (
@@ -36,7 +43,7 @@ export function Select({ options, value, onChange, className, ...rest }: SelectP
       <Icon
         name="chevron"
         size={16}
-        className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-ink-2"
+        className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-ink-2 transition-transform duration-300 group-has-[select:open]/select:rotate-180"
       />
     </span>
   );

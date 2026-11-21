@@ -5,15 +5,14 @@ import type { Alert } from "../api/types";
 import { AlertDetailPane } from "../components/alerts/AlertDetailPane";
 import { AlertList } from "../components/alerts/AlertList";
 import { InboxToolbar } from "../components/alerts/InboxToolbar";
-import { LivePipelineCard } from "../components/alerts/LivePipelineCard";
 import { useAlertCounts } from "../components/alerts/useAlertCounts";
 import { useAlertDetail } from "../components/alerts/useAlertDetail";
 import { useAlertFeed, type StatusFilter } from "../components/alerts/useAlertFeed";
 import { useAlertTransition } from "../components/alerts/useAlertTransition";
-import { useSendTestAlert } from "../components/alerts/useSendTestAlert";
 import { Button } from "../components/ui/Button";
-import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
+import { Icon } from "../components/ui/icons";
+import { cx } from "../lib/cx";
 import { PageFrame } from "../components/ui/PageFrame";
 import { ConnectionIndicator } from "../components/alerts/ConnectionIndicator";
 import { useEventStream } from "../hooks/useEventStream";
@@ -49,7 +48,6 @@ function TeamInbox({
   const feed = useAlertFeed(team, filter);
   const detail = useAlertDetail(selectedAlertId);
   const { counts, refresh: refreshCounts } = useAlertCounts(team);
-  const testAlert = useSendTestAlert(team, teamLabel);
   const { applyAlert: applyToFeed, reload: reloadFeed } = feed;
   const {
     applyAlert: applyToDetail,
@@ -114,13 +112,14 @@ function TeamInbox({
   const selectedAlert = detail.detail?.alert;
   const isSelected = selectedAlertId !== null;
   const isEmpty = !feed.isLoading && feed.error === null && feed.items.length === 0 && !isSelected;
-  const canSend = filter === "open" || filter === "all";
 
   const openCount = counts?.open;
   const context =
     openCount === undefined
       ? teamLabel
-      : `${String(openCount)} open alert${openCount === 1 ? "" : "s"}`;
+      : openCount === 0
+        ? "all clear"
+        : `${String(openCount)} open`;
 
   return (
     <PageFrame
@@ -132,37 +131,45 @@ function TeamInbox({
         <InboxToolbar
           filter={filter}
           counts={counts}
-          isSending={testAlert.isSending}
           onFilterChange={(next) => {
             setFilter(next);
             closeDetail();
           }}
-          onSendTestAlert={() => void testAlert.send()}
         />
       }
       actions={<ConnectionIndicator status={streamStatus} />}
+      isFlush
     >
-      <div className="flex flex-col gap-6">
-        {isSelected ? null : <LivePipelineCard onOpenDetails={onOpenInsights} />}
-        {isEmpty ? (
+      {isEmpty ? (
+        <div className="flex flex-1 items-center justify-center overflow-y-auto p-10">
           <InboxEmpty
-            canSend={canSend}
-            isSending={testAlert.isSending}
-            onSend={() => void testAlert.send()}
+            isOpenView={filter === "open" || filter === "all"}
+            onOpenInsights={onOpenInsights}
           />
-        ) : (
-          <div
-            className={
-              isSelected
-                ? "grid grid-cols-1 items-start gap-5 min-[1100px]:grid-cols-[minmax(340px,2fr)_3fr]"
-                : "grid grid-cols-1"
-            }
+        </div>
+      ) : (
+        <>
+          <section
+            aria-label="Alerts"
+            className={cx(
+              "min-h-0 w-full overflow-y-auto overscroll-contain bg-panel min-[1100px]:w-[420px] min-[1100px]:shrink-0 min-[1100px]:border-r min-[1100px]:border-hairline",
+              isSelected && "max-[1099px]:hidden",
+            )}
           >
-            <div className={isSelected ? "max-[1099px]:hidden" : undefined}>
+            <div key={filter} className="animate-fade-in">
               <AlertList feed={feed} selectedAlertId={selectedAlertId} onSelect={select} />
             </div>
+          </section>
+          <section
+            aria-label="Alert details"
+            className={cx(
+              "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain",
+              isSelected ? "bg-card" : "max-[1099px]:hidden",
+            )}
+          >
             {isSelected ? (
               <AlertDetailPane
+                key={selectedAlertId}
                 detail={detail}
                 pendingTransition={transition.pending}
                 transitionError={transition.error}
@@ -171,42 +178,56 @@ function TeamInbox({
                 }}
                 onClose={closeDetail}
               />
-            ) : null}
-          </div>
-        )}
-      </div>
+            ) : (
+              <NothingSelected />
+            )}
+          </section>
+        </>
+      )}
     </PageFrame>
   );
 }
 
+/** The calm right pane before anything is picked; the panel's star sky shows through. */
+function NothingSelected() {
+  return (
+    <div className="flex h-full animate-fade-in flex-col items-center justify-center gap-3 p-10 text-center">
+      <span className="flex size-16 items-center justify-center rounded-full bg-card/80 text-ink-3 shadow-tile backdrop-blur">
+        <Icon name="inbox" size={28} />
+      </span>
+      <p className="text-body font-medium text-ink-2">Pick an alert to see what happened</p>
+      <p className="max-w-xs text-meta text-ink-3">
+        Who was told, which runbook started, and what to do next.
+      </p>
+    </div>
+  );
+}
+
 function InboxEmpty({
-  canSend,
-  isSending,
-  onSend,
+  isOpenView,
+  onOpenInsights,
 }: {
-  canSend: boolean;
-  isSending: boolean;
-  onSend: () => void;
+  isOpenView: boolean;
+  onOpenInsights: () => void;
 }) {
   return (
-    <Card>
+    <div className="w-full max-w-md animate-fade-up">
       <EmptyState
-        icon="inbox"
-
-        title={canSend ? "All quiet" : "Nothing here"}
+        icon="check"
+        title={isOpenView ? "All quiet" : "Nothing here"}
         action={
-          canSend ? (
-            <Button variant="primary" icon="send" isLoading={isSending} onClick={onSend}>
-              Send test alert
+          isOpenView ? (
+            <Button variant="raised" icon="insights" onClick={onOpenInsights}>
+              See how the pipeline is doing
             </Button>
           ) : undefined
         }
       >
-        {canSend
-          ? "No alerts right now. Send a test alert to see one arrive."
+        {isOpenView
+          ? "No open alerts. New ones appear here the moment they arrive."
           : "Alerts you move to this state show up here."}
       </EmptyState>
-    </Card>
+    </div>
   );
 }
 

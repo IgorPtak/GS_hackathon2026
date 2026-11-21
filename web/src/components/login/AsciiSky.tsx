@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { buildSky } from "./skyLayout";
+import { cx } from "../../lib/cx";
+import { buildSky, type SkyOptions } from "./skyLayout";
 
 const CELL_WIDTH = 9;
 const CELL_HEIGHT = 18;
 
-/** Full-bleed ASCII night sky with gently twinkling stars, sized to its container. */
-export function AsciiSky() {
+const PANEL_SKY: SkyOptions = { x: 0.8, y: 0.7, scale: 0.55, dust: 0.03 };
+
+/**
+ * Full-bleed ASCII night sky with gently twinkling stars, sized to its container. The `panel`
+ * tone is the faint backdrop behind every page; `login` is the bright sign-in sky.
+ */
+export function AsciiSky({ tone = "login" }: { readonly tone?: "login" | "panel" }) {
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ cols: 160, rows: 50 });
 
@@ -27,7 +33,10 @@ export function AsciiSky() {
     };
   }, []);
 
-  const sky = useMemo(() => buildSky(size.cols, size.rows), [size]);
+  const sky = useMemo(
+    () => buildSky(size.cols, size.rows, 7, tone === "panel" ? PANEL_SKY : {}),
+    [size, tone],
+  );
 
   return (
     <div
@@ -35,7 +44,12 @@ export function AsciiSky() {
       aria-hidden="true"
       className="absolute inset-0 -z-10 overflow-hidden select-none"
     >
-      <pre className="ascii-sky m-0 font-mono text-[15px] leading-[18px] tracking-[0.06em]">
+      <pre
+        className={cx(
+          "m-0 font-mono text-[15px] leading-[18px] tracking-[0.06em]",
+          tone === "panel" ? "ascii-sky ascii-sky-panel" : "ascii-sky",
+        )}
+      >
         {sky.map((line, row) => (
           <div key={row}>
             {line.map((cell, col) =>
@@ -59,7 +73,7 @@ export function AsciiSky() {
           </div>
         ))}
       </pre>
-      <div className="ascii-glow absolute inset-0" />
+      {tone === "login" ? <div className="ascii-glow absolute inset-0" /> : null}
     </div>
   );
 }

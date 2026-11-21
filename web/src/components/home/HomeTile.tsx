@@ -28,7 +28,7 @@ export function HomeTile({
       type="button"
       onClick={onOpen}
       className={cx(
-        "group flex flex-col gap-4 rounded-card border border-hairline bg-card p-6 text-left transition-shadow hover:shadow-tile",
+        "group flex flex-col gap-4 rounded-card border border-hairline bg-card p-6 text-left shadow-card transition-[box-shadow,translate] duration-300 hover:-translate-y-0.5 hover:shadow-tile active:translate-y-0",
         className,
       )}
     >
@@ -39,7 +39,7 @@ export function HomeTile({
           </span>
           {title}
         </span>
-        <span className="text-ink-3 transition-transform group-hover:translate-x-0.5">
+        <span className="text-ink-3 transition-[translate,color] duration-300 group-hover:translate-x-0.5 group-hover:text-ink">
           <Icon name="chevronRight" size={18} />
         </span>
       </span>

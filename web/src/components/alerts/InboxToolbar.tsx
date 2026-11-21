@@ -1,6 +1,4 @@
-import { Button } from "../ui/Button";
 import { Pill } from "../ui/Pill";
-import { ToolbarDivider } from "../ui/Toolbar";
 import type { AlertCounts } from "./useAlertCounts";
 import type { StatusFilter } from "./useAlertFeed";
 
@@ -19,25 +17,13 @@ function countFor(counts: AlertCounts | null, filter: StatusFilter): number | un
 interface InboxToolbarProps {
   readonly filter: StatusFilter;
   readonly counts: AlertCounts | null;
-  readonly isSending: boolean;
   readonly onFilterChange: (filter: StatusFilter) => void;
-  readonly onSendTestAlert: () => void;
 }
 
-/** One primary pill, a divider, then the status filters with live counts. */
-export function InboxToolbar({
-  filter,
-  counts,
-  isSending,
-  onFilterChange,
-  onSendTestAlert,
-}: InboxToolbarProps) {
+/** The status filters with live counts. Test alerts live in the test console (Shift+D). */
+export function InboxToolbar({ filter, counts, onFilterChange }: InboxToolbarProps) {
   return (
     <div role="toolbar" aria-label="Inbox" className="flex flex-wrap items-center gap-2">
-      <Button variant="primary" icon="send" isLoading={isSending} onClick={onSendTestAlert}>
-        Send test alert
-      </Button>
-      <ToolbarDivider />
       {FILTERS.map((option) => (
         <Pill
           key={option.id}

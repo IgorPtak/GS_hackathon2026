@@ -39,13 +39,26 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const api = useMemo<ToastApi>(() => ({ show }), [show]);
 
+  // Toasts live in a manual popover so they sit above an open modal dialog (top layer). Re-showing
+  // it on each toast moves it to the top of that layer, above a dialog opened since.
+  const region = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = region.current;
+    if (!element || !("showPopover" in element)) return;
+    if (element.matches(":popover-open")) element.hidePopover();
+    if (toasts.length > 0) element.showPopover();
+  }, [toasts]);
+
   return (
     <ToastContext value={api}>
       {children}
       <div
+        ref={region}
+        popover="manual"
         role="status"
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex flex-col items-center gap-2 px-4"
+        style={{ inset: "auto 0 24px 0" }}
+        className="pointer-events-none fixed z-[60] m-0 flex h-auto w-full flex-col items-center gap-2 overflow-visible border-0 bg-transparent p-0 px-4 text-ink [&:not(:popover-open)]:hidden"
       >
         {toasts.map((toast) => (
           <div

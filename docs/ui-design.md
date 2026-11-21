@@ -140,7 +140,7 @@ A dark rounded tile on the rail with a white glyph: a small dot inside two conce
 │ ┌ window (radius 28) ───────────────────────────────────────────────┐ │
 │ │ rail │ Inbox  •  21 open alerts                    (◐) [Rates ▾]  │ │
 │ │ ┌──┐ │───────────────────────────────────────────────────────────│ │
-│ │ │◉ │ │ [● Send test alert]  │  (Open 21)  (Acknowledged)  (All)   │ │
+│ │ │◉ │ │ (Open 21)  (Acknowledged)  (Resolved)  (All)               │ │
 │ │ └──┘ │───────────────────────────────────────────────────────────│ │
 │ │  ✉   │ ┌ pulse card ───────────────────────────────────────────┐ │ │
 │ │  ✓ 3 │ │ (R) Live pipeline      ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ ● 0 lost   │ │ │
@@ -241,7 +241,7 @@ The guides are in `~/.claude/design-refs/mwg-guides/` (ui-components, visual-des
 7. **Runbooks.** A list. "Add a runbook" lets you paste plain text, then "Beacon turned this into 4 steps" shows a checklist with "Needs approval" chips, then Save. YAML lives under "Advanced".
 8. **People & channels.** A person card with their channels and working hours, edited in plain language: "During 08:00–20:00 Europe/Warsaw send critical alerts by SMS and phone, otherwise by email."
 9. **Insights.** Three hero numbers (events/s, p99, lost = 0) plus open alerts, small SVG sparklines from client-side history, and "Open Grafana" as a secondary pill.
-10. **Demo panel.** Hidden behind `Shift+D`, and also at the route `/demo`. A floating sheet with big buttons:
+10. **Test console.** Kept off the product screens: `Shift+D` (or Settings → Test console, or `?demo=open`) opens a side sheet with scenario buttons, the live stream of incoming events and the on-call phone. The route `/demo` still shows the scenario buttons. The scenarios are:
     - Send rates alert
     - Settlements workflow failure (fresh workflowId)
     - Send 500 duplicates

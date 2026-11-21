@@ -32,27 +32,29 @@ export function AlertListRow({ alert, isSelected, isFresh, now, onSelect }: Aler
           onSelect(alert.id);
         }}
         className={cx(
-          "flex w-full items-start gap-4 px-6 py-5 text-left transition-colors",
-          isSelected ? "bg-fill" : "hover:bg-fill/50",
+          "flex w-full items-start gap-3.5 rounded-[16px] border px-4 py-3.5 text-left transition-[background-color,border-color,box-shadow] duration-200",
+          isSelected
+            ? "border-hairline bg-card shadow-tile"
+            : "border-transparent hover:bg-card/70",
         )}
       >
-        <Avatar name={alert.team} team={alert.team} size="lg" />
-        <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <Avatar name={alert.team} team={alert.team} size="md" />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex items-center justify-between gap-3">
             <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-row font-semibold max-sm:line-clamp-2 max-sm:whitespace-normal">
+              <span className="truncate text-body font-semibold max-sm:line-clamp-2 max-sm:whitespace-normal">
                 {text.title}
               </span>
               {alert.count > 1 ? <CountBadge count={alert.count} /> : null}
             </span>
-            <span className="flex shrink-0 items-center gap-2 text-meta text-ink-2">
+            <span className="flex shrink-0 items-center gap-1.5 text-caption text-ink-2">
               <SeverityDot severity={alert.severity} />
               <span className="num" title={new Date(alert.last_seen).toLocaleString()}>
                 {formatRelativeTime(alert.last_seen, now)}
               </span>
             </span>
           </span>
-          <span className="line-clamp-2 text-body text-ink-2">{readableText(preview)}</span>
+          <span className="line-clamp-2 text-meta text-ink-2">{readableText(preview)}</span>
           {alert.status !== "open" || alert.is_group_summary ? (
             <span className="mt-0.5 flex flex-wrap gap-2">
               {alert.status !== "open" ? (

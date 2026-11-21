@@ -72,6 +72,13 @@ export function ProposeFixDialog({ alert, onClose, onCreated }: ProposeFixDialog
       isOpen
       onClose={onClose}
       title="Propose a fix"
+      width="lg"
+      subtitle={
+        <>
+          For rule <span className="font-medium text-ink">{alert.rule_id}</span>. A teammate reviews
+          it before anything changes.
+        </>
+      }
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -90,13 +97,11 @@ export function ProposeFixDialog({ alert, onClose, onCreated }: ProposeFixDialog
         </>
       }
     >
-      <div className="max-h-[68vh] space-y-4 overflow-y-auto pr-1">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-meta text-ink-2">
-            Rule <span className="font-mono text-ink">{alert.rule_id}</span>
-          </p>
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-tile bg-fill/60 px-4 py-3">
+          <p className="text-meta text-ink-2">Not sure where to start? Let AI suggest a fix.</p>
           <Button
-            variant="secondary"
+            variant="raised"
             icon="sparkles"
             isLoading={drafter.isDrafting}
             onClick={() => {
