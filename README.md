@@ -2,7 +2,7 @@
 
 Teams change alerts without fear and without code, and the AI only proposes.
 
-Flexible Alerting & Notification Service ingests events from HTTP webhooks (including Prometheus Alertmanager) and tailed log files into Redis Streams (`events`), evaluates YAML rules and schema profiles in stateless `processor` workers, persists alerts and outbox rows atomically in Postgres, relays them (`FOR UPDATE SKIP LOCKED`) to Redis Streams (`deliveries` and `runbook-jobs`), and dispatches deliveries through pluggable channels (`ui`, `email`, `sms`, `phone`, `webhook`) while running automated or human-approved runbook actions. Schema profiles, rules, recipients, channel preferences, channels, runbooks, and actions are YAML configuration synced to Postgres and hot-reloaded across every worker via Redis pub/sub (`config.changed`) with no restart. The LLM never runs on the hot path; it is used only at save time for free-text runbooks and for proposals that a human approves.
+Flexible Alerting & Notification Service ingests events from HTTP webhooks (including Prometheus Alertmanager) and tailed log files into Redis Streams (`events`), evaluates YAML rules and schema profiles in stateless `processor` workers, persists alerts and outbox rows atomically in Postgres, relays them (`FOR UPDATE SKIP LOCKED`) to Redis Streams (`deliveries` and `runbook-jobs`), and dispatches deliveries through pluggable channels (`ui`, `email`, `sms`, `phone`, `webhook`) while running automated or human-approved runbook actions. Schema profiles, rules, recipients, channel preferences, channels, runbooks, and actions are YAML configuration synced to Postgres and hot-reloaded across every worker via Redis pub/sub (`config.changed`) with no restart; a new source of an existing type is one YAML file in `config/sources/`, also with no restart. The LLM never runs on the hot path; it is used only at save time for free-text runbooks and for proposals that a human approves.
 
 ```text
 Webhook / Alertmanager / Log tail
@@ -30,6 +30,7 @@ Webhook / Alertmanager / Log tail
 
 ## Quickstart
 
+<!-- TODO: real repo URL -->
 ```bash
 git clone <repo> && cd <repo>
 cp .env.example .env
@@ -70,7 +71,7 @@ There is no authentication; pick a team (`Team Rates`, `Team Settlements`, `Team
 | Tab | What it shows |
 |---|---|
 | **Alerts** | Live SSE alert feed for the selected team with status filter (`Open`, `Acknowledged`, `Resolved`, `All`), severity badges, `×count` dedup badges, and collapsible group summaries with drill-down rows. Clicking an alert opens the detail drawer with fields, **Acknowledge** / **Resolve** buttons, **Propose a fix**, the rendered runbook (live action-run status and manual **Run** buttons), per-channel deliveries, the audit timeline, and raw last-event JSON. A collapsible **Recent events** panel sits below the feed. |
-| **Rules** | Team rules list with active versions, a CodeMirror YAML editor with live dot-path validation, and the **Preview** panel that backtests the draft rule over the last `15m` / `1h` / `6h` / `24h` of the `events` stream (scanned and matched events, alerts, deliveries per recipient and channel, sample titles) before saving. Below the editor, the **Recipients** section edits each team recipient's channel preferences and working hours. |
+| **Rules** | Team rules list with active versions, a CodeMirror YAML editor with live dot-path validation (conditions support `severity_gte` and `time_between`), and the **Preview** panel backtests the draft rule over the last `15m` / `1h` / `6h` / `24h` of the `events` stream (scanned and matched events, alerts, deliveries per recipient and channel, sample titles) before saving. Below the editor, the **Recipients** section edits each team recipient's channel preferences and working hours. |
 | **Runbooks** | Stored runbooks across all formats (`yaml`, `markdown`, `text`), showing step count, normalizer (`parser`, `llm` with model name, or `fallback`), and a side-by-side view of the original source next to the normalized steps. |
 | **Approvals** | Live queue of pending runbook **Approvals** (approve or reject with an optional comment) and **Fix proposals** owned by the selected team, showing line diffs for proposed rule or runbook changes with accept/reject actions. |
 | **Schemas** | **Unknown schema inbox** listing unmatched event shapes (source, event count, key paths) plus a **Paste a sample JSON event** box. Picking a sample opens the prefilled mapping form with a fingerprint picker, **Test on the last hour**, **Save schema profile**, and a shortcut to **Rules**, followed by the saved schema profiles list and **Recent events**. |
@@ -100,7 +101,9 @@ Measured on Apple M4 (10 cores, 16 GB RAM, Docker Desktop VM: 10 CPUs, 7.7 GB RA
 | Gateway down (60 s outage) | 100 | 1 / 1 | 9,000 | 18,000 / 18,000 | **0** | 1,327 ms | 69.4 s |
 | Kill processor (`docker kill`) | 200 | 2 / 1 | 12,000 | 24,000 / 24,000 | **0** | 405 ms | 1,131 ms |
 
-Saturation steps (20 s per step, `delivery=1`, sustainable = `events` drained within 5 s, p99 < 2 s, lost = 0): max sustainable throughput is **250 msg/s** with p99 dropping from **1,276 ms** (1 processor) to **858 ms** (2 processors) to **621 ms** (4 processors), with **0 lost** in every run.
+Saturation sweep (1/2/4 processors, 20 s per step, `delivery=1`, sustainable = `events` drained within 5 s, p99 < 2 s, lost = 0), measured **before the A-24 fixes**: max sustainable throughput is **250 msg/s** with p99 dropping from **1276 ms** (1 processor) to **858 ms** (2 processors) to **621 ms** (4 processors), with **0 lost** in every run.
+
+After the A-24 fixes (`outbox-relay` polls every 50 ms, `delivery` runs 2 replicas), the max sustainable rate is **≥ 350 msg/s**: at 350 msg/s p50 was **56 ms**, p99 **163 ms**, lost **0**. An in-network generator run at **500 msg/s** reached p50 **81.8 ms**, p99 **1917.9 ms** (about 1.9 s), lost **0**. The ~420 msg/s plateau seen with the host generator is the host-to-VM path, not the pipeline.
 
 Reproduce with:
 
@@ -118,6 +121,8 @@ uv run python loadtest/scenarios.py steady --duration 60
 
 - **Redis is a single point of failure** in this single-node Compose deployment (it holds the `events` / `deliveries` / `runbook-jobs` streams, dedup keys, group buffers, and pub/sub). In production, run Redis Sentinel or Redis Cluster, or replace the stream transport with Kafka or Redpanda partitioned by alert `fingerprint` (so dedup for a given alert stays on one processor partition), and add a Postgres standby replica.
 - **At-least-once plugin side effects on a crash:** Delivery workers guard sends with `delivery-done:<id>` and the runbook runner records `(alert_id, step_index, attempt)` in Postgres, so normal retries are idempotent; however, if a worker crashes after an external channel or action call succeeds but before its completion is recorded, the redelivered job can repeat the side effect.
+- **Fixed host ports on `api` and `ingest`:** both publish fixed ports (8000 and 8001), so `--scale` applies only to `processor`, `outbox-relay` and `delivery`.
+- **`events` retention waits for the slowest group:** `events` is trimmed only below the oldest position any consumer group still needs, so an abandoned consumer group makes the stream grow without bound.
 - **No authentication:** Team selection is a UI dropdown by design for the demo.
 
 ## Repository layout
