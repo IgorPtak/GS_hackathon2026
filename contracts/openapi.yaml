@@ -189,7 +189,7 @@ paths:
       tags:
       - runbooks
       operationId: runRunbookStep
-      summary: Start a manual step; creates an approval request when the step requires approval.
+      summary: Start a manual step; creates an approval request when the step requires approval. 409 when the alert is resolved or the step already has a run that has not failed.
       parameters:
       - $ref: '#/components/parameters/AlertId'
       - name: step_index
@@ -210,6 +210,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ActionRun'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
   /api/v1/alerts/{alert_id}/fix-proposals:
     post:
       tags:
@@ -434,6 +440,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RulePreview'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
   /api/v1/schema-profiles:
     get:
       tags:
@@ -1777,6 +1785,8 @@ components:
       - glob
       - regex
       - exists
+      - severity_gte
+      - time_between
       title: ConditionOperator
       type: string
     ConfigChangedEvent:

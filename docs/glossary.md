@@ -32,7 +32,7 @@ JSON on the wire is `snake_case` (no aliasing between Python and TypeScript).
 | **fingerprint** | fingerprint | Stable hash of selected event fields; identical fingerprint = identical event for dedup. | `NormalizedFields.fingerprint`, `Alert.fingerprint` |
 | **rule** | reguła | Condition + route + presentation + dedup/group/throttle + optional runbook, owned by a team. | `config/rules/*.yaml`, `Rule`, table `config_documents` (kind `rule`), UI "Rules" |
 | **condition** | warunek | Tree of `all` / `any` / `not` / leaf `{field, op, value}` evaluated on raw event JSON and normalized fields. | `Condition`, `alerting_core.rules.evaluate_condition` |
-| **operator** | operator | Leaf comparison: `eq ne gt gte lt lte in glob regex exists`. | `ConditionOperator` |
+| **operator** | operator | Leaf comparison: `eq ne gt gte lt lte in glob regex exists severity_gte time_between`. `severity_gte` ranks by severity order (aliases `WARN`→`warning`, `ERR`→`error`, `FATAL`/`CRIT`→`critical`, case-insensitive); `time_between` takes `HH:MM-HH:MM` (UTC, may wrap midnight) or `{range: HH:MM-HH:MM, timezone: <IANA>}`. | `ConditionOperator` |
 | **field path** | ścieżka | Dot path into the raw event (`payload.notional`) or normalized fields (`normalized.severity`). | `alerting_core.rules.resolve_field_path` |
 | **route** | routing | Which recipients and channels a rule's alerts go to. | `Rule.route`, `Route` |
 | **presentation** | prezentacja | Title/body templates, listed fields and color for a rule's alerts. | `Rule.present`, `Presentation` |
