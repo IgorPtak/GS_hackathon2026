@@ -122,7 +122,20 @@ def test_compile_error_is_422_pointing_at_when() -> None:
     assert r.status_code == 422
     body = r.json()
     assert body["error"] == "validation_failed"
-    assert body["details"][0]["path"] == "rule.when"
+    assert body["details"][0]["path"] == "rule.when.all[0].value"
+
+
+def test_bad_timezone_is_422() -> None:
+    cond = {
+        "field": "payload.x",
+        "op": "time_between",
+        "value": {"range": "09:00-17:00", "timezone": "Nope/Zone"},
+    }
+    bad = {**RULE, "when": {"all": [cond]}}
+    with make(SpyRedis([])) as client:
+        r = client.post("/api/v1/rules/preview", json={"rule": bad})
+    assert r.status_code == 422
+    assert r.json()["details"][0]["path"] == "rule.when.all[0].value"
 
 
 def test_registry_none_is_503() -> None:
