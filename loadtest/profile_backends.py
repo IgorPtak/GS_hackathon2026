@@ -125,12 +125,13 @@ async def _psql(container: str, user: str, db: str, sql: str) -> Any:
 
 
 async def _snapshot_backends(args: argparse.Namespace, init_ext: bool = False) -> dict[str, Any]:
+    init_error = None
     if init_ext:
         try:
             ext = "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"
             await _psql(args.postgres_container, args.pg_user, args.pg_db, ext)
-        except RuntimeError:
-            pass
+        except RuntimeError as exc:  # keep the reason; the statements query below reports it
+            init_error = str(exc)
     r_raw, pg_tbl = await asyncio.gather(
         stack.run_cmd("docker", "exec", args.redis_container, "redis-cli", "INFO", "commandstats"),
         _psql(args.postgres_container, args.pg_user, args.pg_db, _PG_TBL_SQL),
@@ -140,6 +141,8 @@ async def _snapshot_backends(args: argparse.Namespace, init_ext: bool = False) -
         pg_stmts = await _psql(args.postgres_container, args.pg_user, args.pg_db, _PG_STMT_SQL)
     except RuntimeError as exc:
         pg_note = f"pg_stat_statements unavailable (not preloaded?): {exc}"
+        if init_error:
+            pg_note += f"; CREATE EXTENSION failed: {init_error}"
     return {"redis": parse_redis_commandstats(r_raw), "pg_statements": pg_stmts,
             "pg_statements_note": pg_note, "pg_tables": pg_tbl}  # fmt: skip
 

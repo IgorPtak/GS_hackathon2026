@@ -218,3 +218,18 @@ Same stack (`processor=1`, `delivery=2`, `ingest` 2 workers, AOF on, identical g
 - **Control-group normalization:** untouched services (`mock-gateway`, `processor`, `outbox-relay`) shifted ~10 % between sessions from host clock/P-core/E-core scheduling (plus a background spike in `main` run 3 to `p99 = 1713 ms` and `4400.6 µs` on `delivery`, absorbed by the 3-run median). Comparing the median per-run `service / mock-gateway` ratio removes that drift (`delivery / mock-gateway` stays tight: `6.24, 6.20, 6.21` on `main` vs `5.49, 5.56, 5.49` on the branch), confirming **−11.5 %** on `delivery` and **−8.7 %** on `ingest`, closely matching `py-spy`.
 - **Latency and reliability:** median `p50 / p99` fell from `53.2 / 382.5 ms` (`main`) to `47.6 / 180.1 ms` (branch), with `lost = 0` in all 6 runs (branch run 1 had 1 client `ReadError` with `7499 / 7500` accepted and `14 998 / 14 998` delivered, and 0 error logs in `ingest`).
 - **Reproduce:** `uv run python loadtest/cpu_bench.py --rate 250 --duration 30 --runs 3`.
+
+## Ported swarm work (A-34), per step
+
+`loadtest/cpu_bench.py --rate 250 --duration 30 --runs 3` after rebuilding the stack from each commit (quiet machine, no parallel builds). `processor` is unchanged by every step, so values are normalized as `service / processor` (median µs per event) to remove host drift between sessions:
+
+| Step | delivery | redis | postgres | total (8 services) | cpu_bench p99 |
+|---|---|---|---|---|---|
+| before port (`a73fe8b`) | 1.849 | 0.684 | 1.522 | 6.045 | 225 ms |
+| 1–3: per-stage metrics, `pg_stat_statements`, quieter mock-gateway | 1.945 | 0.715 | 1.480 | 5.935 | 261 ms |
+| 4: team events published in one pipeline | 1.845 | **0.459** | 1.618 | 5.790 | 193 ms |
+| 5: claim/complete attempts in one Lua round trip, `FOR UPDATE` only for dead letters | **1.634** | 0.429 | **1.391** | **5.392** | 122 ms |
+
+- Step 4 cuts Redis CPU per event by ~36 %; step 5 cuts delivery by ~11 % and Postgres by ~14 % against step 4; all steps together −11 % total CPU per event.
+- `lost = 0` in every run. After step 5: `loadtest/postgres_restart_test.sh` (Postgres restarted at t = 15 s under 100 msg/s: 12 000 / 12 000 delivered) and `loadtest/lost_jobs_test.sh` (724 unread jobs wiped: lost 0).
+- Single steady 500 msg/s runs swung p99 between 0.2 and 2.4 s across all four commits, so they are not used for comparison.

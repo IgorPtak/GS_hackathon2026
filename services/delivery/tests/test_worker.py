@@ -186,6 +186,20 @@ async def test_circuit_open_too_long_dead_letters_to_fallback(pool, redis, plugi
     assert plugin.sent == []
 
 
+async def test_open_circuit_parks_once_without_claiming(pool, redis, plugin, worker) -> None:
+    job = email_job()
+    await redis.hset(
+        circuit_key("email"), mapping={"state": "open", "opened_at": int(time.time() * 1000)}
+    )
+
+    await worker.handle_batch([stream_message(job)])
+    await worker.handle_batch([stream_message(job)])  # a redelivery parks the same job again
+
+    assert await redis.exists(done_key(job.delivery_id)) == 0  # not claimed: no 60 s block
+    assert await redis.zcard(RETRIES_KEY) == 1  # identical parked jobs collapse
+    assert plugin.sent == []
+
+
 async def test_success_does_not_close_an_open_circuit(redis) -> None:
     breaker = CircuitBreaker(redis)
     await redis.hset(circuit_key("email"), mapping={"state": "open", "opened_at": 1})
