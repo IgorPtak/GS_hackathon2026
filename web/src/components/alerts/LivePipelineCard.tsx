@@ -1,4 +1,5 @@
-import { Avatar } from "../ui/Avatar";
+import { Icon } from "../ui/icons";
+import { cx } from "../../lib/cx";
 import { Card } from "../ui/Card";
 import { PulseBars } from "../ui/PulseBars";
 import { StatusChip } from "../ui/StatusChip";
@@ -12,13 +13,30 @@ function openInsights() {
 }
 
 /** The one bold spot of the Inbox: is everything flowing, how fast, and nothing lost. */
-export function LivePipelineCard({ teamId, teamLabel }: { teamId: string; teamLabel: string }) {
+export function LivePipelineCard() {
   const metrics = usePipelineMetrics();
   const words = describePipeline(metrics);
   return (
     <Card className="flex flex-wrap items-center gap-x-8 gap-y-4 @container">
       <div className="flex min-w-0 items-center gap-4">
-        <Avatar name={teamLabel} team={teamId} size="xl" />
+        <span
+          aria-hidden="true"
+          className={cx(
+            "flex size-14 shrink-0 items-center justify-center rounded-full",
+            words.tone === "critical"
+              ? "bg-critical/12 text-critical-ink"
+              : words.tone === "warning"
+                ? "bg-warning/20 text-warning-ink"
+                : words.tone === "neutral"
+                  ? "bg-fill text-ink-2"
+                  : "bg-success/12 text-success-ink",
+          )}
+        >
+          <Icon
+            name={words.tone === "success" ? "check" : words.tone === "neutral" ? "clock" : "alert"}
+            size={26}
+          />
+        </span>
         <div className="min-w-0">
           <h2 className="text-row font-semibold">{words.headline}</h2>
           <p className="text-meta text-ink-2" aria-live="polite">

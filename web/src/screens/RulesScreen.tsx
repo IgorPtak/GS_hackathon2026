@@ -12,6 +12,14 @@ export function RulesScreen({ teamId, teamLabel }: ScreenProps) {
     <PageFrame
       title="Rules"
       context={teamLabel}
+      onBack={
+        selection === null
+          ? undefined
+          : () => {
+              setSelection(null);
+            }
+      }
+      backLabel="All rules"
       actions={
         <Button
           variant="primary"

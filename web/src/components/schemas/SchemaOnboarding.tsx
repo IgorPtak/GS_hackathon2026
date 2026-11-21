@@ -1,5 +1,7 @@
 import { useState } from "react";
 
+import { IllustratedBanner } from "../ui/IllustratedBanner";
+
 import { useEventStream } from "../../hooks/useEventStream";
 import { Icon } from "../ui/icons";
 import { Segmented } from "../ui/Segmented";
@@ -53,6 +55,12 @@ export function SchemaOnboarding({ teamId, onCreateRule }: SchemaOnboardingProps
   const highest = picked ? 3 : 1;
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      {step === 1 ? (
+        <IllustratedBanner scene="connect" title="Connect a system" focus="75% 45%">
+          Show Beacon one event from your system. It suggests how to read it, you check it, and
+          alerts can use it right away.
+        </IllustratedBanner>
+      ) : null}
       <Segmented
         label="Steps"
         value={String(step)}

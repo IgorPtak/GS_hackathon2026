@@ -28,11 +28,10 @@ interface RuleEditorProps {
   readonly version: number | null;
   readonly team: string;
   readonly onSaved: (record: RuleRecord) => void;
-  readonly onClose: () => void;
 }
 
 /** The 3-step flow for one rule; the YAML under "Advanced" is the same text, kept in sync. */
-export function RuleEditor({ source, version, team, onSaved, onClose }: RuleEditorProps) {
+export function RuleEditor({ source, version, team, onSaved }: RuleEditorProps) {
   const [step, setStep] = useState<Step>("when");
   const draft = useRuleDraft(source, team, onSaved);
   const { config } = useConfigLists();
@@ -54,9 +53,6 @@ export function RuleEditor({ source, version, team, onSaved, onClose }: RuleEdit
         <h2 className="text-card-title font-semibold break-all">{title}</h2>
         {version === null ? null : <StatusChip tone="success">Active version {version}</StatusChip>}
         {draft.isChanged ? <StatusChip tone="warning">Unsaved changes</StatusChip> : null}
-        <Button variant="ghost" className="ml-auto" onClick={onClose}>
-          Back to rules
-        </Button>
       </div>
       <Segmented
         label="Rule steps"

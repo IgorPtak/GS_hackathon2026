@@ -1,3 +1,4 @@
+import { flushSync } from "react-dom";
 import { useCallback, useEffect, useState } from "react";
 
 import { TABS, type TabId } from "./tabs";
@@ -21,6 +22,18 @@ export function pathForTab(tabId: TabId): string {
   return TABS.find((tab) => tab.id === tabId)?.path ?? "/inbox";
 }
 
+/** A calm cross-fade of the main panel between sections, when the browser supports it. */
+function withViewTransition(change: () => void): void {
+  const isReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (isReduced || !("startViewTransition" in document)) {
+    change();
+    return;
+  }
+  document.startViewTransition(() => {
+    flushSync(change);
+  });
+}
+
 /** History API routing: the rail item lives in the URL so a reload keeps the place. */
 export function useRoute(): { route: Route; navigate: (path: string) => void } {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
@@ -32,7 +45,9 @@ export function useRoute(): { route: Route; navigate: (path: string) => void } {
       window.history.replaceState(null, "", pathForTab(DEFAULT_TAB) + window.location.search);
     }
     const handlePopState = () => {
-      setRoute(parseRoute(window.location.pathname));
+      withViewTransition(() => {
+        setRoute(parseRoute(window.location.pathname));
+      });
     };
     window.addEventListener("popstate", handlePopState);
     return () => {
@@ -41,8 +56,11 @@ export function useRoute(): { route: Route; navigate: (path: string) => void } {
   }, []);
 
   const navigate = useCallback((path: string) => {
-    window.history.pushState(null, "", path);
-    setRoute(parseRoute(path));
+    if (path === window.location.pathname) return;
+    window.history.pushState(null, "", path + window.location.search);
+    withViewTransition(() => {
+      setRoute(parseRoute(path));
+    });
   }, []);
 
   return { route, navigate };

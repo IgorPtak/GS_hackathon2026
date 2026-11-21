@@ -11,11 +11,11 @@ import { useAlertDetail } from "../components/alerts/useAlertDetail";
 import { useAlertFeed, type StatusFilter } from "../components/alerts/useAlertFeed";
 import { useAlertTransition } from "../components/alerts/useAlertTransition";
 import { useSendTestAlert } from "../components/alerts/useSendTestAlert";
-import { RecentEventsPanel } from "../components/events/RecentEventsPanel";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
-import { Icon } from "../components/ui/icons";
+import { PageFrame } from "../components/ui/PageFrame";
+import { ConnectionIndicator } from "../components/alerts/ConnectionIndicator";
 import { useEventStream } from "../hooks/useEventStream";
 
 /** Below this width the detail pane is a full-width drill-down (docs/ui-design.md "Rail"). */
@@ -108,50 +108,51 @@ function TeamInbox({ team, teamLabel }: { team: string; teamLabel: string }) {
   const isEmpty = !feed.isLoading && feed.error === null && feed.items.length === 0 && !isSelected;
   const canSend = filter === "open" || filter === "all";
 
+  const openCount = counts?.open;
+  const context =
+    openCount === undefined
+      ? teamLabel
+      : `${String(openCount)} open alert${openCount === 1 ? "" : "s"}`;
+
   return (
-    <div className="flex flex-col gap-5">
-      <div
-        className={isSelected ? "flex flex-col gap-5 max-[1099px]:hidden" : "flex flex-col gap-5"}
-      >
-        <LivePipelineCard teamId={team} teamLabel={teamLabel} />
+    <PageFrame
+      title="Inbox"
+      context={context}
+      onBack={isSelected ? closeDetail : undefined}
+      backLabel="Back to the inbox"
+      toolbar={
         <InboxToolbar
           filter={filter}
           counts={counts}
-          streamStatus={streamStatus}
           isSending={testAlert.isSending}
-          onFilterChange={setFilter}
+          onFilterChange={(next) => {
+            setFilter(next);
+            closeDetail();
+          }}
           onSendTestAlert={() => void testAlert.send()}
         />
-      </div>
-
-      {isEmpty ? (
-        <Card>
-          <EmptyState
-            icon="inbox"
-            action={
-              canSend ? (
-                <Button
-                  variant="primary"
-                  icon="send"
-                  isLoading={testAlert.isSending}
-                  onClick={() => void testAlert.send()}
-                >
-                  Send test alert
-                </Button>
-              ) : undefined
+      }
+      actions={<ConnectionIndicator status={streamStatus} />}
+    >
+      <div className="flex flex-col gap-6">
+        {isSelected ? null : <LivePipelineCard />}
+        {isEmpty ? (
+          <InboxEmpty
+            canSend={canSend}
+            isSending={testAlert.isSending}
+            onSend={() => void testAlert.send()}
+          />
+        ) : (
+          <div
+            className={
+              isSelected
+                ? "grid grid-cols-1 items-start gap-5 min-[1100px]:grid-cols-[minmax(340px,2fr)_3fr]"
+                : "grid grid-cols-1"
             }
           >
-            {canSend
-              ? "No alerts right now. Send a test alert to see one arrive."
-              : "Nothing here yet. Alerts you move to this state will show up here."}
-          </EmptyState>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 items-start gap-4 min-[1100px]:grid-cols-[minmax(340px,2fr)_3fr]">
-          <div className={isSelected ? "max-[1099px]:hidden" : undefined}>
-            <AlertList feed={feed} selectedAlertId={selectedAlertId} onSelect={select} />
-          </div>
-          <div className={isSelected ? undefined : "max-[1099px]:hidden"}>
+            <div className={isSelected ? "max-[1099px]:hidden" : undefined}>
+              <AlertList feed={feed} selectedAlertId={selectedAlertId} onSelect={select} />
+            </div>
             {isSelected ? (
               <AlertDetailPane
                 detail={detail}
@@ -162,30 +163,42 @@ function TeamInbox({ team, teamLabel }: { team: string; teamLabel: string }) {
                 }}
                 onClose={closeDetail}
               />
-            ) : (
-              <Card className="flex flex-col items-center gap-3 py-16 text-center text-ink-2">
-                <Icon name="inbox" size={28} />
-                <p className="text-body">Pick an alert to see what happened and what to do next.</p>
-              </Card>
-            )}
+            ) : null}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+    </PageFrame>
+  );
+}
 
-      <details
-        className={`group rounded-card border border-hairline bg-card px-6 py-4 ${isSelected ? "max-[1099px]:hidden" : ""}`}
+function InboxEmpty({
+  canSend,
+  isSending,
+  onSend,
+}: {
+  canSend: boolean;
+  isSending: boolean;
+  onSend: () => void;
+}) {
+  return (
+    <Card>
+      <EmptyState
+        icon="inbox"
+        scene="inbox"
+        title={canSend ? "All quiet" : "Nothing here"}
+        action={
+          canSend ? (
+            <Button variant="primary" icon="send" isLoading={isSending} onClick={onSend}>
+              Send test alert
+            </Button>
+          ) : undefined
+        }
       >
-        <summary className="flex list-none items-center justify-between text-body font-medium [&::-webkit-details-marker]:hidden">
-          Recent events
-          <span className="text-ink-2 transition-transform group-open:rotate-180">
-            <Icon name="chevron" size={18} />
-          </span>
-        </summary>
-        <div className="mt-3">
-          <RecentEventsPanel />
-        </div>
-      </details>
-    </div>
+        {canSend
+          ? "No alerts right now. Send a test alert to see one arrive."
+          : "Alerts you move to this state show up here."}
+      </EmptyState>
+    </Card>
   );
 }
 

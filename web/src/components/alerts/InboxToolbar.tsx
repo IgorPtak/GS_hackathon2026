@@ -1,8 +1,6 @@
-import type { StreamStatus } from "../../hooks/useEventStream";
 import { Button } from "../ui/Button";
 import { Pill } from "../ui/Pill";
 import { ToolbarDivider } from "../ui/Toolbar";
-import { ConnectionIndicator } from "./ConnectionIndicator";
 import type { AlertCounts } from "./useAlertCounts";
 import type { StatusFilter } from "./useAlertFeed";
 
@@ -21,7 +19,6 @@ function countFor(counts: AlertCounts | null, filter: StatusFilter): number | un
 interface InboxToolbarProps {
   readonly filter: StatusFilter;
   readonly counts: AlertCounts | null;
-  readonly streamStatus: StreamStatus;
   readonly isSending: boolean;
   readonly onFilterChange: (filter: StatusFilter) => void;
   readonly onSendTestAlert: () => void;
@@ -31,7 +28,6 @@ interface InboxToolbarProps {
 export function InboxToolbar({
   filter,
   counts,
-  streamStatus,
   isSending,
   onFilterChange,
   onSendTestAlert,
@@ -54,9 +50,6 @@ export function InboxToolbar({
           {option.label}
         </Pill>
       ))}
-      <span className="ml-auto max-sm:hidden">
-        <ConnectionIndicator status={streamStatus} />
-      </span>
     </div>
   );
 }

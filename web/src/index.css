@@ -201,3 +201,34 @@ dialog:not([open]) {
   color-scheme: light;
   color: #1d1d1f;
 }
+
+/* Section changes: only the main panel cross-fades; the rail stays still. */
+.main-panel {
+  view-transition-name: main-panel;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-old(main-panel) {
+  animation: panel-out 140ms ease-in both;
+}
+
+::view-transition-new(main-panel) {
+  animation: panel-in 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes panel-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}

@@ -19,7 +19,8 @@ const SLOW_MILLISECONDS = 3_000;
 const DELAYED_MILLISECONDS = 10_000;
 
 function describeSpeed(p99Milliseconds: number | null): string {
-  if (p99Milliseconds === null) return "Waiting for the first alerts to measure speed.";
+  if (p99Milliseconds === null)
+    return "Quiet in the last minute. New alerts reach people right away.";
   if (p99Milliseconds < 1_000) return "People are notified in under a second.";
   const seconds = Math.round(p99Milliseconds / 1_000);
   return `People are notified within about ${String(seconds)} second${seconds === 1 ? "" : "s"}.`;

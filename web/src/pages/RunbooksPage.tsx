@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
+
+import { useRegisterBack, type RegisterBack } from "../lib/useBackSlot";
 
 import { AddRunbookFlow } from "../components/runbooks/AddRunbookFlow";
 import { RunbookDetailView } from "../components/runbooks/RunbookDetailView";
@@ -6,6 +8,7 @@ import { RunbookList } from "../components/runbooks/RunbookList";
 import { useRunbooks } from "../components/runbooks/useRunbooks";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
+import { IllustratedBanner } from "../components/ui/IllustratedBanner";
 import { Skeleton } from "../components/ui/Skeleton";
 
 type View =
@@ -14,24 +17,29 @@ type View =
   | { readonly name: "detail"; readonly id: string; readonly isNew: boolean };
 
 /** Runbooks: cards, one runbook's step checklist, and the add flow. */
-export function RunbooksPage({ teamId }: { readonly teamId: string | null }) {
+export function RunbooksPage({
+  teamId,
+  onBackChange,
+}: {
+  readonly teamId: string | null;
+  readonly onBackChange?: RegisterBack;
+}) {
   const [view, setView] = useState<View>({ name: "list" });
   const state = useRunbooks(view.name === "detail" ? view.id : null);
 
-  function showList() {
+  const showList = useCallback(() => {
     setView({ name: "list" });
-  }
+  }, []);
+  useRegisterBack(onBackChange, view.name !== "list", showList);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex min-h-9 items-center justify-between gap-3">
-        {view.name === "list" ? (
-          <>
-            <p className="text-body text-ink-2">
-              {state.summaries.length > 0
-                ? `${String(state.summaries.length)} ${state.summaries.length === 1 ? "runbook" : "runbooks"}`
-                : "Step-by-step help for responders"}
-            </p>
+      {view.name === "list" ? (
+        <IllustratedBanner
+          scene="runbooks"
+          title="Let Beacon read your runbooks"
+          focus="72% 30%"
+          action={
             <Button
               variant="primary"
               icon="plus"
@@ -41,13 +49,25 @@ export function RunbooksPage({ teamId }: { readonly teamId: string | null }) {
             >
               Add a runbook
             </Button>
-          </>
-        ) : (
-          <Button variant="ghost" onClick={showList}>
-            ← All runbooks
-          </Button>
-        )}
-      </div>
+          }
+        >
+          Paste the steps the way your team writes them. Beacon turns them into a checklist and
+          always asks before anything risky.
+        </IllustratedBanner>
+      ) : null}
+      {view.name === "list" ? (
+        <div className="flex min-h-9 items-center justify-between gap-3">
+          {
+            <>
+              <p className="text-body text-ink-2">
+                {state.summaries.length > 0
+                  ? `${String(state.summaries.length)} ${state.summaries.length === 1 ? "runbook" : "runbooks"}`
+                  : "Step-by-step help for responders"}
+              </p>
+            </>
+          }
+        </div>
+      ) : null}
       {view.name === "list" ? (
         <RunbookList
           items={state.summaries}

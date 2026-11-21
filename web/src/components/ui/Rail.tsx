@@ -11,7 +11,7 @@ export function Rail({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-0 w-[72px] shrink-0 flex-col items-center gap-5 overflow-y-auto border-r border-hairline py-5 max-sm:w-16">
+    <div className="flex min-h-0 w-[84px] shrink-0 flex-col items-center gap-6 overflow-x-hidden overflow-y-auto py-6 [scrollbar-width:none] max-sm:w-16">
       {logo}
       <nav aria-label="Sections" className="flex flex-col items-center gap-1">
         {children}

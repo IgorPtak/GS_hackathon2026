@@ -102,9 +102,6 @@ export function RulesPage({ teamId, selection, onSelect }: RulesPageProps) {
         version={null}
         team={teamId}
         onSaved={handleSaved}
-        onClose={() => {
-          onSelect(null);
-        }}
       />
     );
   }
@@ -116,9 +113,6 @@ export function RulesPage({ teamId, selection, onSelect }: RulesPageProps) {
         version={record.version}
         team={teamId}
         onSaved={handleSaved}
-        onClose={() => {
-          onSelect(null);
-        }}
       />
     );
   }

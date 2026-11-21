@@ -4,7 +4,7 @@ import { Decoration, EditorView, GutterMarker, gutter } from "@codemirror/view";
 import CodeMirror from "@uiw/react-codemirror";
 import { useMemo } from "react";
 
-import { useIsDarkTheme } from "./useIsDarkTheme";
+import { useIsDarkTheme } from "../../lib/useIsDarkTheme";
 
 const errorLineFacet = Facet.define<readonly number[], readonly number[]>({
   combine: (values) => values.flat(),

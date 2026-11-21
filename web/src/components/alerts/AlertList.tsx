@@ -30,7 +30,7 @@ export function AlertList({ feed, selectedAlertId, onSelect }: AlertListProps) {
   const freshIds = useFreshAlertIds(feed.items, feed.isLoading);
 
   return (
-    <Card isPadded={false} className="p-2">
+    <Card isPadded={false} className="overflow-hidden">
       {feed.error ? (
         <p
           role="alert"
@@ -53,7 +53,7 @@ export function AlertList({ feed, selectedAlertId, onSelect }: AlertListProps) {
           <p className="px-4 py-8 text-center text-body text-ink-2">No alerts in this view.</p>
         )
       ) : (
-        <ul className="flex flex-col gap-0.5">
+        <ul className="flex flex-col divide-y divide-hairline">
           {feed.items.map((alert) => (
             <AlertListRow
               key={alert.id}

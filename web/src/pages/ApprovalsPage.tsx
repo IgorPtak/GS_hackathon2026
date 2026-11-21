@@ -75,8 +75,8 @@ function TeamApprovals({
     <div className="mx-auto max-w-4xl space-y-8">
       {isAllClear ? (
         <Card isPadded={false}>
-          <EmptyState icon="approval">
-            Nothing waiting for you. Approvals from runbooks and proposed fixes show up here.
+          <EmptyState icon="approval" scene="approvals" title="Nothing waiting for you">
+            Approvals from runbooks and proposed fixes show up here.
           </EmptyState>
         </Card>
       ) : null}

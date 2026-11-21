@@ -5,6 +5,7 @@ import { CountBadge } from "../ui/CountBadge";
 import { SeverityDot } from "../ui/SeverityDot";
 import { StatusChip } from "../ui/StatusChip";
 import { formatRelativeTime } from "./alertFormat";
+import { readableText, splitAlertTitle } from "./alertText";
 import { humanizeId } from "./timelineWords";
 
 interface AlertListRowProps {
@@ -19,7 +20,9 @@ interface AlertListRowProps {
 /** One inbox row: avatar, title with duplicate count, two-line preview, time and severity. */
 export function AlertListRow({ alert, isSelected, isFresh, now, onSelect }: AlertListRowProps) {
   const memberCount = alert.group_members?.length ?? 0;
-  const preview = alert.body.trim() || `From ${humanizeId(alert.source_id)}`;
+  const text = splitAlertTitle(alert.title);
+  const body = alert.body.trim() || `From ${humanizeId(alert.source_id)}`;
+  const preview = text.reason ? `${text.reason}. ${body}` : body;
   return (
     <li className={cx(isFresh && "animate-row-in")}>
       <button
@@ -29,16 +32,16 @@ export function AlertListRow({ alert, isSelected, isFresh, now, onSelect }: Aler
           onSelect(alert.id);
         }}
         className={cx(
-          "flex w-full items-start gap-3 rounded-tile px-3 py-3.5 text-left transition-colors",
-          isSelected ? "bg-fill" : "hover:bg-fill/60",
+          "flex w-full items-start gap-4 px-6 py-5 text-left transition-colors",
+          isSelected ? "bg-fill" : "hover:bg-fill/50",
         )}
       >
         <Avatar name={alert.team} team={alert.team} size="lg" />
-        <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="flex min-w-0 flex-1 flex-col gap-1.5">
           <span className="flex items-center justify-between gap-3">
             <span className="flex min-w-0 items-center gap-2">
               <span className="truncate text-row font-semibold max-sm:line-clamp-2 max-sm:whitespace-normal">
-                {alert.title}
+                {text.title}
               </span>
               {alert.count > 1 ? <CountBadge count={alert.count} /> : null}
             </span>
@@ -49,7 +52,7 @@ export function AlertListRow({ alert, isSelected, isFresh, now, onSelect }: Aler
               </span>
             </span>
           </span>
-          <span className="line-clamp-2 text-body text-ink-2">{preview}</span>
+          <span className="line-clamp-2 text-body text-ink-2">{readableText(preview)}</span>
           {alert.status !== "open" || alert.is_group_summary ? (
             <span className="mt-0.5 flex flex-wrap gap-2">
               {alert.status !== "open" ? (

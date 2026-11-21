@@ -100,6 +100,8 @@ const ICON_PATHS = {
   ),
   filter: <path d="M4 6h16M7 12h10M10 18h4" />,
   chevron: <path d="m6 9 6 6 6-6" />,
+  chevronLeft: <path d="m15 6-6 6 6 6" />,
+  chevronRight: <path d="m9 6 6 6-6 6" />,
   plus: <path d="M12 5v14M5 12h14" />,
   more: (
     <>
