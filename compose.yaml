@@ -29,6 +29,8 @@ services:
   postgres:
     image: postgres:16.13
     env_file: *env-file
+    # Preload pg_stat_statements so loadtest/profile_backends.py can report per-query cost.
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
     # Published so host-side tests (pytest, smoke, load test) reach the same database.
     ports:
       - "5432:5432"
@@ -124,7 +126,7 @@ services:
 
   mock-gateway:
     <<: *python-service
-    command: ["uvicorn", "services.mock_gateway.main:app", "--host", "0.0.0.0", "--port", "8090"]
+    command: ["uvicorn", "services.mock_gateway.main:app", "--host", "0.0.0.0", "--port", "8090", "--loop", "uvloop", "--no-access-log"]
     ports:
       - "8090:8090"
     healthcheck:

@@ -88,3 +88,33 @@ Verifies zero lost alerts when Postgres restarts mid-stream under load:
 Runs an in-network `scenarios.py steady` pass at 100 msg/s for 60 s, restarts
 `alerting-postgres-1` (`docker restart`) at `t = 15 s`, waits for settlement, prints the summary,
 and exits non-zero if `steady` exits non-zero, the run did not settle, or `lost != 0`.
+
+## Backend profiling (`profile_backends.py`)
+
+Profiles Redis and Postgres work per accepted event around an in-network `scenarios.py steady`
+run (`--sync-stdin`, default 250 msg/s for 30 s):
+
+    uv run python loadtest/profile_backends.py
+
+Before and after the load window it snapshots `redis-cli INFO commandstats`, Postgres
+`pg_stat_statements` and `pg_stat_user_tables`. `compose.yaml` preloads the library; the profiler
+runs `CREATE EXTENSION IF NOT EXISTS pg_stat_statements` itself before the first snapshot (no
+migration), and falls back with a note in the report if it is unavailable. Prints top-15 per-command
+(`calls/event`, `usec/event`) and per-query (`calls/event`, total and mean ms) tables and writes
+`loadtest/results/backend-profile-<timestamp>.json`.
+
+## Scale matrix and soak test (`soak_and_scale.py`)
+
+Runs multi-replica scaling comparisons or sustained-load memory and lag checks from the host:
+
+    uv run python loadtest/soak_and_scale.py --mode scale --rate 500 --duration 20
+    uv run python loadtest/soak_and_scale.py --mode soak --rate 250 --duration 120
+
+- `--mode scale`: steps through `(processor, delivery)` replica pairs (default `1:1,1:2,2:2,2:4`)
+  with in-network `steady` runs and always restores `processor=1, delivery=2` in `finally`.
+- `--mode soak`: runs a longer in-network `steady` pass while sampling container cgroup
+  `memory.current`, `cpu.stat`, and Redis stream lag every 15 s, reporting memory min/max/growth
+  (MB), CPU%, max lag, p50/p99, and `lost`.
+
+Writes JSON results to `loadtest/results/scale-<timestamp>.json` or
+`loadtest/results/soak-<timestamp>.json`.
