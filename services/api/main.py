@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import asyncpg
-from alerting_core.config import ConfigRegistry
+from alerting_core.config import ConfigRegistry, sync_config_files
 from alerting_core.connections import create_database_pool, create_redis_client
 from alerting_core.llm import LlmClient, LlmConfig, LlmHostNotAllowedError
 from alerting_core.logging import configure_logging, get_logger
@@ -98,6 +98,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     log.warning("config_source_fallback", extra={"reason": "database_unavailable"})
                     return None
                 app.state.pool = pool
+                try:
+                    # The only service that lets the LLM normalize free-text runbooks (A-49).
+                    await sync_config_files(
+                        pool, app.state.redis, resolved.config_dir, normalize_text_with_llm=True
+                    )
+                except (OSError, asyncpg.PostgresError, RedisError) as error:
+                    log.error("config_sync_failed", extra={"error": str(error)})
                 registry = ConfigRegistry()
                 try:
                     await registry.start(pool, app.state.redis)
