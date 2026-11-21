@@ -17,6 +17,7 @@ from alerting_contracts.config import Rule
 from alerting_core.config.registry import ConfigSnapshot
 from alerting_core.outbox import OutboxRow
 from alerting_core.routing import DeliveryTarget, check_throttle, resolve_deliveries
+from alerting_core.runbooks.rendering import render_runbook, runbook_step_texts
 from alerting_core.storage.alerts_write import AuditRow
 from redis.asyncio import Redis
 
@@ -55,6 +56,16 @@ async def throttle_targets(
     return await check_throttle(redis, rule, targets, now, alert_id=alert.id)
 
 
+def _runbook_steps(rule: Rule, alert: Alert, snapshot: ConfigSnapshot | None) -> list[str]:
+    """Numbered, filled-in runbook steps (empty without a runbook or snapshot)."""
+    if snapshot is None or not rule.runbook:
+        return []
+    runbook = snapshot.of_kind("runbook").get(rule.runbook)
+    if runbook is None:
+        return []
+    return runbook_step_texts(render_runbook(runbook, alert, snapshot.of_kind("action")))
+
+
 def build_side_effects(
     rule: Rule,
     alert: Alert,
@@ -64,6 +75,7 @@ def build_side_effects(
     public_base_url: str,
     event_sent_at: datetime | None,
     purpose: DeliveryPurpose = DeliveryPurpose.alert,
+    snapshot: ConfigSnapshot | None = None,
 ) -> AlertSideEffects:
     """Audit the creation, one delivery per allowed target, the runbook job (pure).
 
@@ -82,6 +94,7 @@ def build_side_effects(
         severity=alert.severity,
         fields=alert.fields,
         alert_url=f"{public_base_url.rstrip('/')}/alerts/{alert.id}",
+        runbook_steps=_runbook_steps(rule, alert, snapshot),
     )
     for target in allowed:
         job = DeliveryJob(
