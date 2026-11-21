@@ -90,3 +90,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-36 processor: delivery content now carries numbered, filled-in runbook steps (email prints them; SMS/phone stay link-only)
 - A-38 rules: severity_gte and time_between operators, validate_rule with dot-path errors, processor logs rule_invalid once per rule version
 - A-44 api/runbook-runner: manual runbook step run route (runRunbookStep) creates the action run (or approval request) in one transaction; the runner executes it once without restarting the walk
+- A-46 runbooks/llm: file free-text runbooks are normalized by the LLM at config sync (cached by content hash, 15 s bound, fallback to one text step); LLM steps are guarded (unknown action or missing params become text steps, approval forced unless the action is approval none and not restart/escalate/retry)

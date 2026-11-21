@@ -15,6 +15,14 @@ from redis.asyncio import Redis
 CONFIG_DIR = Path(__file__).resolve().parents[4] / "config"
 
 
+@pytest.fixture(autouse=True)
+def no_live_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """File loading must never reach a real LLM endpoint from unit tests."""
+    from alerting_core.runbooks import store
+
+    monkeypatch.setattr(store, "create_sync_llm_client", lambda cache: None)
+
+
 @pytest.fixture
 def config_dir() -> Path:
     return CONFIG_DIR
