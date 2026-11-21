@@ -82,3 +82,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-31 cleanups: webhook render_body reuses alerting_core.templating, relay uses model_dump_json, postgres/redis/python base images pinned to patch tags
 - A-33 ingest cleanups: idempotency key paths use `alerting_core.rules.field_paths` (temporary `lookup_path` removed), envelopes serialize in one `model_dump_json()` pass
 - A-34 swarm port: per-stage latency (outbox wait, post-relay) + Grafana panel, Postgres-restart and backend-profiler load tools, pg_stat_statements, team events in one pipeline, delivery claim/complete in one Lua call (−11 % total CPU per event, lost 0)
+- A-39 processor: `events` XTRIM MINID is now min(now − 2 h, every group's oldest pending / last-delivered id), compared numerically; skips the round (`events_trim_skipped`) when XINFO GROUPS/XPENDING fail, quietly when the stream is missing (new `services/processor/trimming.py`)

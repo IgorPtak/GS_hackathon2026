@@ -1,7 +1,6 @@
 """Processor worker: consumes `events`, creates alerts; serves /healthz and /metrics on 9101."""
 
 import asyncio
-import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 
@@ -16,33 +15,16 @@ from alerting_core.settings import Settings, get_settings
 from alerting_core.streams import StreamConsumer, default_consumer_name
 from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
-from redis.asyncio import Redis
-from redis.exceptions import RedisError
 
 from .auto_resolution import make_resolution_hook
 from .batch import EventProcessor
 from .folds import FoldTracker
 from .groups import GroupFlusher
+from .trimming import EVENTS_STREAM, trim_events
 
 log = get_logger(__name__)
 
-EVENTS_STREAM = "events"
 CONSUMER_GROUP = "processors"
-# Entries older than this are trimmed; by then they were processed or dead-lettered long ago.
-EVENTS_RETENTION_MS = 2 * 60 * 60 * 1000
-TRIM_INTERVAL_SECONDS = 60.0
-
-
-async def trim_events(redis: Redis, stop: asyncio.Event) -> None:
-    """XTRIM `events` by MINID (now - 2 h) every minute."""
-    while not stop.is_set():
-        min_id = f"{int(time.time() * 1000) - EVENTS_RETENTION_MS}-0"
-        try:
-            await redis.xtrim(EVENTS_STREAM, minid=min_id, approximate=True)
-        except RedisError:
-            log.exception("events_trim_failed")
-        with suppress(TimeoutError):
-            await asyncio.wait_for(stop.wait(), timeout=TRIM_INTERVAL_SECONDS)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
