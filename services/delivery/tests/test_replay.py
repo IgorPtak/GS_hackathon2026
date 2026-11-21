@@ -1,11 +1,15 @@
 """scripts/replay_dead_letters.py: a dead-lettered job delivers after replay, exactly once."""
 
 import importlib.util
+from datetime import UTC, datetime
 from pathlib import Path
 
-from plugins.channels.base import ChannelRejectedError, ChannelUnavailableError
+from alerting_contracts.alerts import AuditVerb, DeliveryStatus
 
-from .conftest import email_job, stream_message
+from plugins.channels.base import ChannelRejectedError, ChannelUnavailableError
+from services.delivery.records import Outcome, record_outcome
+
+from .conftest import email_job, load_snapshot, stream_message
 
 # scripts/ is not a package; load the script the way `uv run python scripts/...` runs it.
 _SPEC = importlib.util.spec_from_file_location(
@@ -85,3 +89,32 @@ async def test_worker_timeout_counts_as_an_outage(pool, redis, plugin, worker) -
     await worker.handle_batch([stream_message(job)])
 
     assert await redis.zcard("delivery-retries") == 1  # retried, not dead-lettered
+
+
+async def test_record_outcome_idempotency(pool) -> None:
+    ui = load_snapshot().of_kind("channel")["ui"]
+    job1 = email_job(delivery_id=10)
+    failed = Outcome(DeliveryStatus.failed, AuditVerb.delivery_failed, 1, "503")
+    delivered = Outcome(
+        DeliveryStatus.delivered, AuditVerb.delivery_delivered, 2, None, datetime.now(UTC)
+    )
+    dead = Outcome(DeliveryStatus.dead_lettered, AuditVerb.delivery_dead_lettered, 1, "rejected")
+    assert (await record_outcome(pool, job1, failed)).delivery is not None
+    first_done = await record_outcome(pool, job1, delivered)
+    assert first_done.delivery is not None and len(first_done.audit) == 1
+    assert (await record_outcome(pool, job1, delivered)).delivery is None
+    assert (await record_outcome(pool, job1, failed)).delivery is None
+    assert (await record_outcome(pool, job1, dead, fallback=ui)).delivery is None
+    assert await pool.fetchval("SELECT status FROM deliveries WHERE id = $1", 10) == "delivered"
+
+    job2 = email_job(delivery_id=11)
+    first_dead = await record_outcome(pool, job2, dead, fallback=ui)
+    assert first_dead.delivery is not None and [a.verb for a in first_dead.audit] == [
+        AuditVerb.delivery_dead_lettered,
+        AuditVerb.delivery_fallback,
+    ]
+    assert (await record_outcome(pool, job2, dead, fallback=ui)).delivery is None
+    assert (await record_outcome(pool, job2, failed)).delivery is not None
+    assert await pool.fetchval("SELECT status FROM deliveries WHERE id = $1", 11) == "dead_lettered"
+    assert (await record_outcome(pool, job2, dead, fallback=ui)).delivery is None
+    assert await pool.fetchval("SELECT count(*) FROM outbox") == 1

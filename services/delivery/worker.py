@@ -119,19 +119,22 @@ class DeliveryWorker:
             await self._give_up(job, channel, f"channel {job.channel_id} unavailable", job.attempt)
             return
         key = done_key(job.delivery_id)
-        if await self._redis.get(key) == b"done":
+        now_ms = int(time.time() * 1000)
+        # One Lua round trip: done / in-flight check, circuit check and the pending claim.
+        claim, retry_after_ms = await self._circuit.claim_attempt(
+            channel.id, key, now_ms, PENDING_TTL_SECONDS
+        )
+        if claim == "done":
             # Sent before; record it in case that worker died before writing the row (no-op
             # when the row already says delivered, so true duplicates stay quiet).
             DELIVERY_ATTEMPTS.labels(job.channel_type.value, "duplicate").inc()
             await self._delivered(job, observe_latency=False)
             return
-        now_ms = int(time.time() * 1000)
-        decision = await self._circuit.acquire(channel.id, now_ms)
-        if not decision.is_allowed:
-            await self._wait_for_circuit(job, channel, now_ms + max(decision.retry_after_ms, 500))
-            return
-        if not await self._redis.set(key, "pending", nx=True, ex=PENDING_TTL_SECONDS):
+        if claim == "in_flight":
             raise InFlightError(job.delivery_id)
+        if claim == "circuit_open":
+            await self._wait_for_circuit(job, channel, now_ms + max(retry_after_ms, 500))
+            return
         recipient = self._recipient(job)
         try:
             await self._send(job, recipient, channel)
@@ -149,8 +152,7 @@ class DeliveryWorker:
                 job, channel, f"{type(error).__name__}: {error}", is_outage=is_outage
             )
             return
-        await self._redis.set(key, "done", ex=DONE_TTL_SECONDS)
-        await self._circuit.record_success(channel.id)
+        await self._circuit.complete_attempt(channel.id, key, DONE_TTL_SECONDS)
         await self._delivered(job, relayed_at_s=relayed_at_s)
 
     async def _is_within_outage_budget(self, job: DeliveryJob) -> bool:
