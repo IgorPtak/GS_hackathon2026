@@ -22,6 +22,8 @@ export const CONDITION_OPS: readonly ConditionOp[] = [
   "glob",
   "regex",
   "exists",
+  "severity_gte",
+  "time_between",
 ];
 
 export type ParsedWhen =

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { apiClient } from "../../api/client";
 import type { ConfigValidationError, Rule } from "../../api/types";
+import { normalizePath } from "./ruleErrors";
 
 const DEBOUNCE_MS = 400;
 
@@ -35,7 +36,7 @@ export function useRuleValidation(yaml: string) {
           const isValid = data.is_valid && data.document !== null;
           setChecked({
             yaml,
-            errors: data.errors ?? [],
+            errors: (data.errors ?? []).map((e) => ({ ...e, path: normalizePath(e.path) })),
             // The server validated the document against the Rule model.
             rule: isValid ? (data.document as unknown as Rule) : null,
             requestError: null,

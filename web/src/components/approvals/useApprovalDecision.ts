@@ -38,9 +38,10 @@ export function useApprovalDecision(team: string, onDecided: (request: ApprovalR
           onDecided(data);
           succeeded = true;
         } else if (response.status === 409) {
-          message = error.message.startsWith("Already")
-            ? error.message
-            : `Already decided: ${error.message}`;
+          message =
+            error.error === "alert_resolved"
+              ? "This alert is already resolved, so the request was closed and nothing will run."
+              : "Someone already decided this request.";
         } else {
           message = `Could not send the decision (API error ${String(response.status)}).`;
         }

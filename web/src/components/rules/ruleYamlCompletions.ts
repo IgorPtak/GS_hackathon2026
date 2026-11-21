@@ -66,6 +66,12 @@ const VALUES_BY_KEY: Record<string, readonly [string, string][]> = {
     ["error", "Something failed"],
     ["critical", "Wake someone up"],
   ],
+  value: [
+    ["warning", "With severity_gte: this level or above"],
+    ["critical", "With severity_gte: only the top level"],
+    ['"08:00-20:00"', "With time_between: UTC hours"],
+    ['{ range: "08:00-20:00", timezone: Europe/Warsaw }', "With time_between: local hours"],
+  ],
   enabled: [
     ["true", "The rule is active"],
     ["false", "The rule is paused"],

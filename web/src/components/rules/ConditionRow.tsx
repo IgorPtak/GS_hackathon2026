@@ -27,6 +27,15 @@ const OP_OPTIONS = CONDITION_OPS.map((op) => ({ value: op, label: opLabel(op) })
 /** Keeps the value's shape valid for the new operator (list for `in`, boolean for `exists`). */
 function valueForOp(op: ConditionLeaf["op"], value: unknown): unknown {
   if (op === "exists") return true;
+  if (op === "severity_gte") {
+    const known = ["debug", "info", "warning", "error", "critical"];
+    return typeof value === "string" && known.includes(value.toLowerCase()) ? value : "warning";
+  }
+  if (op === "time_between") {
+    return typeof value === "string" && /^\d{2}:\d{2}-\d{2}:\d{2}$/.test(value)
+      ? value
+      : "08:00-20:00";
+  }
   if (op === "in") {
     if (Array.isArray(value)) return value;
     return value === null || value === "" ? [] : [value];
@@ -77,7 +86,11 @@ export function ConditionRow({
         <Field label="Value" error={errors.value}>
           {(control) => (
             <ConditionValueInput
-              key={leaf.op === "in" || leaf.op === "exists" ? leaf.op : "scalar"}
+              key={
+                ["in", "exists", "severity_gte", "time_between"].includes(leaf.op)
+                  ? leaf.op
+                  : "scalar"
+              }
               control={control}
               op={leaf.op}
               value={leaf.value}

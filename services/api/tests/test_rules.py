@@ -153,5 +153,5 @@ def test_put_invalid_regex_is_422_and_not_saved() -> None:
     with client:
         r = client.put("/api/v1/rules/platform-alertmanager", json={"rule": bad, "actor": ACTOR})
     assert r.status_code == 422
-    assert r.json()["details"][0]["path"] == "rule.when"
+    assert r.json()["details"][0]["path"] == "when.all[0].value"
     assert not pool.rows

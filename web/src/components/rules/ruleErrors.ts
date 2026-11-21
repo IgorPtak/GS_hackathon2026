@@ -21,18 +21,30 @@ export function errorLines(yaml: string, errors: readonly ConfigValidationError[
   return found.filter((line): line is number => line !== null);
 }
 
+/** `when.all[0].value` (rule validation) and `when.all.0.value` (Pydantic) name the same spot. */
+export function normalizePath(path: string): string {
+  return path.replace(/\[(\d+)\]/g, ".$1");
+}
+
+const withNormalPath = (error: ConfigValidationError): ConfigValidationError => ({
+  ...error,
+  path: normalizePath(error.path),
+});
+
 /** Reads ErrorResponse.details from a failed response body, if present. */
 export function detailsFromBody(body: unknown): ConfigValidationError[] {
   if (typeof body !== "object" || body === null || !("details" in body)) return [];
   const details = (body as { details?: unknown }).details;
   if (!Array.isArray(details)) return [];
-  return details.filter(
-    (item): item is ConfigValidationError =>
-      typeof item === "object" &&
-      item !== null &&
-      typeof (item as { path?: unknown }).path === "string" &&
-      typeof (item as { message?: unknown }).message === "string",
-  );
+  return details
+    .filter(
+      (item): item is ConfigValidationError =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as { path?: unknown }).path === "string" &&
+        typeof (item as { message?: unknown }).message === "string",
+    )
+    .map(withNormalPath);
 }
 
 export function messageFromBody(body: unknown, fallback: string): string {
@@ -124,7 +136,8 @@ const isUnionNoise = (e: ConfigValidationError) =>
  * The condition is a union of shapes, so the API reports every shape that did not fit. Keep the
  * real problem, or one plain sentence when nothing more specific is known; drop repeats.
  */
-export function tidyErrors(errors: readonly ConfigValidationError[]): ConfigValidationError[] {
+export function tidyErrors(raw: readonly ConfigValidationError[]): ConfigValidationError[] {
+  const errors = raw.map(withNormalPath);
   const hasReal = errors.some((e) => e.path.startsWith("when") && !isUnionNoise(e));
   const kept = errors.filter((e) => !isUnionNoise(e));
   const summary: ConfigValidationError[] =

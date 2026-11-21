@@ -48,6 +48,60 @@ function fromText(op: ConditionLeaf["op"], text: string, kind: ValueKind): unkno
   return text;
 }
 
+const SEVERITIES = [
+  { value: "debug", label: "Debug" },
+  { value: "info", label: "Info" },
+  { value: "warning", label: "Warning" },
+  { value: "error", label: "Error" },
+  { value: "critical", label: "Critical" },
+];
+
+const TIME_WINDOW = /^(\d{2}:\d{2})-(\d{2}:\d{2})$/;
+
+/** "HH:MM-HH:MM" in UTC as two time pickers; a window that wraps midnight is allowed. */
+function TimeWindowInput({
+  value,
+  control,
+  label,
+  onChange,
+}: {
+  readonly value: unknown;
+  readonly control: FieldControl;
+  readonly label: string;
+  readonly onChange: (value: unknown) => void;
+}) {
+  const match = typeof value === "string" ? TIME_WINDOW.exec(value) : null;
+  const from = match?.[1] ?? "08:00";
+  const to = match?.[2] ?? "20:00";
+  const timeClass =
+    "h-10 rounded-input border border-transparent bg-fill px-3 text-body text-ink num transition-colors hover:bg-hairline/60";
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <input
+        {...control}
+        type="time"
+        value={from}
+        aria-label={`${label} from`}
+        onChange={(event) => {
+          onChange(`${event.target.value}-${to}`);
+        }}
+        className={timeClass}
+      />
+      <span className="text-meta text-ink-2">to</span>
+      <input
+        type="time"
+        value={to}
+        aria-label={`${label} to`}
+        onChange={(event) => {
+          onChange(`${from}-${event.target.value}`);
+        }}
+        className={timeClass}
+      />
+      <span className="text-meta text-ink-3">UTC</span>
+    </div>
+  );
+}
+
 /** Value editor whose widget follows the operator: list, true/false, or typed scalar. */
 export function ConditionValueInput({
   op,
@@ -64,6 +118,21 @@ export function ConditionValueInput({
     setCommitted(value);
     setText(toText(value));
     setKind(kindOf(value));
+  }
+
+  if (op === "severity_gte") {
+    return (
+      <Select
+        {...control}
+        options={SEVERITIES}
+        value={typeof value === "string" && value !== "" ? value.toLowerCase() : "warning"}
+        onChange={onChange}
+      />
+    );
+  }
+
+  if (op === "time_between") {
+    return <TimeWindowInput value={value} control={control} label={label} onChange={onChange} />;
   }
 
   if (op === "exists") {

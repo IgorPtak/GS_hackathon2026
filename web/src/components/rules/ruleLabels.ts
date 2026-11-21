@@ -12,6 +12,8 @@ export const OP_LABELS: Record<ConditionLeaf["op"], string> = {
   glob: "matches the pattern",
   regex: "matches the regex",
   exists: "must be",
+  severity_gte: "at least severity",
+  time_between: "between hours",
 };
 
 export function opLabel(op: ConditionLeaf["op"]): string {
