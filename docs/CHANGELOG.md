@@ -71,3 +71,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-01 smoke 14h: settlements alerts from earlier runs are resolved first (runbook starts again); the phone APPROVE reply comes from settlements on-call piotr
 - Redis persistence: AOF (fsync every second) on a named volume; a hard Redis kill under 200 msg/s lost 378 deliveries before, 0 after
 - Relay reconciler: re-publishes relayed delivery jobs still pending after 30 s (lost in Redis), at most once per 11 min per delivery; recovered all 378 jobs lost in the Redis-kill test
+- A-24 in-network loadgen and per-request CPU fixes: run steady load inside the compose network, add sniffio (-11.5% normalized delivery CPU/event), disable ingest access log (-8.7% normalized ingest CPU/event), and add cgroup cpu_bench.py
