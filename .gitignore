@@ -17,4 +17,4 @@ loadtest/results/*.tmp
 .vscode/
 .claude/worktrees/
 loadtest/results/profiles/load.log
-loadtest/results/cpu-bench-*.json
+loadtest/results/*.json

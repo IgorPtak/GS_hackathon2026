@@ -83,7 +83,7 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-33 ingest cleanups: idempotency key paths use `alerting_core.rules.field_paths` (temporary `lookup_path` removed), envelopes serialize in one `model_dump_json()` pass
 - A-34 swarm port: per-stage latency (outbox wait, post-relay) + Grafana panel, Postgres-restart and backend-profiler load tools, pg_stat_statements, team events in one pipeline, delivery claim/complete in one Lua call (−11 % total CPU per event, lost 0)
 - S-04 contract v1.1: `severity_gte` and `time_between` condition operators, 404/409/422 on the manual step-run route, 422 on rule preview
-- A-35 loadtest: raw result files committed under loadtest/results (cpu-bench and profile logs excluded), results doc summary and 500 msg/s row added, compose header corrected
+- A-35 loadtest: raw result JSON kept local and gitignored (only the CSV sample and py-spy profiles are committed), results doc summary and 500 msg/s row added, compose header corrected
 - A-37 ingest: sources come from the ConfigRegistry and reload on config.changed (new/removed sources and log-tail start/stop/restart, no restart needed)
 - A-39 processor: `events` XTRIM MINID is now min(now − 2 h, every group's oldest pending / last-delivered id), compared numerically; skips the round (`events_trim_skipped`) when XINFO GROUPS/XPENDING fail, quietly when the stream is missing (new `services/processor/trimming.py`)
 - A-45 runbook formats: markdown inline `action key=value` params and approval, "needs approval" prose, actions with missing required params become text steps

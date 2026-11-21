@@ -6,11 +6,10 @@ Current max sustainable rate is **≥ 350 msg/s** (p99 < 2 s, lag drained, zero 
 350 msg/s: p99 163 ms). Saturation with the host generator plateaus at **~420 msg/s** regardless of processor count
 (1, 2 or 4 processors all stop at 400–428 msg/s). The in-network generator later reached **500 msg/s** with
 p99 1.9 s and zero lost (see the 500 msg/s row and "Host vs in-network generator"), so the ~420 plateau is the
-host-to-VM path, not the pipeline. Every number here has its raw JSON or CSV committed under `loadtest/results/`.
+host-to-VM path, not the pipeline. Raw per-run JSON is written locally to `loadtest/results/` (gitignored, not published); file names below identify the run, and every scenario is reproducible with the commands in `loadtest/README.md`.
 
 First measurement (task A-21), 2026-11-20. Scenarios: `loadtest/scenarios.py` (see `loadtest/README.md`).
-Raw data: `loadtest/results/*.json` (one file per run, every step with counters, latency, lag samples).
-Raw cpu-bench output is not committed.
+Raw data: `loadtest/results/*.json`, written locally per run (every step with counters, latency, lag samples); not committed.
 
 ## Measurement design
 
