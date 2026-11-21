@@ -29,6 +29,7 @@ from .routers import (
     phone_simulator,
     recipients,
     rules,
+    runbook_runs,
     runbooks,
     schema_profiles,
     stream,
@@ -42,6 +43,7 @@ DATABASE_RETRY_SECONDS = 5.0
 ROUTERS = (
     alerts,
     runbooks,
+    runbook_runs,
     fix_proposals,
     fix_proposal_drafts,
     config,

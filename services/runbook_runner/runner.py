@@ -138,6 +138,8 @@ class RunbookWalker:
             )
             return
         final = await self._execute(step, run)
+        if not (step.is_automatic or step.requires_approval):
+            return  # a manual step run from the UI does not restart the automatic walk
         await self._walk(after_index=step.index, previous=final.status)
 
     async def _cancel_for_resolved_alert(self, run: ActionRun) -> None:
