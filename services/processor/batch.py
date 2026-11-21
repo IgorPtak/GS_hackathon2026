@@ -189,6 +189,7 @@ class EventProcessor:
                         suppressed,
                         public_base_url=self._settings.public_base_url,
                         event_sent_at=first.envelope.sent_at or first.envelope.received_at,
+                        snapshot=snapshot,
                     )
                     outbox_rows.extend(effects.outbox_rows)
                     audit_rows.extend(effects.audit_rows)
