@@ -396,7 +396,8 @@ class RunbookRunner:
         extra = {"alert_id": job.alert_id, "job_type": job.job_type, "runbook_id": job.runbook_id}
         try:
             # Row lock: a concurrent resolve waits until this job's transaction ends, so the
-            # status read below stays true while actions run.
+            # status read below stays true while actions run. lock_alert is only an advisory
+            # lock between runners; it does not block an UPDATE of the alert row.
             await connection.execute(
                 "SELECT 1 FROM alerts WHERE id = $1::uuid FOR UPDATE", job.alert_id
             )
