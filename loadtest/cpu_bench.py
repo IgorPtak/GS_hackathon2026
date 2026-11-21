@@ -25,6 +25,8 @@ RESULTS = Path(__file__).parent / "results"
 PROJECT = "alerting"
 _DEFAULT_SERVICES_STR = "ingest processor outbox-relay delivery mock-gateway postgres redis"
 DEFAULT_SERVICES = tuple(_DEFAULT_SERVICES_STR.split())
+# Through `proxy`, so the load spreads over every ingest replica (one DNS answer would pin one).
+DEFAULT_INGEST_URL = "http://proxy:8001"
 
 
 def parse_cpu_stat(text: str) -> dict[str, int]:
@@ -141,11 +143,12 @@ async def snapshot_cpu(containers: Sequence[str]) -> dict[str, dict[str, int]]:
 
 def _build_load_cmd(args: argparse.Namespace) -> list[str]:
     db = "postgresql://alerting:change-me-local-only@postgres:5432/alerting"
+    ingest_url = getattr(args, "ingest_url", DEFAULT_INGEST_URL)
     return [
         # The image runs as uid 10001; run as the host user so results/*.json stay writable.
         "docker", "run", "--rm", "-i", "--network", args.network,
         "--user", f"{os.getuid()}:{os.getgid()}", "-v", f"{REPO}:/work",
-        "-w", "/work", "-e", "INGEST_URL=http://ingest:8001", "-e", f"LOADTEST_DATABASE_URL={db}",
+        "-w", "/work", "-e", f"INGEST_URL={ingest_url}", "-e", f"LOADTEST_DATABASE_URL={db}",
         "-e", "LOADTEST_REDIS_URL=redis://redis:6379/0", args.image, "python",
         "loadtest/scenarios.py", "steady", "--rate", str(args.rate),
         "--duration", str(args.duration), "--concurrency", str(args.concurrency), "--sync-stdin",
@@ -263,6 +266,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("--concurrency", _positive_int, 16), ("--cooldown", float, 3.0),
         ("--services", _csv, DEFAULT_SERVICES), ("--image", str, "alerting-python:dev"),
         ("--network", str, "alerting_default"), ("--label", str, ""),
+        ("--ingest-url", str, DEFAULT_INGEST_URL),
     ):  # fmt: skip
         p.add_argument(flag, type=typ, default=default)
     return p

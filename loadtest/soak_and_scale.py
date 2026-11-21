@@ -31,17 +31,23 @@ _LAG_KEYS = ("events_lag", "events_pending", "deliveries_lag", "deliveries_pendi
 _STEP_KEYS = "run_id accepted achieved_ingest_msg_s processed_msg_s lost is_settled".split()
 
 
-def parse_scale_pairs(raw: str) -> list[tuple[int, int]]:
-    """Parse `processor:delivery` pairs like `'1:1,1:2,2:2,2:4'` into integer tuples."""
-    pairs = []
+def parse_scale_pairs(raw: str) -> list[tuple[int, int, int, int]]:
+    """Parse `processor:delivery[:ingest[:outbox-relay]]` steps like `'1:1,2:2:2,4:4:3:2'`.
+
+    Missing ingest and outbox-relay counts default to 1, so plain `p:d` pairs keep working.
+    """
+    steps = []
     for item in (p.strip() for p in raw.split(",") if p.strip()):
-        p_s, sep, d_s = item.partition(":")
-        if not sep or (p := int(p_s)) < 1 or (d := int(d_s)) < 1:
-            raise ValueError(f"invalid scale pair '{item}'; expected 'p:d' with >= 1")
-        pairs.append((p, d))
-    if not pairs:
-        raise ValueError("at least one processor:delivery pair is required")
-    return pairs
+        parts = item.split(":")
+        if not 2 <= len(parts) <= 4:
+            raise ValueError(f"invalid scale step '{item}'; expected 'p:d[:i[:r]]'")
+        counts = [int(x) for x in parts] + [1] * (4 - len(parts))
+        if min(counts) < 1:
+            raise ValueError(f"invalid scale step '{item}'; every replica count must be >= 1")
+        steps.append((counts[0], counts[1], counts[2], counts[3]))
+    if not steps:
+        raise ValueError("at least one processor:delivery step is required")
+    return steps
 
 
 def parse_cgroup_sample(text: str) -> dict[str, int]:
@@ -100,21 +106,29 @@ def summarize_soak_samples(samples: Sequence[dict[str, Any]], c2s: dict[str, str
                     for k in _LAG_KEYS}}  # fmt: skip
 
 
-async def scale_pair(processor: int, delivery: int, settle_s: float = 5.0) -> None:
-    """Scale processor and delivery replicas, wait for healthy status, and let consumers join."""
-    await stack.compose("up", "-d", "--no-recreate", "--no-deps", "--no-build",
-                        "--scale", f"processor={processor}", "--scale", f"delivery={delivery}",
-                        "processor", "delivery")  # fmt: skip
+async def scale_pair(
+    processor: int, delivery: int, ingest: int = 1, relay: int = 1, settle_s: float = 5.0
+) -> None:
+    """Scale the pipeline services, wait for healthy status, and let consumers join.
+
+    Ingest replicas sit behind `proxy`, which re-resolves compose DNS every 5 s, so settle_s
+    (default 5 s) also covers the proxy picking up new ingest replicas.
+    """
+    wanted = {"processor": processor, "delivery": delivery, "ingest": ingest, "outbox-relay": relay}
+    scale_args = [arg for svc, n in wanted.items() for arg in ("--scale", f"{svc}={n}")]
+    await stack.compose(
+        "up", "-d", "--no-recreate", "--no-deps", "--no-build", *scale_args, *wanted
+    )  # fmt: skip
     fmt = "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}"
     for _ in range(90):
-        p_ids, d_ids = [await stack.running_containers(s) for s in ("processor", "delivery")]
-        if len(p_ids) == processor and len(d_ids) == delivery:
-            out = await stack.run_cmd("docker", "inspect", "--format", fmt, *p_ids, *d_ids)
+        ids = {svc: await stack.running_containers(svc) for svc in wanted}
+        if all(len(ids[svc]) == n for svc, n in wanted.items()):
+            out = await stack.run_cmd("docker", "inspect", "--format", fmt, *sum(ids.values(), []))
             if all(s.strip() in ("healthy", "running") for s in out.splitlines() if s.strip()):
                 break
         await asyncio.sleep(1.0)
     else:
-        raise RuntimeError(f"timed out waiting for healthy replicas ({processor}:{delivery})")
+        raise RuntimeError(f"timed out waiting for healthy replicas ({wanted})")
     await asyncio.sleep(max(settle_s, 0.0))
 
 
@@ -135,16 +149,18 @@ async def _take_soak_sample(ns: Sequence[str], redis: Redis, t0: float) -> dict[
 
 
 async def run_scale(args: argparse.Namespace) -> dict[str, Any]:
-    """Sweep `(processor, delivery)` pairs and always restore `processor=1, delivery=2`."""
+    """Sweep replica steps and always restore the compose defaults."""
     steps: list[dict[str, Any]] = []
     try:
-        for p_rep, d_rep in args.pairs:
-            print(f"--- scaling processor={p_rep} delivery={d_rep} ---", flush=True)
-            await scale_pair(p_rep, d_rep, args.settle_s)
+        for p_rep, d_rep, i_rep, r_rep in args.pairs:
+            print(f"--- scaling processor={p_rep} delivery={d_rep} ingest={i_rep} "
+                  f"outbox-relay={r_rep} ---", flush=True)  # fmt: skip
+            await scale_pair(p_rep, d_rep, i_rep, r_rep, args.settle_s)
             _, _, wall_s, s_file, rc = await pb.run_steady_synced(args)
             step = json.loads((RESULTS / s_file).read_text())["steps"][0]
             lat, lg = step["latency_ms"].get("all", {}), step["lag"]
             steps.append({"processor_replicas": p_rep, "delivery_replicas": d_rep,
+                          "ingest_replicas": i_rep, "outbox_relay_replicas": r_rep,
                           "steady_file": s_file, "returncode": rc, "wall_s": round(wall_s, 3),
                           "p50_ms": lat.get("p50"), "p99_ms": lat.get("p99"),
                           "max_events_lag": lg["max_events_lag"],
@@ -196,8 +212,10 @@ async def run_soak(args: argparse.Namespace) -> dict[str, Any]:
 
 def _format_output(mode: str, data: dict[str, Any]) -> str:
     if mode == "scale":
-        hdr = f"{'proc':>4} {'del':>3} {'ing/s':>7} {'p50':>6} {'p99':>7} {'lag':>6} {'lost':>4}"
+        hdr = (f"{'proc':>4} {'del':>3} {'ing':>3} {'rel':>3} {'ing/s':>7} {'p50':>6} {'p99':>7} "
+               f"{'lag':>6} {'lost':>4}")  # fmt: skip
         rows = [f"{s['processor_replicas']:>4} {s['delivery_replicas']:>3} "
+                f"{s['ingest_replicas']:>3} {s['outbox_relay_replicas']:>3} "
                 f"{s['achieved_ingest_msg_s']:>7.1f} {str(s['p50_ms']):>6} {str(s['p99_ms']):>7} "
                 f"{s['max_deliveries_lag']:>6} {s['lost']:>4}" for s in data["steps"]]  # fmt: skip
         return "\n".join([hdr, *rows, f"all_zero_lost={data['all_zero_lost']}"])
@@ -224,6 +242,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("--settle-s", float, 5.0), ("--concurrency", cpu_bench._positive_int, 16),
         ("--services", cpu_bench._csv, cpu_bench.DEFAULT_SERVICES), ("--label", str, ""),
         ("--image", str, "alerting-python:dev"), ("--network", str, "alerting_default"),
+        ("--ingest-url", str, cpu_bench.DEFAULT_INGEST_URL),
     ):  # fmt: skip
         p.add_argument(f, type=t, default=d)
     return p
