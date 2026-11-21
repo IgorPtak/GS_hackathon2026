@@ -22,6 +22,7 @@ from alerting_core.config import publish_config_changed, save_config_document
 from alerting_core.durations import parse_duration
 from alerting_core.event_log import read_event_log
 from alerting_core.logging import get_logger
+from alerting_core.rules import validate_rule
 from alerting_core.rules.preview import preview_rule
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
@@ -110,6 +111,12 @@ async def preview_rule_route(request: Request, redis: RedisDep, registry: Regist
         body = RulePreviewRequest.model_validate(payload)
     except ValidationError as exc:
         return validation_failed("invalid rule preview request", validation_errors(exc))
+    rule_errors = validate_rule(body.rule)
+    if rule_errors:
+        return validation_failed(
+            "rule does not compile",
+            [e.model_copy(update={"path": f"rule.{e.path}"}) for e in rule_errors],
+        )
     if registry is None:
         raise ApiError(503, "unavailable", "configuration registry unavailable")
     window_end = datetime.now(UTC)
@@ -164,6 +171,9 @@ async def save_rule(rule_id: str, request: Request, pool: PoolDep, redis: RedisD
                 )
             ],
         )
+    rule_errors = validate_rule(write.rule)
+    if rule_errors:
+        return validation_failed("rule does not compile", rule_errors)
     await save_config_document(pool, redis, "rule", write.rule, write.actor)
     return await _fetch(pool, rule_id)
 
