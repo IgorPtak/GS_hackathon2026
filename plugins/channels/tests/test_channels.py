@@ -262,7 +262,7 @@ async def test_email_concurrent_sends_beyond_default_executor_do_not_block(
     import time
 
     sends = 40  # more than the default executor's min(32, cpu + 4) threads
-    delay = 0.3
+    delay = 0.5  # 0.4 s of headroom for slow CI runners; a regression still needs >= 2 * delay
 
     class SlowSmtp(FakeSmtp):
         def send_message(self, message: Any) -> None:

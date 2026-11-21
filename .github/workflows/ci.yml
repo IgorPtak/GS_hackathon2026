@@ -67,7 +67,12 @@ jobs:
 
       # Mirrors `make test` but excludes tests/integration, which need the compose stack.
       - name: Unit tests
-        run: uv run pytest -q --ignore=tests/integration
+        # Wall-clock benchmarks (marker `slow`) depend on the runner's speed, so they run below
+        # without blocking; correctness tests block.
+        run: uv run pytest -q --ignore=tests/integration -m "not integration and not slow"
+      - name: Benchmarks (informational)
+        continue-on-error: true
+        run: uv run pytest -q --ignore=tests/integration -m "slow and not integration" -s
 
       # Reported only: new CVEs should show up in the log without blocking unrelated changes.
       - name: Dependency audit (pip-audit)
