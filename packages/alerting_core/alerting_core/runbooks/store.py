@@ -14,6 +14,7 @@ from redis.asyncio import Redis
 from plugins.runbook_formats.markdown_format import heading_text
 
 from ..config import register_kind, save_config_document
+from ..config.store import NORMALIZE_TEXT_WITH_LLM
 from ..llm import LlmCache, LlmClient, LlmConfig, LlmError, RedisLlmCache
 from ..logging import get_logger
 from ..settings import get_settings
@@ -140,8 +141,15 @@ def normalize_text_file(
             return normalize_runbook(id, title, team, RunbookFormat.text, source, actions)
 
 
-def load_runbook_file(path: Path) -> Runbook:
-    """Read one runbook file and normalize it. id = file stem."""
+def load_runbook_file(path: Path, normalize_text_with_llm: bool | None = None) -> Runbook:
+    """Read one runbook file and normalize it. id = file stem.
+
+    Free-text files call the LLM only when `normalize_text_with_llm` is true (None reads the
+    config-sync opt-in, default off); otherwise they become one text step. This blocks, so async
+    callers must run it in a thread.
+    """
+    if normalize_text_with_llm is None:
+        normalize_text_with_llm = NORMALIZE_TEXT_WITH_LLM.get()
     format = _FORMAT_BY_SUFFIX.get(path.suffix)
     if format is None:
         raise ValueError(f"unsupported runbook file extension {path.suffix!r}")
@@ -158,7 +166,7 @@ def load_runbook_file(path: Path) -> Runbook:
     elif format is RunbookFormat.markdown:
         title = heading_text(source) or title
     actions = _sibling_actions(path)
-    if format is RunbookFormat.text and source.strip():
+    if format is RunbookFormat.text and source.strip() and normalize_text_with_llm:
         return normalize_text_file(path.stem, title, team, source, actions)
     return normalize_runbook(path.stem, title, team, format, source, actions)
 
