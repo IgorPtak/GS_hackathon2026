@@ -14,6 +14,7 @@ from alerting_contracts.events import EventEnvelope, SourceType
 from alerting_core.connections import create_redis_client
 from alerting_core.logging import configure_logging, get_logger
 from alerting_core.metrics import EVENTS_INGESTED, LATENCY_BUCKETS, render_metrics
+from alerting_core.rules.field_paths import resolve_field_path
 from alerting_core.settings import Settings, get_settings
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
@@ -66,17 +67,6 @@ def error_response(status: int, error: str, message: str) -> JSONResponse:
     return JSONResponse(body.model_dump(mode="json"), status_code=status)
 
 
-# Temporary: A-08's field_paths helper replaces lookup_path.
-def lookup_path(payload: dict[str, Any], path: str) -> Any:
-    """Value at a dot path in `payload`, or None when any segment is missing."""
-    node: Any = payload
-    for part in path.split("."):
-        if not isinstance(node, dict) or part not in node:
-            return None
-        node = node[part]
-    return node
-
-
 def parse_sent_at(raw: str | None) -> datetime | None:
     """Parse the X-Sent-At header; invalid -> 422."""
     if raw is None:
@@ -126,8 +116,8 @@ def build_envelopes(
             # One client key for several payloads would drop all but the first event.
             key = header_key if len(payloads) == 1 else f"{header_key}:{index}"
         elif key_path:
-            found = lookup_path(payload, key_path)
-            key = None if found is None else str(found)
+            is_found, found = resolve_field_path(payload, key_path)
+            key = str(found) if is_found and found is not None else None
         else:
             key = plugin.idempotency_key(payload, source)
         try:
@@ -157,7 +147,8 @@ async def append_envelopes(
     """
     pipe = redis.pipeline(transaction=False)
     for envelope in envelopes:
-        raw = orjson.dumps(envelope.model_dump(mode="json"))
+        # One pass in pydantic-core instead of model_dump + orjson.dumps.
+        raw = envelope.model_dump_json()
         if envelope.idempotency_key is None:
             pipe.xadd(STREAM, {"envelope": raw})
         else:
