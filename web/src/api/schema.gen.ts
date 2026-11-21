@@ -529,6 +529,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/llm/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getLlmStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -1728,6 +1744,26 @@ export interface components {
              * @description Events skipped by ingest idempotency.
              */
             duplicate_count: number;
+        };
+        /**
+         * LlmStatus
+         * @description LLM connectivity for the Settings screen; never carries the full URL or the key.
+         */
+        LlmStatus: {
+            /** Is Enabled */
+            is_enabled: boolean;
+            /** Model */
+            model: string | null;
+            /** Provider Host */
+            provider_host: string | null;
+            /** Is Reachable */
+            is_reachable: boolean | null;
+            /** Latency Ms */
+            latency_ms: number | null;
+            /** Checked At */
+            checked_at: string | null;
+            /** Privacy Note */
+            privacy_note: string;
         };
         /**
          * MetricsSummary
@@ -3697,6 +3733,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MetricsSummary"];
+                };
+            };
+        };
+    };
+    getLlmStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmStatus"];
                 };
             };
         };

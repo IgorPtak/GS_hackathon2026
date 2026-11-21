@@ -302,6 +302,18 @@ class MetricsSummary(ContractModel):
     open_alert_count: int
 
 
+class LlmStatus(ContractModel):
+    """LLM connectivity for the Settings screen; never carries the full URL or the key."""
+
+    is_enabled: bool
+    model: str | None
+    provider_host: str | None
+    is_reachable: bool | None
+    latency_ms: int | None
+    checked_at: datetime | None
+    privacy_note: str
+
+
 class AlertQuery(ContractModel):
     """Query parameters of GET /api/v1/alerts (documentation only)."""
 
