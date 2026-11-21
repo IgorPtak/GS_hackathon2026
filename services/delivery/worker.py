@@ -40,7 +40,9 @@ from .retries import backoff_ms, schedule_retry
 
 log = get_logger(__name__)
 
-DONE_TTL_SECONDS = 7 * 24 * 3600
+# Redeliveries come within minutes (XAUTOCLAIM 60 s, outage parking ≤ 600 s, reconcile 30 s);
+# a day is ample and keeps millions of done keys from piling up in Redis under load.
+DONE_TTL_SECONDS = 24 * 3600
 # Longer than the slowest send (SEND_TIMEOUT) so a live attempt is never duplicated.
 PENDING_TTL_SECONDS = 60
 SEND_TIMEOUT_SECONDS = 15.0

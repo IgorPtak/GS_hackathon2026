@@ -61,7 +61,7 @@ async def scale(service: str, replicas: int, settle_s: float = 5.0) -> None:
 
 
 async def restore_stack() -> None:
-    """Back to processor=1, delivery=2 (the compose default) and mock-gateway started.
+    """Back to the compose defaults (processor=1, delivery=2, ingest=1, outbox-relay=1).
 
     Skipped without a docker CLI (generator running inside the compose network): scenarios that
     scale or stop services must run on the host.
@@ -72,7 +72,8 @@ async def restore_stack() -> None:
     await compose(
         "up", "-d", "--no-recreate", "--no-deps", "--no-build",
         "--scale", "processor=1", "--scale", "delivery=2",
-        "processor", "delivery", "mock-gateway",
+        "--scale", "ingest=1", "--scale", "outbox-relay=1",
+        "processor", "delivery", "ingest", "outbox-relay", "mock-gateway",
     )  # fmt: skip
 
 

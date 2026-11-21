@@ -122,7 +122,8 @@ def test_compute_pg_tables_delta() -> None:
 
 
 def test_parse_scale_pairs_and_cgroup_sample() -> None:
-    assert sas.parse_scale_pairs("1:1, 1:2, 2:4") == [(1, 1), (1, 2), (2, 4)]
+    assert sas.parse_scale_pairs("1:1, 1:2, 2:4") == [(1, 1, 1, 1), (1, 2, 1, 1), (2, 4, 1, 1)]
+    assert sas.parse_scale_pairs("2:2:2, 4:4:3:2") == [(2, 2, 2, 1), (4, 4, 3, 2)]
     for bad in ("", "1", "0:1", "1:0"):
         with pytest.raises(ValueError):
             sas.parse_scale_pairs(bad)

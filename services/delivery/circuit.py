@@ -126,7 +126,7 @@ class CircuitBreaker:
         return text, int(retry_after)
 
     async def complete_attempt(
-        self, channel_id: str, done_key: str, done_ttl_seconds: int = 7 * 24 * 3600
+        self, channel_id: str, done_key: str, done_ttl_seconds: int = 24 * 3600
     ) -> bool:
         """Mark `done_key` as done and reset the circuit only if recovery/failures need clearing."""
         reset = await self._complete_attempt(

@@ -210,12 +210,60 @@ def _recording_sync(calls: list[dict[str, Any]]) -> Any:
     return fake_sync
 
 
-def test_api_syncs_config_with_llm_normalization_on(monkeypatch: pytest.MonkeyPatch) -> None:
+class _LockConnection:
+    """Answers pg_try_advisory_lock with `is_free` and records the statements."""
+
+    def __init__(self, is_free: bool) -> None:
+        self.is_free = is_free
+        self.statements: list[str] = []
+
+    async def fetchval(self, sql: str, *args: Any) -> bool:
+        self.statements.append(sql)
+        return self.is_free
+
+    async def execute(self, sql: str, *args: Any) -> None:
+        self.statements.append(sql)
+
+
+class _LockPool:
+    def __init__(self, is_free: bool = True) -> None:
+        self.connection = _LockConnection(is_free)
+
+    def acquire(self) -> Any:
+        connection = self.connection
+
+        class _Acquire:
+            async def __aenter__(self) -> _LockConnection:
+                return connection
+
+            async def __aexit__(self, *exc: object) -> None:
+                return None
+
+        return _Acquire()
+
+    async def close(self) -> None:
+        return None
+
+
+@pytest.mark.parametrize("is_free", [True, False])
+async def test_only_the_lock_holder_runs_the_llm_sync(
+    monkeypatch: pytest.MonkeyPatch, is_free: bool
+) -> None:
     import services.api.main as api_main
 
-    class FakePool:
-        async def close(self) -> None:
-            return None
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(api_main, "sync_config_files", _recording_sync(calls))
+    pool = _LockPool(is_free)
+
+    await api_main.sync_runbooks_with_llm(pool, None, "config")  # type: ignore[arg-type]
+
+    assert calls == ([{"normalize_text_with_llm": True}] if is_free else [])
+    unlocked = any("pg_advisory_unlock" in sql for sql in pool.connection.statements)
+    assert unlocked is is_free
+
+
+def test_api_syncs_config_with_llm_normalization_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    import services.api.main as api_main
 
     class FakeRegistry:
         async def start(self, pool: Any, redis: Any) -> None:
@@ -225,7 +273,7 @@ def test_api_syncs_config_with_llm_normalization_on(monkeypatch: pytest.MonkeyPa
             return None
 
     async def fake_pool(settings: Settings) -> Any:
-        return FakePool()
+        return _LockPool()
 
     calls: list[dict[str, Any]] = []
     monkeypatch.setattr(api_main, "create_database_pool", fake_pool)

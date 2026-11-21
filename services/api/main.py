@@ -41,6 +41,8 @@ log = get_logger(__name__)
 
 # How often a request may retry connecting to Postgres while it is down.
 DATABASE_RETRY_SECONDS = 5.0
+# Session advisory lock key: one api replica at a time runs the LLM config sync (A-49).
+LLM_SYNC_LOCK_ID = 4_149_049
 
 ROUTERS = (
     alerts,
@@ -62,9 +64,23 @@ ROUTERS = (
 
 
 async def sync_runbooks_with_llm(pool: asyncpg.Pool, redis: Redis, config_dir: str) -> None:
-    """Sync config files with LLM normalization of free-text runbooks; never raises."""
+    """Sync config files with LLM normalization of free-text runbooks; never raises.
+
+    With `--scale api=N` only the replica holding the advisory lock syncs: replicas starting
+    together would otherwise all miss the LLM cache and call the LLM once each per runbook.
+    """
     try:
-        await sync_config_files(pool, redis, config_dir, normalize_text_with_llm=True)
+        async with pool.acquire() as connection:
+            is_locked = await connection.fetchval(
+                "SELECT pg_try_advisory_lock($1)", LLM_SYNC_LOCK_ID
+            )
+            if not is_locked:
+                log.info("config_sync_skipped", extra={"reason": "another api replica syncs"})
+                return
+            try:
+                await sync_config_files(pool, redis, config_dir, normalize_text_with_llm=True)
+            finally:
+                await connection.execute("SELECT pg_advisory_unlock($1)", LLM_SYNC_LOCK_ID)
     except (OSError, asyncpg.PostgresError, RedisError) as error:
         log.error("config_sync_failed", extra={"error": str(error)})
 
