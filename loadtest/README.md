@@ -66,3 +66,15 @@ queueing shows up as seconds of latency. Run steady load from inside the network
 
 There is no docker CLI in that container, so scenarios that scale, stop or kill services
 (saturation, gateway-down, kill-processor) still run on the host.
+
+## CPU time per event (`cpu_bench.py`)
+
+When the stack is near capacity, throughput varies across runs; measuring cgroup `cpu.stat`
+(`usage_usec`) per accepted event below saturation compares optimizations cleanly:
+
+    uv run python loadtest/cpu_bench.py --rate 500 --duration 30 --runs 3
+
+It drives `scenarios.py steady --sync-stdin` inside the compose network, snapshots
+`/sys/fs/cgroup/cpu.stat` on every pipeline container before and after the run, annotates each
+`steady-*.json` with `cpu_per_event`, and writes a median summary to
+`loadtest/results/cpu-bench-<timestamp>.json`.

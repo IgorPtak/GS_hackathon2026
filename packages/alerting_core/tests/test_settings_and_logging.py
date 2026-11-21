@@ -29,17 +29,30 @@ def test_json_formatter_emits_event_service_and_ids() -> None:
 def test_configure_logging_keeps_a_disabled_access_log() -> None:
     access = logging.getLogger("uvicorn.access")
     error = logging.getLogger("uvicorn.error")
-    root_handlers = logging.getLogger().handlers[:]
+    root = logging.getLogger()
+    root_handlers = root.handlers[:]
+    root_level = root.level
+    uvicorn_names = ("uvicorn", "uvicorn.error", "uvicorn.access")
+    saved = {
+        name: (logging.getLogger(name).handlers[:], logging.getLogger(name).propagate)
+        for name in uvicorn_names
+    }
     try:
         access.handlers[:] = []
         access.propagate = False  # what `uvicorn --no-access-log` leaves behind
         error.addHandler(logging.NullHandler())
         configure_logging("test")
         assert access.propagate is False
+        assert not access.hasHandlers()
         assert error.propagate is True and not error.handlers
 
         access.addHandler(logging.NullHandler())  # access log on: route it through ours
         configure_logging("test")
         assert access.propagate is True and not access.handlers
     finally:
-        logging.getLogger().handlers[:] = root_handlers
+        root.handlers[:] = root_handlers
+        root.setLevel(root_level)
+        for name, (handlers, propagate) in saved.items():
+            logger = logging.getLogger(name)
+            logger.handlers[:] = handlers
+            logger.propagate = propagate

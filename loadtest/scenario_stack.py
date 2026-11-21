@@ -83,7 +83,7 @@ async def kill_one(service: str) -> str:
     return containers[-1][:12]
 
 
-async def hardware(replicas: dict[str, int] | None = None) -> dict[str, Any]:
+async def hardware(replicas: dict[str, int | None] | None = None) -> dict[str, Any]:
     """Host and Docker details for the results table."""
     info: dict[str, Any] = {
         "os": platform.platform(),
