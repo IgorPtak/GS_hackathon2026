@@ -11,6 +11,7 @@ class MySource(HttpSourcePlugin):
     def extract_payloads(self, body, source):
         return list(body.get("items", []))  # one payload per event
 
+
 register_source_plugin(SourceType.alertmanager, MySource())
 ```
 

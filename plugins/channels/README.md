@@ -17,6 +17,7 @@ class SlackChannel(ChannelPlugin):
         if response.status_code >= 400:
             raise ChannelRejectedError(f"http {response.status_code}")  # permanent
 
+
 register_channel_plugin(SlackChannel())
 ```
 

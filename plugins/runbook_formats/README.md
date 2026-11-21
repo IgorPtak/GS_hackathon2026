@@ -15,6 +15,7 @@ from alerting_contracts.runbooks import RunbookFormat, RunbookStep, StepKind
 from plugins.runbook_formats.base import RunbookFormatPlugin
 from plugins.runbook_formats.registry import register_runbook_format
 
+
 @register_runbook_format
 class CsvRunbookFormat(RunbookFormatPlugin):
     format = RunbookFormat.csv
