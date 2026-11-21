@@ -142,3 +142,50 @@ async def test_llm_not_used_for_parsed_formats(config_dir, actions):
         read(config_dir, "workflow-failed.yaml"),
     )
     assert rb.normalized_by == "parser" and client.calls == []
+
+
+UNSAFE_YAML = """\
+id: unsafe
+title: Unsafe
+steps:
+  - index: 0
+    kind: action
+    text: "Restart {{feed}}"
+    action: restart-pricing-adapter
+    params: { feed: "{{feed}}" }
+    approval: none
+    is_automatic: true
+  - index: 1
+    kind: action
+    text: "Escalate {{workflowId}}"
+    action: escalate
+    params: { workflow_id: "{{workflowId}}" }
+    approval: none
+    is_automatic: true
+"""
+
+
+def test_yaml_approval_none_cannot_loosen_required_actions(actions):
+    rb = normalize_runbook("unsafe", "Unsafe", None, RunbookFormat.yaml, UNSAFE_YAML, actions)
+    assert [s.approval.value for s in rb.steps] == ["required", "required"]
+
+
+def test_step_requires_approval_ignores_a_loosening_step(actions):
+    from alerting_contracts.config import ApprovalPolicy
+    from alerting_contracts.runbooks import RunbookStep
+    from alerting_core.runbooks.approval_policy import step_requires_approval
+
+    loose = RunbookStep(
+        index=0,
+        kind=StepKind.action,
+        text="x",
+        action="escalate",
+        approval=ApprovalPolicy.none,
+        is_automatic=True,
+    )
+    assert step_requires_approval(loose, actions) is True
+    open_ticket = loose.model_copy(update={"action": "open-ticket"})
+    assert step_requires_approval(open_ticket, actions) is False
+    assert step_requires_approval(
+        open_ticket.model_copy(update={"approval": ApprovalPolicy.required}), actions
+    )

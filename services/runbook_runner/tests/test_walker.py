@@ -232,3 +232,27 @@ async def test_plugin_timeout_is_a_failed_run() -> None:
         await walker.start()
     run = next(iter(store.runs.values()))
     assert run.status is ActionRunStatus.failed and "timed out" in (run.error or "")
+
+
+async def test_automatic_step_that_requires_approval_never_runs_without_one() -> None:
+    plugin = ScriptedPlugin([True])
+    walker, store, notifier = build(
+        rendered(step(0, approval=True, automatic=True), step(1)), plugin
+    )
+    await walker.start()
+    assert plugin.calls == []
+    assert store.statuses(0) == [(1, "pending_approval")]
+    assert len(store.approvals) == 1 and len(notifier.notified) == 1
+
+
+async def test_retry_after_failure_of_an_approval_step_asks_again() -> None:
+    runbook = rendered(step(0, approval=True, automatic=True, max_attempts=3))
+    plugin = ScriptedPlugin([True])
+    walker, store, _ = build(runbook, plugin)
+    await store.create_run(
+        "0197c9a0-0000-7000-8000-000000000001", "rb", 0, "act", {}, ActionRunStatus.failed
+    )
+    walker, store, _ = build(runbook, plugin, store)
+    await walker.start()
+    assert plugin.calls == []
+    assert store.statuses(0) == [(1, "failed"), (2, "pending_approval")]

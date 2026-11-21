@@ -70,3 +70,36 @@ def test_plugin_fallback_is_one_text_step():
     assert result.text == "hello" and result.kind is StepKind.text
     with pytest.raises(ValueError):
         TextRunbookFormat().normalize(" ", ACTIONS)
+
+
+def test_llm_steps_are_never_automatic():
+    [result] = validate_llm_steps(
+        [step(0, action="open-ticket", params={"summary": "{{title}}"}, is_automatic=True)],
+        ACTIONS,
+    )
+    assert result.action == "open-ticket" and result.is_automatic is False
+
+
+def test_llm_max_attempts_is_clamped_to_three():
+    [result] = validate_llm_steps(
+        [step(0, action="open-ticket", params={"summary": "x"}, max_attempts=50)], ACTIONS
+    )
+    assert result.max_attempts == 3
+
+
+@pytest.mark.parametrize(
+    "value", ["http://evil.example/x", "HTTPS://evil.example", "evil.example:8080", "10.0.0.1:22/x"]
+)
+def test_llm_url_and_host_params_are_dropped_and_noted(value):
+    [result] = validate_llm_steps(
+        [step(0, action="open-ticket", params={"summary": value, "other": "{{title}}"})], ACTIONS
+    )
+    assert "summary" not in result.params and result.params == {"other": "{{title}}"}
+    assert "dropped params" in result.text and "summary" in result.text
+
+
+def test_llm_placeholder_and_plain_params_are_kept():
+    [result] = validate_llm_steps(
+        [step(0, action="open-ticket", params={"summary": "Feed {{feed}}: stale"})], ACTIONS
+    )
+    assert result.params == {"summary": "Feed {{feed}}: stale"}

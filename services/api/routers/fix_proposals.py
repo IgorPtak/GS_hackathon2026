@@ -12,6 +12,7 @@ with the new version saved; accepting again finds the identical document already
 reuses its version (no extra version), so a proposal is never "accepted" without its change saved.
 """
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
@@ -21,7 +22,7 @@ from alerting_contracts.api import (
     ConfigValidationError,
     FixProposalDecisionRequest,
 )
-from alerting_contracts.config import Rule
+from alerting_contracts.config import ActionConfig, ApprovalPolicy, Rule
 from alerting_contracts.proposals import (
     FixKind,
     FixProposal,
@@ -35,6 +36,7 @@ from alerting_core.config.store import canonical_document
 from alerting_core.logging import get_logger
 from alerting_core.publishing import publish_team_event
 from alerting_core.runbooks import save_runbook
+from alerting_core.runbooks.approval_policy import check_steps, tighten_steps
 from alerting_core.storage.alerts_read import get_alert
 from alerting_core.storage.audit import append_audit
 from alerting_core.storage.transitions import AlertNotFoundError
@@ -75,10 +77,75 @@ def _detail(path: str, message: str) -> ConfigValidationError:
     return ConfigValidationError(path=path, message=message)
 
 
-def validate_create(
-    alert: Alert, body: FixProposalCreate, current_rule: Rule | None = None
+# The only top-level rule fields each kind may change; everything else must stay as it is.
+_ALLOWED_RULE_FIELDS: dict[FixKind, frozenset[str]] = {
+    FixKind.threshold: frozenset({"when"}),
+    FixKind.fields: frozenset({"present"}),
+    FixKind.dedup_window: frozenset({"dedup", "group"}),
+}
+
+
+def _diff_paths(current: Any, proposed: Any, path: str) -> list[str]:
+    """Dot paths of the differing leaves; lists and type changes count as one path."""
+    if isinstance(current, dict) and isinstance(proposed, dict):
+        return [
+            found
+            for key in sorted(current.keys() | proposed.keys())
+            for found in _diff_paths(current.get(key), proposed.get(key), f"{path}.{key}")
+        ]
+    return [] if current == proposed else [path]
+
+
+def _rule_scope_errors(kind: FixKind, current: Rule, proposed: Rule) -> list[ConfigValidationError]:
+    """422 details for every rule field changed outside what `kind` may touch."""
+    allowed = _ALLOWED_RULE_FIELDS[kind]
+    before = current.model_dump(mode="json")
+    after = proposed.model_dump(mode="json")
+    return [
+        _detail(path, f"kind {kind.value} may only change {', '.join(sorted(allowed))}")
+        for name in sorted(before.keys() | after.keys())
+        if name not in allowed
+        for path in _diff_paths(before.get(name), after.get(name), f"proposed_rule.{name}")
+    ]
+
+
+def _step_errors(
+    body: FixProposalCreate, actions: Mapping[str, ActionConfig]
 ) -> list[ConfigValidationError]:
-    """Check the kind/payload pairing; returns dot-path errors (empty = valid)."""
+    """Same rules as a saved runbook: known action, approval never loosened."""
+    step = body.proposed_runbook_step
+    if step is None:
+        return []
+    errors = [
+        _detail(path.replace("steps.0", "proposed_runbook_step"), message)
+        for path, message in check_steps([step], actions)
+    ]
+    action = actions.get(step.action) if step.action else None
+    if (
+        action is not None
+        and action.approval is ApprovalPolicy.required
+        and step.approval is ApprovalPolicy.none
+    ):
+        errors.append(
+            _detail(
+                "proposed_runbook_step.approval",
+                f"action {action.id!r} requires approval; a step cannot loosen it",
+            )
+        )
+    return errors
+
+
+def validate_create(
+    alert: Alert,
+    body: FixProposalCreate,
+    current_rule: Rule | None = None,
+    actions: Mapping[str, ActionConfig] | None = None,
+) -> list[ConfigValidationError]:
+    """Check the kind/payload pairing and scope; returns dot-path errors (empty = valid).
+
+    With `current_rule`, a rule kind may change only its own fields. With `actions`, a runbook
+    step must name a known action and not loosen its approval.
+    """
     errors: list[ConfigValidationError] = []
     if body.kind in _RULE_KINDS:
         if body.proposed_rule is None:
@@ -98,6 +165,8 @@ def validate_create(
                     f"got {body.proposed_rule.team!r}",
                 )
             )
+        elif current_rule is not None:
+            errors.extend(_rule_scope_errors(body.kind, current_rule, body.proposed_rule))
         if body.proposed_runbook_step is not None:
             errors.append(
                 _detail("proposed_runbook_step", f"not allowed for kind {body.kind.value}")
@@ -109,6 +178,8 @@ def validate_create(
             errors.append(_detail("kind", "the alert has no runbook to change"))
         if body.proposed_rule is not None:
             errors.append(_detail("proposed_rule", "not allowed for kind runbook_step"))
+        if actions is not None:
+            errors.extend(_step_errors(body, actions))
     else:
         if body.proposed_rule is not None:
             errors.append(_detail("proposed_rule", "not allowed for kind other"))
@@ -135,6 +206,7 @@ async def create_proposal(
     alert_id: str,
     body: FixProposalCreate,
     current_rule_of: Any,
+    actions: Mapping[str, ActionConfig] | None = None,
 ) -> FixProposal:
     """Insert + audit in one transaction, then publish.
 
@@ -147,7 +219,7 @@ async def create_proposal(
     async with pool.acquire() as connection, connection.transaction():
         alert = await get_alert(connection, alert_id)
         current_rule = current_rule_of(alert.rule_id)
-        errors = validate_create(alert, body, current_rule)
+        errors = validate_create(alert, body, current_rule, actions)
         if errors:
             raise ProposalInvalidError("invalid fix proposal", errors)
         owner_team = current_rule.team if current_rule is not None else alert.team
@@ -198,6 +270,7 @@ async def decide_proposal(
     proposal_id: str,
     body: FixProposalDecisionRequest,
     get_runbook: Any,
+    actions: Mapping[str, ActionConfig] | None = None,
 ) -> FixProposal:
     """Decide atomically (see module docstring for ordering), then publish after commit."""
     if not store.is_uuid(proposal_id):
@@ -211,7 +284,7 @@ async def decide_proposal(
             raise AlreadyDecidedError(proposal_id)
         applied: dict[str, Any] = {}
         if accepted:
-            applied = await _apply(pool, redis, current, body, get_runbook)
+            applied = await _apply(pool, redis, current, body, get_runbook, actions)
         updated = await store.mark_decided(
             connection,
             proposal_id,
@@ -247,6 +320,7 @@ async def _apply(
     proposal: FixProposal,
     body: FixProposalDecisionRequest,
     get_runbook: Any,
+    actions: Mapping[str, ActionConfig] | None = None,
 ) -> dict[str, Any]:
     """Save the proposed rule or runbook step; returns audit detail. Raises on invalid."""
     try:
@@ -270,6 +344,20 @@ async def _apply(
                     "runbook no longer exists",
                     [_detail("runbook_id", f"runbook {proposal.runbook_id!r} not found")],
                 )
+            if actions is not None:
+                problems = _step_errors(
+                    FixProposalCreate(
+                        kind=FixKind.runbook_step,
+                        description=proposal.description,
+                        proposed_runbook_step=proposal.proposed_runbook_step,
+                        proposed_by=proposal.proposed_by,
+                    ),
+                    actions,
+                )
+                if problems:
+                    raise ProposalInvalidError("proposal cannot be applied", problems)
+                tightened = tighten_steps([proposal.proposed_runbook_step], actions)[0]
+                proposal = proposal.model_copy(update={"proposed_runbook_step": tightened})
             if step_already_applied(runbook, proposal):
                 version = runbook.version  # already saved (crash before mark): no extra version
             else:
@@ -302,6 +390,7 @@ async def create_fix_proposal_route(
     pool: PoolDep,
     redis: RedisDep,
     registry: RegistryDep,
+    catalog: CatalogDep,
 ) -> Any:
     """Propose a rule or runbook fix from an alert; goes to the rule's owner team."""
 
@@ -309,7 +398,9 @@ async def create_fix_proposal_route(
         return registry.rules().get(rule_id) if registry is not None else None
 
     try:
-        return await create_proposal(pool, redis, alert_id, body, current_rule_of)
+        return await create_proposal(
+            pool, redis, alert_id, body, current_rule_of, catalog.actions()
+        )
     except AlertNotFoundError as error:
         raise ApiError(404, "not_found", f"alert {alert_id} not found") from error
     except ProposalInvalidError as error:
@@ -336,7 +427,9 @@ async def decide_fix_proposal_route(
 ) -> Any:
     """Accept (saves the new rule version or runbook step) or reject a pending proposal."""
     try:
-        return await decide_proposal(pool, redis, proposal_id, body, _runbook_getter(catalog))
+        return await decide_proposal(
+            pool, redis, proposal_id, body, _runbook_getter(catalog), catalog.actions()
+        )
     except ProposalNotFoundError as error:
         raise ApiError(404, "not_found", f"fix proposal {proposal_id} not found") from error
     except AlreadyDecidedError as error:

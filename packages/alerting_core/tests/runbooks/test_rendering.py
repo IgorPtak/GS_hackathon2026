@@ -85,7 +85,7 @@ def test_fixture_runbook_renders_text_params_and_metadata() -> None:
     assert all(step.missing_fields == [] for step in rendered.steps)
 
 
-def test_approval_from_action_and_step_override_both_directions() -> None:
+def test_step_may_tighten_approval_but_never_loosen_it() -> None:
     steps = [
         RunbookStep(index=0, kind=StepKind.action, text="a", action="retry-workflow"),
         RunbookStep(index=1, kind=StepKind.action, text="b", action="escalate"),
@@ -101,12 +101,12 @@ def test_approval_from_action_and_step_override_both_directions() -> None:
             kind=StepKind.action,
             text="d",
             action="escalate",
-            approval=ApprovalPolicy.none,
+            approval=ApprovalPolicy.none,  # tries to loosen the escalate policy: ignored
         ),
         RunbookStep(index=4, kind=StepKind.text, text="e"),
     ]
     rendered = render_runbook(_runbook(steps), _alert(_event()), _actions())
-    assert [s.requires_approval for s in rendered.steps] == [False, True, True, False, False]
+    assert [s.requires_approval for s in rendered.steps] == [False, True, True, True, False]
 
 
 def test_missing_placeholder_listed_and_rendered_empty() -> None:
@@ -141,3 +141,19 @@ def test_runbook_step_texts_numbered_with_approval_marker() -> None:
     assert lines[0] == "1. Check health of settlement-engine"
     assert lines[2] == f"3. Escalate {WF} to the settlements lead (approval required)"
     assert lines[3].startswith("4. Confirm") and "approval" not in lines[3]
+
+
+def test_yaml_runbook_with_loosened_approval_renders_as_requiring_it() -> None:
+    """approval: none + is_automatic: true on required actions still ends up needing approval."""
+    from alerting_core.runbooks.normalize import normalize_runbook
+
+    source = """id: unsafe
+title: Unsafe
+steps:
+  - {index: 0, kind: action, text: r, action: restart-pricing-adapter, approval: none,
+     is_automatic: true}
+  - {index: 1, kind: action, text: e, action: escalate, approval: none, is_automatic: true}
+"""
+    runbook = normalize_runbook("unsafe", "Unsafe", None, RunbookFormat.yaml, source, _actions())
+    rendered = render_runbook(runbook, _alert(_event()), _actions())
+    assert [s.requires_approval for s in rendered.steps] == [True, True]

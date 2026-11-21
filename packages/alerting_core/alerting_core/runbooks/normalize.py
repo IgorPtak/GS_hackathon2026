@@ -13,6 +13,7 @@ from plugins.runbook_formats.text_format import validate_llm_steps
 
 from ..llm import LlmClient, LlmError
 from ..logging import get_logger
+from .approval_policy import tighten_steps
 
 log = get_logger(__name__)
 
@@ -23,6 +24,12 @@ class StepsResponse(BaseModel):
     """LLM answer: normalized runbook steps."""
 
     steps: list[RunbookStep]
+
+
+def wrap_untrusted(text: str) -> str:
+    """Fence outside text in the tags the system prompt calls data; a closing tag is defused."""
+    safe = text.replace("</untrusted_input>", "<\\/untrusted_input>")
+    return f"<untrusted_input>\n{safe}\n</untrusted_input>"
 
 
 def build_system_prompt(actions: Mapping[str, ActionConfig]) -> str:
@@ -57,7 +64,7 @@ def normalize_runbook(
     one-step fallback. B-09 adds the LLM path (`normalized_by="llm"`, `llm_model` set).
     """
     format = RunbookFormat(format)
-    steps = get_runbook_format(format).normalize(source, actions)
+    steps = tighten_steps(get_runbook_format(format).normalize(source, actions), actions)
     normalized_by: Literal["parser", "fallback"] = (
         "fallback" if format is RunbookFormat.text else "parser"
     )
@@ -96,7 +103,9 @@ async def normalize_runbook_with_llm(
         raise ValueError("runbook text is empty")
     try:
         # redact_secrets is applied inside LlmClient.generate
-        answer = await client.generate(text, StepsResponse, system=build_system_prompt(actions))
+        answer = await client.generate(
+            wrap_untrusted(text), StepsResponse, system=build_system_prompt(actions)
+        )
         assert isinstance(answer, StepsResponse)
         steps = validate_llm_steps(answer.steps, actions)
     except LlmError as error:

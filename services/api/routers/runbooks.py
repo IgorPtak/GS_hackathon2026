@@ -19,6 +19,7 @@ from alerting_contracts.config import ActionConfig
 from alerting_contracts.runbooks import Runbook, RunbookFormat
 from alerting_core.logging import get_logger
 from alerting_core.runbooks import normalize_runbook, save_runbook
+from alerting_core.runbooks.approval_policy import StepPolicyError, check_steps
 from alerting_core.runbooks.normalize import normalize_runbook_with_llm
 from alerting_core.runbooks.store import KIND, load_runbook_file
 from fastapi import APIRouter, Depends, Request
@@ -99,6 +100,8 @@ def _validation_response(error: Exception) -> JSONResponse:
             )
             for item in error.errors()
         ]
+    elif isinstance(error, StepPolicyError):
+        details = [ConfigValidationError(path=p, message=m) for p, m in error.problems]
     else:
         details = [ConfigValidationError(path="", message=str(error))]
     body = ErrorResponse(
@@ -193,6 +196,11 @@ async def save_runbook_route(
             catalog.actions(),
             getattr(request.app.state, "llm", None),
         )
+        problems = check_steps(runbook.steps, catalog.actions())
+        if problems:
+            raise StepPolicyError(problems)
+    except StepPolicyError as error:
+        return _validation_response(error)
     except (ValidationError, ValueError) as error:
         return _validation_response(error)
     version = await save_runbook(pool, redis, runbook, body.actor)
