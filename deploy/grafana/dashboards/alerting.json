@@ -387,6 +387,65 @@
         },
         "overrides": []
       }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Per-Stage Latency (p99)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(processor_event_to_alert_seconds_bucket[1m])))",
+          "legendFormat": "processor (event to alert)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "B",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(outbox_relay_wait_seconds_bucket[1m])))",
+          "legendFormat": "outbox relay wait"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(delivery_post_relay_seconds_bucket[1m])))",
+          "legendFormat": "delivery (post-relay)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "D",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(alert_e2e_latency_seconds_bucket[1m])))",
+          "legendFormat": "e2e total"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
     }
   ],
   "templating": {

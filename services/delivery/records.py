@@ -65,6 +65,43 @@ async def delivery_age_seconds(pool: asyncpg.Pool, delivery_id: int) -> float:
     return float(age or 0.0)
 
 
+async def _record_audit_and_fallback(
+    connection: asyncpg.Connection,
+    job: DeliveryJob,
+    outcome: Outcome,
+    fallback: ChannelConfig | None,
+) -> list[AuditEntry]:
+    detail: dict[str, Any] = {
+        "delivery_id": job.delivery_id,
+        "channel_id": job.channel_id,
+        "recipient_id": job.recipient_id,
+        "attempt": outcome.attempt,
+    }
+    if outcome.error:
+        detail["error"] = outcome.error[:500]
+    status_ok = "ok" if outcome.status == DeliveryStatus.delivered else "error"
+    entries = [
+        await append_audit(
+            connection, job.alert_id, DELIVERY_ACTOR, outcome.verb, status_ok, detail
+        )
+    ]
+    if fallback is not None:
+        fallback_job = fallback_job_for(job, fallback)
+        outbox_id = await enqueue_delivery(connection, fallback_job)
+        fallback_detail = {**detail, "fallback_channel_id": fallback.id, "outbox_id": outbox_id}
+        entries.append(
+            await append_audit(
+                connection,
+                job.alert_id,
+                DELIVERY_ACTOR,
+                AuditVerb.delivery_fallback,
+                "ok",
+                fallback_detail,
+            )
+        )
+    return entries
+
+
 async def record_outcome(
     pool: asyncpg.Pool,
     job: DeliveryJob,
@@ -73,12 +110,15 @@ async def record_outcome(
 ) -> RecordedOutcome:
     """Upsert the delivery row, audit it and, for a dead letter, queue the fallback delivery."""
     async with pool.acquire() as connection, connection.transaction():
-        previous = await connection.fetchval(
-            "SELECT status FROM deliveries WHERE id = $1 FOR UPDATE", job.delivery_id
-        )
-        if previous == DeliveryStatus.dead_lettered and outcome.status == previous:
-            # A redelivered entry that was already dead-lettered: one fallback, one audit.
-            return RecordedOutcome(delivery=None, audit=[])
+        if outcome.status == DeliveryStatus.dead_lettered:
+            # Lock the row before upserting so duplicate dead letters queue at most one fallback;
+            # other outcomes are serialised by the upsert's own row lock and need no pre-read.
+            previous = await connection.fetchval(
+                "SELECT status FROM deliveries WHERE id = $1 FOR UPDATE", job.delivery_id
+            )
+            if previous == DeliveryStatus.dead_lettered:
+                # A redelivered entry that was already dead-lettered: one fallback, one audit.
+                return RecordedOutcome(delivery=None, audit=[])
         row = await connection.fetchrow(
             _UPSERT,
             job.delivery_id,
@@ -96,34 +136,7 @@ async def record_outcome(
         )
         if row is None:
             return RecordedOutcome(delivery=None, audit=[])
-        detail: dict[str, Any] = {
-            "delivery_id": job.delivery_id,
-            "channel_id": job.channel_id,
-            "recipient_id": job.recipient_id,
-            "attempt": outcome.attempt,
-        }
-        if outcome.error:
-            detail["error"] = outcome.error[:500]
-        status_ok = "ok" if outcome.status == DeliveryStatus.delivered else "error"
-        entries = [
-            await append_audit(
-                connection, job.alert_id, DELIVERY_ACTOR, outcome.verb, status_ok, detail
-            )
-        ]
-        if fallback is not None:
-            fallback_job = fallback_job_for(job, fallback)
-            outbox_id = await enqueue_delivery(connection, fallback_job)
-            fallback_detail = {**detail, "fallback_channel_id": fallback.id, "outbox_id": outbox_id}
-            entries.append(
-                await append_audit(
-                    connection,
-                    job.alert_id,
-                    DELIVERY_ACTOR,
-                    AuditVerb.delivery_fallback,
-                    "ok",
-                    fallback_detail,
-                )
-            )
+        entries = await _record_audit_and_fallback(connection, job, outcome, fallback)
         return RecordedOutcome(delivery=Delivery.model_validate(row_to_dict(row)), audit=entries)
 
 

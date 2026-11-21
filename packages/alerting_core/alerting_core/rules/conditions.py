@@ -17,7 +17,7 @@ import operator
 import re
 import re._constants as _sre_constants
 import re._parser as _sre_parser
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
 from alerting_contracts.config import (
@@ -150,47 +150,95 @@ def _in_predicate(expected: Any) -> _Predicate:
     return predicate
 
 
-def _check_pattern_safety(pattern: str) -> None:
-    """Reject over-long patterns and nested unbounded quantifiers like `(a+)+`."""
+_REPEAT_OPS = (_sre_constants.MAX_REPEAT, _sre_constants.MIN_REPEAT)
+_OP_TYPE = type(_sre_constants.MAX_REPEAT)
+_UNBOUNDED = _sre_constants.MAXREPEAT
+# Bounded nesting such as (\d{1,3}\.){3} is fine; this caps outer_max * inner_max.
+_MAX_NESTED_PRODUCT = 64
+
+
+def _walk(node: Any) -> Iterator[tuple[Any, Any]]:
+    """Yield every (op, argument) node below `node`, however deeply nested."""
+    if isinstance(node, _sre_parser.SubPattern):
+        node = node.data
+    if not isinstance(node, list | tuple):
+        return
+    if len(node) == 2 and isinstance(node[0], _OP_TYPE):
+        yield node[0], node[1]
+    for item in node:
+        if isinstance(item, tuple | list | _sre_parser.SubPattern):
+            yield from _walk(item)
+
+
+def _literal_text(branch: Any) -> str | None:
+    """The branch as plain text when it is only literal characters, else None."""
+    items = branch.data if isinstance(branch, _sre_parser.SubPattern) else branch
+    if not all(op is _sre_constants.LITERAL for op, _ in items):
+        return None
+    return "".join(chr(argument) for _, argument in items)
+
+
+def _has_overlapping_branch(body: Any) -> bool:
+    """True when an alternation in `body` can match empty, or has identical or prefix branches.
+
+    The parser factors a common prefix out, so `(a|aa)` arrives as `a` + `(|a)`; empty branches
+    are therefore the signal for those. Distinct literals like POST|PUT and class or category
+    branches are linear in CPython and stay allowed.
+    """
+    for op, argument in _walk(body):
+        if op is not _sre_constants.BRANCH:
+            continue
+        texts: list[str] = []
+        for branch in argument[1]:
+            items = branch.data if isinstance(branch, _sre_parser.SubPattern) else branch
+            if not items:
+                return True
+            text = _literal_text(branch)
+            if text is not None:
+                texts.append(text)
+        for index, first in enumerate(texts):
+            if any(first.startswith(other) for other in texts[:index]) or any(
+                other.startswith(first) for other in texts[:index]
+            ):
+                return True
+    return False
+
+
+def check_pattern_safety(pattern: str) -> None:
+    r"""Reject patterns that can backtrack catastrophically; raises ValueError.
+
+    Refused: over-long patterns, backreferences, nested repetition unless both bounds are
+    small (`(a+)+`, `(a+){1,50}`, `(a{1,100}){1,100}`), and alternation under repetition with
+    identical, prefix-related or empty alternatives (`(a|a)+`, `(a|aa)+`).
+    The parse tree comes from the private `re._parser` because the public API cannot expose
+    quantifier structure; the stdlib `re` has no timeout, so the shape must be rejected up front.
+    """
     if len(pattern) > MAX_PATTERN_LENGTH:
         raise ValueError(f"regex longer than {MAX_PATTERN_LENGTH} characters")
     try:
         tree = _sre_parser.parse(pattern)
     except (re.error, OverflowError, RecursionError) as exc:
         raise ValueError(f"invalid regex: {exc}") from exc
-
-    def has_unbounded(node: Any) -> bool:
-        if isinstance(node, _sre_parser.SubPattern | list | tuple):
-            items = node.data if isinstance(node, _sre_parser.SubPattern) else node
-            for item in items:
-                if (
-                    isinstance(item, tuple)
-                    and len(item) == 2
-                    and item[0] in _REPEAT_OPS
-                    and item[1][1] == _sre_constants.MAXREPEAT
-                ):
-                    return True
-                if has_unbounded(item):
-                    return True
-        return False
-
-    def visit(node: Any) -> None:
-        items = node.data if isinstance(node, _sre_parser.SubPattern) else node
-        for item in items if isinstance(items, list | tuple) else ():
-            if isinstance(item, tuple) and len(item) == 2 and item[0] in _REPEAT_OPS:
-                _, high, body = item[1]
-                if high == _sre_constants.MAXREPEAT and has_unbounded(body):
-                    raise ValueError(
-                        "regex has nested unbounded quantifiers; bound the inner one, e.g. {1,20}"
-                    )
-                visit(body)
-            elif isinstance(item, tuple | list | _sre_parser.SubPattern):
-                visit(item)
-
-    visit(tree)
-
-
-_REPEAT_OPS = (_sre_constants.MAX_REPEAT, _sre_constants.MIN_REPEAT)
+    for op, argument in _walk(tree):
+        if op is _sre_constants.GROUPREF or op is _sre_constants.GROUPREF_EXISTS:
+            raise ValueError("regex has backreferences, which can backtrack exponentially")
+        if op not in _REPEAT_OPS:
+            continue
+        _, outer_max, body = argument
+        if outer_max <= 1:
+            continue
+        for inner_op, inner in _walk(body):
+            if inner_op not in _REPEAT_OPS or inner[1] <= 1:
+                continue
+            inner_max = inner[1]
+            is_bounded = outer_max != _UNBOUNDED and inner_max != _UNBOUNDED
+            if not is_bounded or outer_max * inner_max > _MAX_NESTED_PRODUCT:
+                raise ValueError(
+                    "regex has nested quantifiers that can backtrack exponentially; "
+                    "bound them tightly, e.g. {1,8}"
+                )
+        if _has_overlapping_branch(body):
+            raise ValueError("regex has overlapping alternation under repetition, e.g. (a|a)+")
 
 
 def _compile_pattern(pattern: str) -> re.Pattern[str]:
@@ -203,18 +251,22 @@ def _compile_pattern(pattern: str) -> re.Pattern[str]:
 def _glob_predicate(expected: Any) -> _Predicate:
     if not isinstance(expected, str):
         raise ValueError("operator 'glob' needs a string value")
+    if len(expected) > MAX_PATTERN_LENGTH:
+        raise ValueError(f"glob longer than {MAX_PATTERN_LENGTH} characters")
     prefix = expected[:-1]
     if expected.endswith("*") and not _GLOB_SPECIAL.search(prefix):
         # "type.*" is by far the most common glob; startswith skips the regex engine.
         return lambda actual: isinstance(actual, str) and actual.startswith(prefix)
     glob_regex = _compile_pattern(fnmatch.translate(expected))  # case-sensitive
-    return lambda actual: isinstance(actual, str) and glob_regex.match(actual) is not None
+    match = glob_regex.match
+    limit = MAX_SUBJECT_LENGTH
+    return lambda actual: isinstance(actual, str) and match(actual[:limit]) is not None
 
 
 def _regex_predicate(expected: Any) -> _Predicate:
     if not isinstance(expected, str):
         raise ValueError("operator 'regex' needs a string value")
-    _check_pattern_safety(expected)
+    check_pattern_safety(expected)
     search = _compile_pattern(expected).search
     limit = MAX_SUBJECT_LENGTH
     return lambda actual: isinstance(actual, str) and search(actual[:limit]) is not None

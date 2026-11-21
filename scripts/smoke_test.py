@@ -29,7 +29,6 @@ RATES_SOURCE = "rates-oms"
 RATES_RULE_ID = "rates-large-rejections"
 SETTLEMENTS_SOURCE = "settlements-engine"
 RATES_RULE_ID = "rates-large-rejections"
-WORKFLOW_ID = "wf-settle-20261120-0042"
 ACTOR = {"id": "system:smoke-test"}
 WORKERS = {"processor": 9101, "outbox-relay": 9102, "delivery": 9103, "runbook-runner": 9104}
 
@@ -105,9 +104,15 @@ def rates_event(ctx: Ctx, label: str) -> tuple[dict[str, Any], str]:
 
 def settlements_event(ctx: Ctx) -> dict[str, Any]:
     event = fixture("settlements_workflow_failed.json")
-    # Same workflowId on purpose (the runbook check needs it); vary a harmless field.
+    # A fresh workflowId per run: mock-gateway fails only the first retries of each workflow,
+    # so a reused id retries fine and the runbook never reaches the escalate approval.
+    event["workflowId"] = workflow_id(ctx)
     event["error"]["message"] = f"{event['error']['message']} [smoke {ctx.run_id}]"
     return event
+
+
+def workflow_id(ctx: Ctx) -> str:
+    return f"wf-smoke-{ctx.run_id}"
 
 
 def find_alert(ctx: Ctx, team: str, matches: Callable[[dict[str, Any]], bool]) -> Any:
@@ -129,7 +134,7 @@ def trade_matcher(trade_id: str) -> Callable[[dict[str, Any]], bool]:
 def workflow_matcher(ctx: Ctx) -> Callable[[dict[str, Any]], bool]:
     marker = f"[smoke {ctx.run_id}]"
     return lambda event: (
-        event.get("workflowId") == WORKFLOW_ID
+        event.get("workflowId") == workflow_id(ctx)
         and marker in event.get("error", {}).get("message", "")
     )
 
@@ -168,21 +173,21 @@ def make_worker_healthz_check(service: str, port: int) -> Callable[[Ctx], str]:
     return check
 
 
-def resolve_open_rates_alerts(ctx: Ctx) -> int:
-    """Resolve earlier runs' rates alerts (best effort; the api may not exist at this gate).
+def resolve_open_alerts(ctx: Ctx, team: str, rule_id: str) -> int:
+    """Resolve earlier runs' alerts of one rule (best effort; the api may not exist at a gate).
 
-    The fixture's fingerprint has no tradeId, so without this the smoke event would fold into an
-    alert from a previous run and send no new notification for the email check to find.
+    The fixtures' fingerprints are stable across runs, so without this the smoke event would
+    fold into an alert from a previous run: no new notification, no new runbook run.
     """
     try:
         page = AlertPage.model_validate(
-            get_json(ctx, f"{ctx.base_url}/api/v1/alerts", team="rates", status="open", limit=200)
+            get_json(ctx, f"{ctx.base_url}/api/v1/alerts", team=team, status="open", limit=200)
         )
     except (CheckFailed, httpx.HTTPError, ValueError):
         return 0
     resolved = 0
     for alert in page.items:
-        if alert.rule_id != RATES_RULE_ID:
+        if alert.rule_id != rule_id:
             continue
         url = f"{ctx.base_url}/api/v1/alerts/{alert.id}/resolve"
         body = {"actor": {"id": "smoke-test"}, "comment": f"smoke {ctx.run_id}"}
@@ -194,6 +199,10 @@ def resolve_open_rates_alerts(ctx: Ctx) -> int:
     return resolved
 
 
+def resolve_open_rates_alerts(ctx: Ctx) -> int:
+    return resolve_open_alerts(ctx, "rates", RATES_RULE_ID)
+
+
 def check_post_rates_fixture(ctx: Ctx) -> str:
     resolve_open_rates_alerts(ctx)
     event, trade_id = rates_event(ctx, "main")
@@ -203,6 +212,7 @@ def check_post_rates_fixture(ctx: Ctx) -> str:
 
 
 def check_post_settlements_fixture(ctx: Ctx) -> str:
+    resolve_open_alerts(ctx, "settlements", "settlements-workflow-failed")
     post_event(ctx, SETTLEMENTS_SOURCE, settlements_event(ctx))
     return "202"
 
@@ -231,7 +241,7 @@ def check_events_recent(ctx: Ctx) -> str:
         events = get_json(ctx, f"{ctx.base_url}/api/v1/events/recent", limit=500)
         payloads = [e.get("payload", {}) for e in events]
         has_rates = any(p.get("payload", {}).get("tradeId") == trade_id for p in payloads)
-        has_settlements = any(p.get("workflowId") == WORKFLOW_ID for p in payloads)
+        has_settlements = any(p.get("workflowId") == workflow_id(ctx) for p in payloads)
         return has_rates and has_settlements
 
     poll(ctx, probe, "events/recent does not list both posted fixtures")
@@ -365,8 +375,8 @@ def check_rendered_runbook(ctx: Ctx) -> str:
 
     detail = poll(ctx, probe, "alert detail has no rendered runbook")
     steps = detail.rendered_runbook.steps
-    if not any(WORKFLOW_ID in step.text for step in steps):
-        raise CheckFailed(f"no runbook step text contains {WORKFLOW_ID}")
+    if not any(workflow_id(ctx) in step.text for step in steps):
+        raise CheckFailed(f"no runbook step text contains {workflow_id(ctx)}")
     missing = [f for step in steps for f in step.missing_fields]
     if missing:
         raise CheckFailed(f"runbook has unfilled placeholders: {missing}")
@@ -392,7 +402,8 @@ def check_phone_approve(ctx: Ctx) -> str:
     approval = ctx.state["approval"]
     response = ctx.client.post(
         f"{ctx.base_url}/api/v1/phone-simulator/replies",
-        json={"recipient_id": "anna", "text": f"APPROVE {approval['approval_code']}"},
+        # Replies are checked against the sender's teams: settlements is on-call piotr.
+        json={"recipient_id": "piotr", "text": f"APPROVE {approval['approval_code']}"},
     )
     if response.status_code != 200:
         raise CheckFailed(f"phone reply returned {response.status_code}")

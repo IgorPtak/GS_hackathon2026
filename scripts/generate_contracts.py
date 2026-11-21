@@ -4,7 +4,9 @@ Writes:
   * ``contracts/schemas/*.schema.json``      one JSON Schema per top-level model
   * ``contracts/openapi.yaml``               ONLY the ``components.schemas`` block
                                              (spliced textually, so ``paths`` stay byte-identical)
-  * ``web/src/api/schema.gen.ts``            via ``npx -y openapi-typescript@7``
+  * ``web/src/api/schema.gen.ts``            via ``web/node_modules/.bin/openapi-typescript``,
+                                             else ``npx --no-install`` (never downloads;
+                                             run ``npm --prefix web ci`` first)
 
 Also validates that every ``$ref`` in openapi.yaml resolves and that every YAML file in
 ``contracts/examples/<kind>/`` validates against its model's JSON Schema.
@@ -46,6 +48,8 @@ CONTRACTS = ROOT / "contracts"
 SCHEMAS_DIR = CONTRACTS / "schemas"
 OPENAPI = CONTRACTS / "openapi.yaml"
 EXAMPLES = CONTRACTS / "examples"
+WEB_DIR = ROOT / "web"
+WEB_BIN = WEB_DIR / "node_modules" / ".bin" / "openapi-typescript"
 TS_OUT = ROOT / "web" / "src" / "api" / "schema.gen.ts"
 REF_PREFIX = "#/components/schemas/"
 
@@ -216,17 +220,29 @@ def validate_examples(types: dict[str, Any]) -> list[str]:
     return errors
 
 
-def run_typescript(openapi: Path, out: Path) -> None:
-    """Run openapi-typescript v7 on ``openapi`` writing ``out``."""
-    out.parent.mkdir(parents=True, exist_ok=True)
+def _openapi_typescript_command() -> list[str]:
+    """argv prefix for openapi-typescript: the pinned local binary, else npx without network."""
+    if WEB_BIN.exists():
+        return [str(WEB_BIN)]
     npx = shutil.which("npx")
-    if not npx:
-        raise SystemExit("npx not found on PATH")
-    subprocess.run(
-        [npx, "-y", "openapi-typescript@7", str(openapi), "-o", str(out)],
-        check=True,
-        cwd=ROOT,
+    if npx:
+        return [npx, "--no-install", "openapi-typescript"]
+    raise SystemExit(
+        "openapi-typescript not found (no web/node_modules/.bin/openapi-typescript and no npx "
+        "on PATH): run `npm --prefix web ci` first"
     )
+
+
+def run_typescript(openapi: Path, out: Path) -> None:
+    """Run the local openapi-typescript on ``openapi`` writing ``out``; never downloads."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    command = [*_openapi_typescript_command(), str(openapi), "-o", str(out)]
+    try:
+        subprocess.run(command, check=True, cwd=WEB_DIR)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(
+            f"openapi-typescript failed (exit {exc.returncode}): run `npm --prefix web ci` first"
+        ) from exc
 
 
 def main() -> int:

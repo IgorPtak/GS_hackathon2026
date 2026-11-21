@@ -14,6 +14,7 @@ from alerting_core.publishing import (
     publish_alert_change,
     publish_broadcast,
     publish_team_event,
+    publish_team_events,
 )
 from redis.asyncio import Redis
 
@@ -110,3 +111,86 @@ async def test_publish_swallows_os_errors() -> None:
 
     event = ConfigChangedEvent(at=datetime.now(UTC), kind="rule", id="r", version=1)
     await publish_team_event(BrokenRedis(), "rates", event)  # type: ignore[arg-type]
+
+
+async def test_publish_team_events_batches_into_one_pipeline(redis: Redis) -> None:
+    alert = sample_alert()
+    now = datetime.now(UTC)
+    entry = AuditEntry(
+        id=1, alert_id=alert.id, at=now, actor=Actor(id="anna"), verb=AuditVerb.alert_acknowledged
+    )
+    events = [AlertUpdatedEvent(at=now, alert=alert), AuditAppendedEvent(at=now, entry=entry)]
+
+    payloads = await collect(
+        redis, "alerts.team.rates", 2, lambda: publish_team_events(redis, "rates", events)
+    )
+
+    assert [p["type"] for p in payloads] == ["alert.updated", "audit.appended"]
+    assert AlertUpdatedEvent.model_validate(payloads[0]).alert == alert
+    assert AuditAppendedEvent.model_validate(payloads[1]).entry == entry
+
+
+async def test_publish_team_events_uses_non_transactional_pipeline_and_skips_empty() -> None:
+    calls: list[tuple[bool, list[tuple[str, bytes]], int]] = []
+
+    class SpyPipeline:
+        def __init__(self, transaction: bool) -> None:
+            self._transaction = transaction
+            self._items: list[tuple[str, bytes]] = []
+            self._executes = 0
+
+        async def __aenter__(self) -> "SpyPipeline":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        def publish(self, channel: str, data: bytes) -> "SpyPipeline":
+            self._items.append((channel, data))
+            return self
+
+        async def execute(self) -> list[int]:
+            self._executes += 1
+            calls.append((self._transaction, list(self._items), self._executes))
+            return [1] * len(self._items)
+
+    class SpyRedis:
+        def pipeline(self, *, transaction: bool = True) -> SpyPipeline:
+            return SpyPipeline(transaction)
+
+    spy = SpyRedis()
+    await publish_team_events(spy, "rates", [])  # type: ignore[arg-type]
+    assert calls == []
+
+    now = datetime.now(UTC)
+    events = [
+        ConfigChangedEvent(at=now, kind="rule", id="r1", version=1),
+        ConfigChangedEvent(at=now, kind="rule", id="r2", version=2),
+    ]
+    await publish_team_events(spy, "rates", events)  # type: ignore[arg-type]
+    assert len(calls) == 1
+    assert calls[0][0] is False
+    assert [ch for ch, _ in calls[0][1]] == ["alerts.team.rates", "alerts.team.rates"]
+    assert calls[0][2] == 1
+
+
+async def test_publish_team_events_swallows_pipeline_errors() -> None:
+    class BrokenPipeline:
+        async def __aenter__(self) -> "BrokenPipeline":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        def publish(self, channel: str, data: bytes) -> "BrokenPipeline":
+            return self
+
+        async def execute(self) -> list[int]:
+            raise ConnectionResetError("boom")
+
+    class BrokenPipelineRedis:
+        def pipeline(self, *, transaction: bool = True) -> BrokenPipeline:
+            return BrokenPipeline()
+
+    event = ConfigChangedEvent(at=datetime.now(UTC), kind="rule", id="r", version=1)
+    await publish_team_events(BrokenPipelineRedis(), "rates", [event])  # type: ignore[arg-type]

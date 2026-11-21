@@ -7,6 +7,7 @@ from typing import Any, BinaryIO, NamedTuple
 import orjson
 from alerting_contracts.config import SourceConfig
 from alerting_core.logging import get_logger
+from alerting_core.rules.conditions import MAX_SUBJECT_LENGTH, check_pattern_safety
 
 MAX_LINE_BYTES = 1 << 20
 HEAD_BYTES = 64
@@ -140,6 +141,9 @@ def parse_line(line: str, source: SourceConfig, pattern: re.Pattern[str] | None)
         return {**parsed, "raw_line": line}
     if pattern is None:
         raise LineParseError("line_pattern is missing or invalid")
+    if len(line) > MAX_SUBJECT_LENGTH:
+        # Bounds regex work per line; longer lines go to the DLQ like non-matching ones.
+        raise LineParseError(f"line longer than {MAX_SUBJECT_LENGTH} characters for line_pattern")
     match = pattern.match(line)
     if match is None:
         raise LineParseError("line does not match line_pattern")
@@ -159,12 +163,13 @@ RELEASE_SCRIPT = (
 
 
 def compile_pattern(source: SourceConfig) -> re.Pattern[str] | None:
-    """Compile `settings.line_pattern`; an invalid pattern is logged and sends lines to the DLQ."""
+    """Compile `settings.line_pattern`; an invalid or unsafe one is logged, lines go to the DLQ."""
     raw = source.settings.get("line_pattern")
     if not raw:
         return None
     try:
+        check_pattern_safety(raw)
         return re.compile(raw)
-    except re.error as error:
+    except (re.error, ValueError) as error:
         log.error("log_tail_pattern_invalid", extra={"source_id": source.id, "error": str(error)})
         return None

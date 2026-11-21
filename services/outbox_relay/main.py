@@ -11,6 +11,7 @@ from alerting_core.settings import Settings, get_settings
 from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
 
+from .reconcile import run_reconciler
 from .relay import run_relay
 
 
@@ -28,13 +29,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.relay_task = task
         # One relay replica is enough; extra replicas would only set the same gauge values.
         lag_task = asyncio.create_task(run_stream_lag_collector(redis, stop))
+        # Lost-job safety net; replicas may both run it, the SET NX guard keeps copies to one.
+        reconcile_task = asyncio.create_task(run_reconciler(pool, redis, stop))
         yield
         stop.set()
         with suppress(asyncio.CancelledError):
             await asyncio.wait_for(task, timeout=5)
-        lag_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await lag_task
+        for background in (lag_task, reconcile_task):
+            background.cancel()
+            with suppress(asyncio.CancelledError):
+                await background
         await redis.aclose()
         await pool.close()
 

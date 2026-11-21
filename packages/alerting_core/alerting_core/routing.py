@@ -60,7 +60,8 @@ def _is_within(window: str, moment: datetime, timezone: str, rule_id: str, alert
     """Start inclusive, end exclusive; a window with start > end wraps midnight.
 
     A window with start == end never matches. An invalid timezone never raises: it falls back
-    to Europe/Warsaw (the contract default) and logs `routing_timezone_invalid`.
+    to Europe/Warsaw (the contract default), or UTC when that is missing too, and logs
+    `routing_timezone_invalid`.
     """
     try:
         zone = ZoneInfo(timezone)
@@ -69,7 +70,10 @@ def _is_within(window: str, moment: datetime, timezone: str, rule_id: str, alert
             "routing_timezone_invalid",
             extra={"rule_id": rule_id, "alert_id": alert_id, "timezone": timezone},
         )
-        zone = ZoneInfo(DEFAULT_TIMEZONE)
+        try:
+            zone = ZoneInfo(DEFAULT_TIMEZONE)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            zone = UTC  # no tz database installed at all
     start_text, end_text = window.split("-")
     start, end = time.fromisoformat(start_text), time.fromisoformat(end_text)
     local = _as_utc(moment).astimezone(zone).time().replace(tzinfo=None)

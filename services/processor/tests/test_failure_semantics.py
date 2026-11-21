@@ -9,6 +9,7 @@ from alerting_contracts.config import ThrottlePolicy
 from alerting_core.config.registry import ConfigSnapshot
 
 from services.processor import batch as batch_module
+from services.processor import folds as folds_module
 
 from .conftest import message
 from .test_processor import RULE_ID, alert_rows, rates_event
@@ -147,3 +148,28 @@ async def test_throttled_targets_are_audited_as_suppressed(
     )
     assert suppressed
     assert {row["detail"]["recipient_id"] for row in suppressed} == {"anna"}
+
+
+async def test_folds_of_a_killed_replica_are_adopted_by_another(
+    pool, redis, make_processor, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(folds_module, "ORPHAN_IDLE_SECONDS", 0)
+    killed, survivor = make_processor(), make_processor()
+    for _ in range(3):
+        await killed.handle_batch([message(rates_event())])  # 1 alert + 2 folds in Redis
+    # `killed` never flushes: its in-memory tracker died with it.
+
+    assert await survivor._folds.adopt_orphans() == 1
+    await survivor._folds.flush()
+    assert await survivor._folds.adopt_orphans() == 0  # the counter was taken exactly once
+
+    [row] = await alert_rows(pool)
+    assert row["count"] == 3
+
+
+async def test_live_counters_are_not_adopted(pool, redis, make_processor) -> None:
+    killed, survivor = make_processor(), make_processor()
+    for _ in range(2):
+        await killed.handle_batch([message(rates_event())])
+
+    assert await survivor._folds.adopt_orphans() == 0  # touched < 10 s ago: still owned

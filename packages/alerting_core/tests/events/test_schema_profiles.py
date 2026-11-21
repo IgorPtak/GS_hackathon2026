@@ -200,6 +200,7 @@ def test_shape_hash_and_key_paths():
     assert shape_hash(a) != shape_hash({"k": 1})
 
 
+@pytest.mark.slow  # wall-clock threshold: informational in CI
 def test_benchmark_100k_selections_and_normalizations():
     envelopes = [
         _envelope(_alertmanager("alertmanager_firing.json")),
