@@ -5,6 +5,15 @@ Step-by-step commands, UI clicks, and expected outcomes for each scene of the 5-
 ## Before you start
 
 1. Ensure the stack is running (`docker compose ps` shows all services healthy).
+1. Rehearse, then reset (the rehearsal itself creates alerts, so the reset comes last):
+
+   ```bash
+   uv run python scripts/demo_rehearsal.py      # expect "9/9 scenes passed" (~20 s)
+   uv run python scripts/reset_demo.py --seed   # resolves every open alert, clears Mailpit, seeds 1 alert per team
+   ```
+
+   After benchmarks the feed holds thousands of load-test alerts; the reset resolves them in about 20 s.
+1. Record between **08:00 and 20:00 Europe/Warsaw**: Anna's SMS and phone only fire inside her working hours; outside them she gets email only.
 2. Open these browser tabs ahead of recording:
    - Web UI: http://localhost:5173
    - Mailpit: http://localhost:8025
@@ -291,7 +300,10 @@ docker compose up -d --scale processor=4 --scale delivery=4 --scale ingest=3 --s
 ### UI clicks
 
 1. Open the **Metrics** tab at http://localhost:5173: point out the live tiles updating every 5 s (`Ingest rate`, `Processed rate`, `Events stream lag`, `Deliveries stream lag`, `End-to-end latency p50`, `End-to-end latency p99`, `Delivery retries`, `Dead-lettered`, `Open alerts`).
-2. Click **Open Grafana** (http://localhost:3000) and open the provisioned **Alerting** dashboard.
+2. Click **Open Grafana** (http://localhost:3000, no login) and open the provisioned **Alerting** dashboard. Point at:
+   - the top tiles (p99 green under 1 s, msg/s, alerts/s, deliveries/s, outbox relay lag, dead letters = 0);
+   - **msg/s processed by replica**: after the `--scale` command one line per processor appears within ~15 s and the load splits between them;
+   - **End-to-end p99 by channel**: during the Scene 5 outage only `sms` rises, `ui` and `email` stay flat.
 3. Quote the final A-41 numbers from the README load table (do not re-measure on stage), see [docs/load-test-results.md](load-test-results.md) and [docs/benchmarks.md](benchmarks.md) for the full method and flame graphs:
    - Steady 60 s at 200 msg/s: 12,000 sent, 24,000 / 24,000 delivered, **0 lost**, p50 **41.1 ms**, p99 **83.8 ms**.
    - Horizontal scale sweep (`2:2:2:1` behind `proxy`): **500.0 msg/s** (p50 61.7 ms, p99 353.2 ms) and **800.0 msg/s** sustained (p50 **416.9 ms**, p99 **1,000.7 ms**, **0 lost**; peak **983.8 msg/s** on `1:2:1:1`).

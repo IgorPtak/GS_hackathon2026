@@ -95,7 +95,7 @@ def scene_sms_outage_no_loss(ctx: RehearsalContext) -> SceneResult:
                 timeout=max(ctx.timeout, OUTAGE_RECOVERY_TIMEOUT_SECONDS),
                 reason=f"not all deliveries for {alert.id} reached sent/delivered after recovery",
             )
-            return f"alert {alert.id[:8]}, {len(deliveries)}/{len(deliveries)} delivered, 0 DLQ"
+            return f"alert {alert.id[-8:]}, {len(deliveries)}/{len(deliveries)} delivered, 0 DLQ"
         finally:
             set_gateway_outage(ctx, is_down=False)
 
@@ -253,6 +253,6 @@ def scene_alertmanager_resolve(ctx: RehearsalContext) -> SceneResult:
             is_resolved, timeout=ctx.timeout, reason=f"alert {alert.id} did not resolve"
         )
         reason_text = final_alert.resolution_reason.value if final_alert.resolution_reason else None
-        return f"alert {alert.id[:8]} ({instance}) resolved ({reason_text})"
+        return f"alert {alert.id[-8:]} ({instance}) resolved ({reason_text})"
 
     return run_scene("alertmanager_resolve", body)

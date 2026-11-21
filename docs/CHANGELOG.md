@@ -120,3 +120,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-41 deploy/processor: nginx proxy fronting api and ingest replicas for horizontal scaling, scale sweep (--pairs p:d:i:r), orphan fold counter index (dedup-count-index replacing SCAN), delivery-done TTL 24 h, api LLM config sync advisory lock, and ingest /tmp/prometheus tmpfs uid/gid fix
 - D-01 docs: final benchmarks, CPU flame graphs, and project documentation
 - D-05 deploy: Grafana dashboard keeps values between bursts (5 m stat tiles, "idle" instead of NaN), dead letters counted per range, p99 by channel, per-replica throughput, outbox relay lag; Prometheus data on a volume
+- D-03 demo: rehearse-then-reset procedure, recording window, Grafana pointers in docs/demo.md; demo scripts print the distinctive end of alert ids
