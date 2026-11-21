@@ -7,7 +7,7 @@ from typing import Any
 
 import asyncpg
 import orjson
-from alerting_contracts.alerts import Alert, AuditVerb, RunbookJob
+from alerting_contracts.alerts import Alert, AlertStatus, AuditVerb, RunbookJob
 from alerting_contracts.config import ActionConfig
 from alerting_contracts.runbooks import (
     ActionRun,
@@ -112,6 +112,9 @@ class RunbookWalker:
 
     async def execute_approved(self, run: ActionRun) -> None:
         """execute_action_run: run the approved step, then continue after it."""
+        if self._alert.status is AlertStatus.resolved:
+            await self._cancel_for_resolved_alert(run)
+            return
         step = next((s for s in self._rendered.steps if s.index == run.step_index), None)
         if step is None:
             log.warning(
@@ -137,9 +140,31 @@ class RunbookWalker:
         final = await self._execute(step, run)
         await self._walk(after_index=step.index, previous=final.status)
 
+    async def _cancel_for_resolved_alert(self, run: ActionRun) -> None:
+        """Never call the plugin for a resolved alert. There is no `cancelled` run status, so the
+        run becomes `skipped` with the reason in `error`."""
+        error = "alert resolved before the action ran"
+        skipped = await self._store.update_run(
+            run.id, ActionRunStatus.skipped, run.attempt, error=error
+        )
+        self._changed(skipped)
+        await self._audit(
+            AuditVerb.action_run_skipped,
+            {
+                "step_index": run.step_index,
+                "action_id": run.action_id,
+                "action_run_id": run.id,
+                "reason": "alert_resolved",
+            },
+            outcome="error",
+        )
+
     # -- the walk ---------------------------------------------------------------------------
 
     async def _walk(self, after_index: int, previous: ActionRunStatus | None) -> None:
+        if self._alert.status is AlertStatus.resolved:
+            log.info("runbook_walk_alert_resolved", extra={"alert_id": self._alert.id})
+            return
         for step in self._rendered.steps:
             if step.index <= after_index:
                 continue
@@ -368,6 +393,11 @@ class RunbookRunner:
     ) -> tuple[str, str, list[BaseModel]]:
         extra = {"alert_id": job.alert_id, "job_type": job.job_type, "runbook_id": job.runbook_id}
         try:
+            # Row lock: a concurrent resolve waits until this job's transaction ends, so the
+            # status read below stays true while actions run.
+            await connection.execute(
+                "SELECT 1 FROM alerts WHERE id = $1::uuid FOR UPDATE", job.alert_id
+            )
             alert = await get_alert(connection, job.alert_id)
         except AlertNotFoundError:
             log.warning("runbook_job_alert_missing", extra=extra)

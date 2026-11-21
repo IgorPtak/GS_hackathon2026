@@ -88,3 +88,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-39 processor: `events` XTRIM MINID is now min(now − 2 h, every group's oldest pending / last-delivered id), compared numerically; skips the round (`events_trim_skipped`) when XINFO GROUPS/XPENDING fail, quietly when the stream is missing (new `services/processor/trimming.py`)
 
 - A-45 runbook formats: markdown inline `action key=value` params and approval, "needs approval" prose, actions with missing required params become text steps
+- A-47 api/runbook-runner: decisions and action runs refuse resolved alerts (409 alert_resolved, SMS "Alert already resolved", runner skips without calling the plugin; alert row locked FOR UPDATE)
