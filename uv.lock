@@ -27,11 +27,11 @@ source = { editable = "packages/alerting_core" }
 dependencies = [
     { name = "alerting-contracts" },
     { name = "asyncpg" },
+    { name = "httpx" },
     { name = "orjson" },
     { name = "prometheus-client" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "python-ulid" },
     { name = "pyyaml" },
     { name = "redis" },
     { name = "watchfiles" },
@@ -41,11 +41,11 @@ dependencies = [
 requires-dist = [
     { name = "alerting-contracts", editable = "contracts" },
     { name = "asyncpg" },
+    { name = "httpx" },
     { name = "orjson" },
     { name = "prometheus-client" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pydantic-settings" },
-    { name = "python-ulid" },
     { name = "pyyaml" },
     { name = "redis", specifier = ">=5" },
     { name = "watchfiles" },
@@ -70,7 +70,7 @@ dependencies = [
     { name = "redis" },
     { name = "sniffio" },
     { name = "uvicorn", extra = ["standard"] },
-    { name = "uvloop" },
+    { name = "uvloop", marker = "sys_platform != 'win32'" },
     { name = "watchfiles" },
 ]
 
@@ -99,7 +99,7 @@ requires-dist = [
     { name = "redis", specifier = ">=5" },
     { name = "sniffio" },
     { name = "uvicorn", extras = ["standard"] },
-    { name = "uvloop" },
+    { name = "uvloop", marker = "sys_platform != 'win32'" },
     { name = "watchfiles" },
 ]
 
