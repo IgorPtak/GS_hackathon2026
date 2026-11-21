@@ -28,11 +28,12 @@ to `deliveries`.
 | `ingest-idempotency:<idempotency_key>` | string `SET NX` | 24 h | Drop duplicate submissions at ingest | A |
 | `dedup:<rule_id>:<fingerprint>` | string (alert id) `SET NX` | dedup window | First event wins and creates the alert. The value is the alert id generated *before* `SET NX`; the insert is `ON CONFLICT (id) DO NOTHING`, so a redelivered event recreates an alert lost to a crash between `SET NX` and commit. On a key miss while an open alert with the same (`rule_id`, `fingerprint`) exists, the key is re-armed with that alert's id and the event folds into it | A |
 | `dedup-count:<rule_id>:<fingerprint>` | counter `INCR` | dedup window + 60 s | Events folded into the alert; flushed to `alerts.count` in batches | A |
+| `dedup-count-index` | sorted set, member = `dedup-count:*` key, score = last write ms | — (entries of gone counters dropped on read) | Lets orphan adoption find idle counters without SCAN | A |
 | `group-buffer:<rule_id>:<group_key>` | list `RPUSH` (event summary JSON) | group window + 60 s | Different events waiting for the group window | A |
 | `group-deadlines` | sorted set, member `<rule_id>:<group_key>`, score = flush time ms | — | Flusher claims due groups with `ZREM` (returns 1 = this worker owns it) | A |
 | `group-flushing:<rule_id>:<group_key>:<deadline_ms>` | list (the claimed `group-buffer`, renamed) | group window + 60 s | A flusher's claimed window until its summary alert commits; `group-deadlines` holds `retry:<this key>` (score = retry time) so another processor re-flushes it after a crash. The summary alert id is derived from this key, so a re-flush cannot duplicate | A |
 | `throttle:<rule_id>:<recipient_id>:<period_start>` | counter `INCR` | throttle period | Per-recipient delivery limit | A |
-| `delivery-done:<delivery_id>` | string `SET NX` | 7 d | Delivery idempotency by outbox id | A |
+| `delivery-done:<delivery_id>` | string `SET NX` | 24 h | Delivery idempotency by outbox id | A |
 | `delivery-retries` | sorted set (job JSON, score = due ms) | — | Delayed retries | A |
 | `circuit:<channel_id>` | hash `{state, opened_at, failures}` | — | Circuit breaker per channel | A |
 | `silence-deadlines` | sorted set, member alert id, score = deadline ms | — | Auto-resolve after silence | A |

@@ -7,8 +7,12 @@
 - `dedup-count:<rule_id>:<fingerprint>` counts folded events. Flushers take the counter with
   GETDEL and add the delta to `alerts.count`, so several processors can flush the same key
   without double counting; a delta whose alert is not committed yet is put back with INCRBY.
+- `dedup-count-index` is a sorted set of those counters scored by their last write (ms). Orphan
+  adoption reads it instead of SCANning the keyspace, whose cost grew with every replica and with
+  the millions of `delivery-done:*` keys (A-41 load test: SCAN was the top Redis CPU consumer).
 """
 
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -16,6 +20,22 @@ from redis.asyncio import Redis
 
 # The counter outlives the window so a late flush still finds the folded events.
 _COUNT_GRACE_MS = 60_000
+DEDUP_COUNT_INDEX = "dedup-count-index"
+# Candidates idle long enough that still exist; index entries of counters already taken (GETDEL)
+# or expired are dropped in the same script, so a concurrent INCRBY + ZADD cannot be lost between
+# an EXISTS check and the ZREM.
+_IDLE_COUNTERS_SCRIPT = """
+local candidates = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[2])
+local live = {}
+for _, key in ipairs(candidates) do
+  if redis.call('EXISTS', key) == 1 then
+    table.insert(live, key)
+  else
+    redis.call('ZREM', KEYS[1], key)
+  end
+end
+return live
+"""
 
 
 def dedup_key(rule_id: str, fingerprint: str) -> str:
@@ -81,11 +101,13 @@ async def record_folds(redis: Redis, folds: Sequence[tuple[DedupClaim, int]]) ->
     """Add `count` folded events per (claim, count)."""
     if not folds:
         return
+    now_ms = _now_ms()
     async with redis.pipeline(transaction=False) as pipeline:
         for fold, count in folds:
             key = dedup_count_key(fold.rule_id, fold.fingerprint)
             pipeline.incrby(key, count)
             pipeline.pexpire(key, fold.window_ms + _COUNT_GRACE_MS)
+            pipeline.zadd(DEDUP_COUNT_INDEX, {key: now_ms})
         await pipeline.execute()
 
 
@@ -104,11 +126,23 @@ async def return_fold_counts(redis: Redis, deltas: Sequence[tuple[str, int]]) ->
     """Put back deltas that could not be flushed yet (alert not committed by its owner)."""
     if not deltas:
         return
+    now_ms = _now_ms()
     async with redis.pipeline(transaction=False) as pipeline:
         for key, delta in deltas:
             pipeline.incrby(key, delta)
             pipeline.pexpire(key, _COUNT_GRACE_MS * 5)
+            pipeline.zadd(DEDUP_COUNT_INDEX, {key: now_ms})
         await pipeline.execute()
+
+
+async def find_idle_fold_counters(redis: Redis, idle_ms: int, limit: int = 1000) -> list[str]:
+    """Existing fold counters not written for `idle_ms`, oldest first (at most `limit`)."""
+    keys = await redis.eval(_IDLE_COUNTERS_SCRIPT, 1, DEDUP_COUNT_INDEX, _now_ms() - idle_ms, limit)
+    return [key.decode() if isinstance(key, bytes) else key for key in keys]
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
 
 
 async def release_dedup_key(redis: Redis, rule_id: str, fingerprint: str) -> None:

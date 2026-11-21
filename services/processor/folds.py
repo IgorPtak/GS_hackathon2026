@@ -5,8 +5,9 @@ same counter; the flusher GETDELs it, so a delta is applied exactly once whichev
 flushes. Last-seen and last-event are tracked in memory and applied with the delta.
 
 A replica killed between INCRBY and its flush leaves a counter nobody tracks. `adopt_orphans`
-picks up counters idle for ORPHAN_IDLE_SECONDS (a live tracker flushes every second) and maps
-them back to the latest alert of their rule + fingerprint; the normal flush then applies them.
+picks up counters not written for ORPHAN_IDLE_SECONDS (a live tracker flushes every second) from
+`dedup-count-index` and maps them back to the latest alert of their rule + fingerprint; the
+normal flush then applies them.
 """
 
 import asyncio
@@ -17,7 +18,7 @@ from typing import Any
 
 import asyncpg
 from alerting_contracts.sse import AlertUpdatedEvent
-from alerting_core.dedup import return_fold_counts, take_fold_counts
+from alerting_core.dedup import find_idle_fold_counters, return_fold_counts, take_fold_counts
 from alerting_core.logging import get_logger
 from alerting_core.publishing import publish_team_event
 from alerting_core.storage.alerts_write import FoldUpdate, apply_folds
@@ -108,27 +109,14 @@ class FoldTracker:
     async def adopt_orphans(self) -> int:
         """Track counters no live tracker flushes; returns how many were adopted."""
         tracked = {fold.count_key for fold in self._pending.values()}
-        keys = [
-            key.decode() if isinstance(key, bytes) else key
-            async for key in self._redis.scan_iter(match=f"{_COUNT_PREFIX}*", count=500)
-        ]
-        keys = [key for key in keys if key not in tracked]
-        if not keys:
-            return 0
-        async with self._redis.pipeline(transaction=False) as pipeline:
-            for key in keys:
-                pipeline.object("idletime", key)
-            idle = await pipeline.execute(raise_on_error=False)
-        if any(not isinstance(seconds, int) for seconds in idle):
-            # OBJECT IDLETIME errors under an LFU maxmemory-policy: adoption is then disabled.
-            log.warning("fold_orphan_idletime_unavailable", extra={"keys": len(keys)})
+        idle = await find_idle_fold_counters(self._redis, ORPHAN_IDLE_SECONDS * 1000)
         orphans = [
             key
-            for key, seconds in zip(keys, idle, strict=True)
-            if isinstance(seconds, int)
-            and seconds >= ORPHAN_IDLE_SECONDS
-            and key.count(":") >= 2  # dedup-count:<rule>:<fingerprint>
+            for key in idle
+            if key not in tracked and key.count(":") >= 2  # dedup-count:<rule>:<fingerprint>
         ]
+        if not orphans:
+            return 0
         # rule ids never contain ':'; fingerprints are hex, so the last ':' splits the two.
         pairs = [key.removeprefix(_COUNT_PREFIX).rsplit(":", 1) for key in orphans]
         rows = await self._pool.fetch(
