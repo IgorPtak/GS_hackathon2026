@@ -73,7 +73,7 @@ in *[brackets]* is an on-screen caption for the edit.
 | s0 problem | nobody | the sign-in screen | open a new window, wait for the star to draw | after a 6–8 s still |
 | s1 setup | nobody, then Anna | a terminal, then the sign-in screen | `reset_demo.py --seed`; record the terminal part separately | the test alert is in the Inbox |
 | s2 new system | Anna | Home | welcome already seen; console closed | the second payment event is an alert in the Inbox |
-| s3 runbook & phone | Piotr | Home | click once on the page (sound); voice tested in Settings | the Inbox timeline shows "escalated" |
+| s3 runbook & phone | Piotr | Home | click once on the page (sound); voice tested in Settings | the Inbox timeline shows the approval and the escalation |
 | s4 channels & fix | Anna | Home | Mailpit tab open; LLM endpoint reachable for Draft with AI | the fix card folds away in Approvals |
 | s5 no flood, no loss | Anna, then Piotr for SMS | Home | SMS is up (console says **Take SMS down**) | SMS is back to **Sending** with nothing waiting |
 | s6 scale | n/a | the architecture diagram | Grafana open, last 15 minutes; a terminal with the commands ready to paste | one line per replica in "msg/s processed by replica" |
