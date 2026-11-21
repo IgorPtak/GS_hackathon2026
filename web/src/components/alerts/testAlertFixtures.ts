@@ -48,7 +48,64 @@ function settlementsTestAlert(): TestAlert {
   };
 }
 
-/** A fresh test event that lands in the picked team's inbox; other teams get a Rates alert. */
+function pricingTestAlert(): TestAlert {
+  // Goes through the generic webhook, like the seeded pricing log line; the instrument is the
+  // fingerprint, so each click makes a new alert.
+  const instrument = `EURUSD-UI-${freshSuffix()}`;
+  const now = new Date().toISOString();
+  return {
+    sourceId: "generic-webhook",
+    teamId: "pricing",
+    payload: {
+      timestamp: now,
+      level: "ERROR",
+      service: "pricing-engine",
+      instrument,
+      feed: "reuters",
+      age_ms: "31000",
+      msg: "Price stale for 31s",
+      raw_line: `${now} ERROR pricing-engine instrument=${instrument} feed=reuters age_ms=31000 msg="Price stale for 31s"`,
+    },
+  };
+}
+
+function platformTestAlert(): TestAlert {
+  // Alertmanager fingerprints by alertname and instance, so the instance is fresh per click.
+  const instance = `exporter-ui-${freshSuffix().toLowerCase()}:9100`;
+  return {
+    sourceId: "alertmanager",
+    teamId: "platform",
+    payload: {
+      version: "4",
+      status: "firing",
+      receiver: "alerting-service",
+      groupKey: '{}:{alertname="ExporterDown"}',
+      alerts: [
+        {
+          status: "firing",
+          labels: {
+            alertname: "ExporterDown",
+            severity: "warning",
+            instance,
+            job: "dynamic-monitoring",
+          },
+          annotations: { summary: `Exporter ${instance} is down` },
+          startsAt: new Date().toISOString(),
+          endsAt: "0001-01-01T00:00:00Z",
+        },
+      ],
+    },
+  };
+}
+
+const BUILDERS: Record<string, () => TestAlert> = {
+  rates: ratesTestAlert,
+  settlements: settlementsTestAlert,
+  pricing: pricingTestAlert,
+  platform: platformTestAlert,
+};
+
+/** A fresh test event that lands in the picked team's inbox; unknown teams get a Rates alert. */
 export function buildTestAlert(teamId: string): TestAlert {
-  return teamId === "settlements" ? settlementsTestAlert() : ratesTestAlert();
+  return (BUILDERS[teamId] ?? ratesTestAlert)();
 }

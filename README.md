@@ -28,7 +28,9 @@ Webhook / Alertmanager / Log tail
                                                                                  YAML webhooks)
 ```
 
-## Quickstart
+## Quickstart: three commands
+
+You need Docker Desktop (or Docker Engine with Compose v2). The running stack uses about 0.8 GB of memory, and its images take about 2.8 GB of disk.
 
 ```bash
 git clone https://github.com/IgorPtak/GS_hackathon2026.git && cd GS_hackathon2026
@@ -36,53 +38,126 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-To also start a local Ollama container (optional, off by default):
+| Step | Measured on an Apple M4 laptop |
+|---|---|
+| First run: download the base images, then build | depends on your connection; the build itself takes about 25 s |
+| Every later start, from `docker compose up` to all services healthy | **18 s** |
+| Test event in, alert in the Inbox and the email in Mailpit | **about 1 s** |
+
+Then open **http://localhost:5173** and pick a person, for example *Anna Kowalska* (Team Rates).
+A three-step welcome explains the screens. Its last button sends a test alert, and you see it land
+in the Inbox. That is the whole demo setup. Nothing has to be configured first: the `config/`
+folder ships four example teams, their rules, people and runbooks.
+
+Optional:
 
 ```bash
-docker compose --profile local-llm up -d --build
+uv run python scripts/reset_demo.py --seed   # clean slate plus a few demo alerts and one approval
+uv run python scripts/smoke_test.py --gate 14h   # end-to-end check: ingest, dedup, email, SMS, runbooks, approvals
+docker compose --profile local-llm up -d --build  # also start a local Ollama for the AI features
 ```
 
-Verify the full stack end-to-end with the smoke test (checks health, ingest, alerts, Mailpit email, dedup, live rule reload, SMS delivery, runbook rendering, and approval via the phone simulator):
+For the scene-by-scene demo walkthrough, see [docs/demo.md](docs/demo.md).
+
+## Your first alert
+
+**From the UI.** Home shows a *Set up your team* checklist. Each step ticks itself once it really
+works, because it is read from live data, not from clicks. The last step, **Send a test alert**,
+puts an alert in your Inbox. More scenarios are in the **test console** (press `Shift` + `D`
+anywhere): a payment workflow that calls the on-call phone, a 500-event duplicate storm, an SMS
+outage, and an unknown system.
+
+**From a terminal.** Any system that can send an HTTP POST can send alerts:
 
 ```bash
-uv run python scripts/smoke_test.py --gate 14h
+curl -X POST localhost:8001/api/v1/ingest/rates-oms \
+  -H 'content-type: application/json' \
+  -d @contracts/fixtures/events/rates_trade_rejected.json
 ```
 
-Cumulative gates `{3h,7h,11h,14h}` are supported (`make smoke GATE=14h`). For the scene-by-scene walkthrough and demo commands, see [docs/demo.md](docs/demo.md).
+The event matches the `rates-large-rejections` rule. It shows up in Team Rates' Inbox, and Anna gets
+an email (see http://localhost:8025). Send it again, even 500 times within the rule's 60 s dedup
+window, and it is still **one** alert with a count, and no second email.
+
+## A new team, from nothing to its first alert in about 5 minutes
+
+We timed this path end to end with a made-up *Team Payments*. The alert and its email arrived
+about 1 s after the first event.
+
+1. **Say who the team is (two small files, 1 minute).** Then run `docker compose restart api`,
+   which loads them in about 4 s.
+
+   ```yaml
+   # config/teams/payments.yaml
+   id: payments
+   display_name: Team Payments
+   on_call: [ola]
+   ```
+
+   ```yaml
+   # config/recipients/ola.yaml
+   id: ola
+   display_name: Ola Nowak
+   teams: [payments]
+   contacts: { email: ola@example.com }
+   channel_preferences:
+     - channels: [email, ui]
+   ```
+
+2. **Sign in as Ola.** The welcome and the *Set up Payments* checklist on Home take it from here.
+3. **Connect a system (1 to 2 minutes).** Send one real event to
+   `POST /api/v1/ingest/generic-webhook`, or paste it on **Connect a system**. Beacon proposes how to
+   read its fields: severity, time, and what makes two events "the same". **Test on the last hour**
+   shows what it would have matched before you save.
+4. **Write a rule (2 minutes).** Go to **Rules → New rule**. It is a form ("field *evt* is
+   *payment.declined*", "at least severity *warning*", "between hours 08:00 and 20:00"). The YAML
+   view sits behind *Advanced*. **Preview** replays the last hour of events, so you see how many
+   alerts and emails the rule *would* have produced before it is live. Saving reloads every worker;
+   nothing restarts.
+5. **Choose who is told.** On **People & channels**, set email, SMS or a call, and the working hours
+   for each person.
+6. **Send the event again.** The alert is in Ola's Inbox and her email arrives about 1 s later.
+
+Everything the UI saves is versioned YAML, so the same setup can live in Git. A rule file in
+`config/rules/` is the same rule as one made in the editor.
+
+## Finding your way around the UI
+
+There is no password on purpose. On the sign-in screen you pick who you are, and Beacon opens that
+person's team.
+
+| Screen | What it is for |
+|---|---|
+| **Home** | The team at a glance: the setup checklist, whether the pipeline is healthy, open alerts, waiting approvals. |
+| **Inbox** | Alerts for your team, mail-style. A row shows how many times the alert repeated. The detail pane has the readable description, **Acknowledge** ("I'm on it"), **Resolve** ("it's fixed"), the runbook with its steps, who was told and how, and the audit trail. **Propose a fix** suggests a change to the rule or runbook. A teammate must accept it in Approvals. |
+| **Approvals** | Runbook steps that need a human ("restart the pricing adapter?") and proposed fixes as a before/after diff. Approve or reject; the result stays visible for a moment so you see what you did. The same request can be approved from the on-call phone with a 4-digit code. |
+| **Rules** | Your team's rules. The editor is a step-by-step form with a live **Preview** on past events, and the YAML is under *Advanced* (with autocomplete). |
+| **Connect a system** | Three steps: pick a sample event (unknown shapes collect here on their own), check the proposed field mapping, then test and save. |
+| **Runbooks** | What to do when an alert fires, written as YAML, Markdown or plain sentences. Plain text is turned into steps by the AI once, at save time. Steps that touch production always wait for approval. |
+| **People & channels** | Who is told, by which channel, and in which working hours. |
+| **Insights** | Throughput, end-to-end p50/p99, where the time goes per stage, and each channel's health. A channel that is down shows as *Paused*, with how many messages are waiting; none are lost. |
+| **Settings** | Appearance (light, dark, automatic), the phone's voice, reopening the welcome and checklist, and links to the API docs, Grafana and Mailpit. |
+| **Test console** (`Shift` + `D`) | Demo scenarios, the live raw event stream, and the on-call phone. The phone rings, reads the alert and the approval code aloud, and accepts the code on its keypad. On a real phone, open `/phone`. |
 
 ## Service URLs
 
 | Service | URL | Purpose |
 |---|---|---|
-| Web UI | http://localhost:5173 | Alerting console (live feed, rules, runbooks, approvals, schemas, phone simulator, metrics) |
-| API | http://localhost:8000 | REST + SSE API for the UI |
+| Web UI | http://localhost:5173 | The Beacon console |
+| API | http://localhost:8000 | REST + SSE API for the UI (behind the `proxy`, so `--scale api=N` works) |
 | API docs | http://localhost:8000/docs | Interactive OpenAPI (Swagger) reference |
 | Ingest | http://localhost:8001 | HTTP event ingestion (`POST /api/v1/ingest/{source_id}` and `/batch`) |
-| Mailpit | http://localhost:8025 | Local SMTP inbox capturing all `email` channel deliveries |
+| Mailpit | http://localhost:8025 | Local inbox that captures every `email` delivery |
 | Grafana | http://localhost:3000 | Provisioned **Alerting** dashboard (msg/s, stream lag, p50/p95/p99 latency, retries, DLQ) |
-| Prometheus | http://localhost:9090 | Metrics store scraping all service replicas via Compose DNS |
+| Prometheus | http://localhost:9090 | Metrics store that scrapes all service replicas through Compose DNS |
 | Mock gateway | http://localhost:8090 | Simulated SMS/phone gateway, webhook receiver, action targets, and outage controls |
-
-## UI tabs
-
-There is no authentication; pick a team (`Team Rates`, `Team Settlements`, `Team Pricing`, `Team Platform`) from the header dropdown.
-
-| Tab | What it shows |
-|---|---|
-| **Alerts** | Live SSE alert feed for the selected team with status filter (`Open`, `Acknowledged`, `Resolved`, `All`), severity badges, `×count` dedup badges, and collapsible group summaries with drill-down rows. Clicking an alert opens the detail drawer with fields, **Acknowledge** / **Resolve** buttons, **Propose a fix**, the rendered runbook (live action-run status and manual **Run** buttons), per-channel deliveries, the audit timeline, and raw last-event JSON. A collapsible **Recent events** panel sits below the feed. |
-| **Rules** | Team rules list with active versions, a CodeMirror YAML editor with live dot-path validation (conditions support `severity_gte` and `time_between`), and the **Preview** panel backtests the draft rule over the last `15m` / `1h` / `6h` / `24h` of the `events` stream (scanned and matched events, alerts, deliveries per recipient and channel, sample titles) before saving. Below the editor, the **Recipients** section edits each team recipient's channel preferences and working hours. |
-| **Runbooks** | Stored runbooks across all formats (`yaml`, `markdown`, `text`), showing step count, normalizer (`parser`, `llm` with model name, or `fallback`), and a side-by-side view of the original source next to the normalized steps. |
-| **Approvals** | Live queue of pending runbook **Approvals** (approve or reject with an optional comment) and **Fix proposals** owned by the selected team, showing line diffs for proposed rule or runbook changes with accept/reject actions. |
-| **Schemas** | **Unknown schema inbox** listing unmatched event shapes (source, event count, key paths) plus a **Paste a sample JSON event** box. Picking a sample opens the prefilled mapping form with a fingerprint picker, **Test on the last hour**, **Save schema profile**, and a shortcut to **Rules**, followed by the saved schema profiles list and **Recent events**. |
-| **Phone** | Per-recipient phone simulator displaying live SMS and phone deliveries (`phone.message`). Incoming phone calls open a full-screen overlay with a Web Audio ring tone (with **Mute** toggle), speech-synthesis read-out of the alert and approval code, and a 4-digit keypad (`*` rejects, `#` repeats). Below the transcript sits an SMS reply box accepting `APPROVE <code>`, `REJECT <code>`, and `ACK`. |
-| **Metrics** | Operational tiles refreshed every 5 s (`Ingest rate`, `Processed rate`, `Events stream lag`, `Deliveries stream lag`, `End-to-end latency p50`, `End-to-end latency p99`, `Delivery retries`, `Dead-lettered`, `Open alerts`) and an **Open Grafana** link. |
 
 ## What is mocked
 
 | Real-world part | In this demo | To make it real |
 |---|---|---|
 | Email provider | Mailpit (`http://localhost:8025`, real SMTP on port 1025; nothing leaves the machine) | Update SMTP settings in `config/channels/email.yaml` |
-| SMS and phone provider | Mock gateway (`services/mock_gateway`, port 8090) + **Phone** tab simulator with ringing, speech-synthesis read-out, 4-digit keypad approval codes, and SMS replies (`APPROVE <code>`) | Add one channel plugin in `plugins/channels/` (e.g., Twilio) |
+| SMS and phone provider | Mock gateway (`services/mock_gateway`, port 8090) + on-call phone simulator (test console, or `/phone` on a real phone) with ringing, speech-synthesis read-out, 4-digit keypad approval codes, and SMS replies (`APPROVE <code>`) | Add one channel plugin in `plugins/channels/` (e.g., Twilio) |
 | Runbook action targets | Mock action plugins in `plugins/actions/` (`retry_workflow`, `restart_service`, `open_ticket`, `escalate`, `http_get`, `webhook`) configured in `config/actions/` against `mock-gateway` | Point `config/actions/*.yaml` URLs at real endpoints or add a plugin in `plugins/actions/` |
 | Slack / Teams / PagerDuty | Generic `webhook` channel (`config/channels/slack-rates.yaml`) posting templated JSON to `mock-gateway` (`/webhooks/{name}`) | Set the target webhook URL and `body_template` in YAML |
 | Event producers | Synthetic generator (`loadtest/generator.py`), event fixtures (`contracts/fixtures/events/`), local tailed log file (`data/logs/pricing_engine.log`), and Alertmanager webhook payloads | Point real producers, Alertmanager, and log paths at `config/sources/*.yaml` |
@@ -130,7 +205,6 @@ uv run python loadtest/scenarios.py steady --duration 60
 
 - **Redis is a single point of failure** in this single-node Compose deployment (it holds the `events` / `deliveries` / `runbook-jobs` streams, dedup keys, group buffers, and pub/sub). In production, run Redis Sentinel or Redis Cluster, or replace the stream transport with Kafka or Redpanda partitioned by alert `fingerprint` (so dedup for a given alert stays on one processor partition), and add a Postgres standby replica.
 - **At-least-once plugin side effects on a crash:** Delivery workers guard sends with `delivery-done:<id>` and the runbook runner records `(alert_id, step_index, attempt)` in Postgres, so normal retries are idempotent; however, if a worker crashes after an external channel or action call succeeds but before its completion is recorded, the redelivered job can repeat the side effect.
-- **Fixed host ports on `api` and `ingest`:** both publish fixed ports (8000 and 8001), so `--scale` applies only to `processor`, `outbox-relay` and `delivery`.
 - **`events` retention waits for the slowest group:** `events` is trimmed only below the oldest position any consumer group still needs, so an abandoned consumer group makes the stream grow without bound.
 - **No authentication:** Team selection is a UI dropdown by design for the demo.
 
