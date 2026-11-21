@@ -6,6 +6,8 @@ import { TEST_CONSOLE_SHORTCUT, onOpenTestConsole } from "../../lib/testConsole"
 import { useSendTestAlert } from "../alerts/useSendTestAlert";
 import { useDemoActions, type DemoActionId } from "../demo/useDemoActions";
 import { PhoneSimulator } from "../phone/PhoneSimulator";
+import { PhoneVoicePicker } from "../phone/PhoneVoicePicker";
+import { useSpeech } from "../phone/useSpeech";
 import { Dialog } from "../ui/Dialog";
 import { Icon, type IconName } from "../ui/icons";
 import { Spinner } from "../ui/Spinner";
@@ -89,6 +91,7 @@ export function TestConsole({ teamId, teamLabel, onNavigate }: TestConsoleProps)
   };
   const actions = useDemoActions({ onNavigate, onAfterNavigate: close });
   const testAlert = useSendTestAlert(teamId, teamLabel);
+  const speech = useSpeech();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -212,6 +215,9 @@ export function TestConsole({ teamId, teamLabel, onNavigate }: TestConsoleProps)
             On-call phone
           </h3>
           {isOpen ? <PhoneSimulator teamId={teamId} isDeviceOnly /> : null}
+          <div className="w-full pt-2">
+            <PhoneVoicePicker speech={speech} firstName="Piotr" />
+          </div>
         </section>
       </div>
     </Dialog>

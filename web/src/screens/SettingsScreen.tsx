@@ -1,3 +1,5 @@
+import { PhoneVoicePicker } from "../components/phone/PhoneVoicePicker";
+import { useSpeech } from "../components/phone/useSpeech";
 import { AiAssistantCard } from "../components/settings/AiAssistantCard";
 import { Avatar } from "../components/ui/Avatar";
 import { Button } from "../components/ui/Button";
@@ -53,6 +55,7 @@ export function SettingsScreen({
   onSignOut,
 }: ScreenProps) {
   const { theme, chooseTheme } = useTheme();
+  const speech = useSpeech();
   const myTeams = teams.filter((team) => person?.teams?.includes(team.id) ?? true);
   return (
     <PageFrame title="Settings" context={teamLabel} isNarrow>
@@ -69,6 +72,15 @@ export function SettingsScreen({
               }}
             />
           </div>
+        </Section>
+        <Section
+          title="Phone voice"
+          hint="The English voice that reads calls on the on-call phone. Your browser's voices."
+        >
+          <PhoneVoicePicker
+            speech={speech}
+            firstName={person?.display_name.split(" ")[0] ?? "there"}
+          />
         </Section>
         <Section title="Account" hint="Who you are and which team you are looking at.">
           <div className="flex items-center gap-4">

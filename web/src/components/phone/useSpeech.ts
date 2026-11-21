@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { playSpeechChime } from "./playChime";
 import {
   pickBestVoice,
   readStoredVoiceUri,
   sortVoicesForPicker,
+  subscribeVoiceChoice,
   writeStoredVoiceUri,
 } from "./voiceSelection";
 
@@ -37,7 +38,7 @@ export interface SpeechController {
 export function useSpeech(): SpeechController {
   const isSupported = typeof window !== "undefined" && "speechSynthesis" in window;
   const [rawVoices, setRawVoices] = useState<readonly SpeechSynthesisVoice[]>(readVoices);
-  const [selectedVoiceUri, setSelectedUriState] = useState<string>(readStoredVoiceUri);
+  const selectedVoiceUri = useSyncExternalStore(subscribeVoiceChoice, readStoredVoiceUri);
   // Keep references to queued utterances so the browser does not garbage-collect them mid-speech.
   const utterancesRef = useRef<SpeechSynthesisUtterance[]>([]);
   const generationRef = useRef(0);
@@ -59,14 +60,13 @@ export function useSpeech(): SpeechController {
 
   const activeVoice = useMemo(() => {
     if (selectedVoiceUri !== "") {
-      const explicit = rawVoices.find((voice) => voice.voiceURI === selectedVoiceUri);
+      const explicit = voices.find((voice) => voice.voiceURI === selectedVoiceUri);
       if (explicit) return explicit;
     }
     return pickBestVoice(rawVoices);
-  }, [rawVoices, selectedVoiceUri]);
+  }, [rawVoices, voices, selectedVoiceUri]);
 
   const setSelectedVoiceUri = useCallback((uri: string) => {
-    setSelectedUriState(uri);
     writeStoredVoiceUri(uri);
   }, []);
 

@@ -1,14 +1,11 @@
 import type { Recipient } from "../../api/types";
 import type { StreamStatus } from "../../hooks/useEventStream";
 import { Avatar } from "../ui/Avatar";
-import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
-import { Field } from "../ui/Field";
 import { Icon } from "../ui/icons";
-import { Select, type SelectOption } from "../ui/Select";
 import { StatusChip, type ChipTone } from "../ui/StatusChip";
 import type { SpeechController } from "./useSpeech";
-import { formatVoiceLabel } from "./voiceSelection";
+import { PhoneVoicePicker } from "./PhoneVoicePicker";
 
 interface PhoneInfoCardProps {
   readonly recipients: readonly Recipient[];
@@ -35,31 +32,6 @@ export function PhoneInfoCard({
 }: PhoneInfoCardProps) {
   const firstName = selectedRecipient?.display_name.trim().split(/\s+/)[0] ?? "Piotr";
   const badge = STREAM_BADGE[streamStatus];
-  const voiceOptions: SelectOption[] = [
-    {
-      value: "",
-      label: speech.activeVoice
-        ? `Automatic (${speech.activeVoice.name})`
-        : "Automatic (best voice)",
-    },
-    ...speech.voices.map((voice) => ({
-      value: voice.voiceURI,
-      label: formatVoiceLabel(voice),
-    })),
-  ];
-
-  function previewVoice() {
-    speech.speakSentences([
-      `Hi ${firstName}.`,
-      "This is Beacon.",
-      "To approve, enter code:",
-      "four.",
-      "six.",
-      "zero.",
-      "two.",
-    ]);
-  }
-
   return (
     <Card className="flex w-full max-w-[348px] flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
@@ -114,25 +86,9 @@ export function PhoneInfoCard({
         </div>
       ) : null}
 
-      {speech.isSupported ? (
-        <div className="flex flex-col gap-2.5 border-t border-hairline pt-4">
-          <Field label="Voice">
-            {(control) => (
-              <Select
-                {...control}
-                value={speech.selectedVoiceUri}
-                options={voiceOptions}
-                onChange={speech.setSelectedVoiceUri}
-              />
-            )}
-          </Field>
-          <div>
-            <Button variant="secondary" size="md" icon="volume" onClick={previewVoice}>
-              Test voice
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      <div className="border-t border-hairline pt-4">
+        <PhoneVoicePicker speech={speech} firstName={firstName} />
+      </div>
 
       <div className="flex items-center justify-between gap-3 border-t border-hairline pt-4 text-meta text-ink-2">
         <span>Open on a real phone</span>

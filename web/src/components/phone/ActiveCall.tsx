@@ -38,10 +38,17 @@ export function ActiveCall({
   const sendingRef = useRef(false);
   const script = useMemo(() => buildCallScript(message, recipientName), [message, recipientName]);
 
+  // Decide once, when the call is picked up: the parent flips `autoSpeak` right after answering,
+  // and voices loading later swap `speakSentences`; neither may cut the script off mid-sentence.
+  const [shouldSpeakOnAnswer] = useState(autoSpeak);
+  const speakRef = useRef(speakSentences);
   useEffect(() => {
-    if (autoSpeak) speakSentences(script);
+    speakRef.current = speakSentences;
+  });
+  useEffect(() => {
+    if (shouldSpeakOnAnswer) speakRef.current(script);
     return cancel;
-  }, [autoSpeak, cancel, script, speakSentences]);
+  }, [shouldSpeakOnAnswer, cancel, script]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
