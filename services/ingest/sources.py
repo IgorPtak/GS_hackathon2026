@@ -1,7 +1,6 @@
 """Source config for ingest: file loader (tests, fallback) and the hot-reloading log-tail set."""
 
 import asyncio
-import contextlib
 from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 
@@ -70,9 +69,10 @@ class LogTailSet:
 
     async def _run_after(self, previous: asyncio.Task[None] | None, source: SourceConfig) -> None:
         # Wait for the old runner to release its Redis lock so the new one takes it at once.
+        # asyncio.wait never raises the old task's cancellation, so a cancel aimed at this task
+        # (a newer reconcile or stop()) still propagates and no untracked tail is started.
         if previous is not None:
-            with contextlib.suppress(asyncio.CancelledError):
-                await previous
+            await asyncio.wait([previous])
         await self._start_tail(source)
 
     async def stop(self) -> None:

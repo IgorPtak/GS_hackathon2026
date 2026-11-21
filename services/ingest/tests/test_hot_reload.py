@@ -70,3 +70,34 @@ async def test_log_tails_start_stop_and_restart_only_the_changed_one() -> None:
     await tails.stop()
     assert tails.source_ids == []
     assert cancelled == ["x", "y", "x"]
+
+
+async def test_quick_successive_restarts_leave_exactly_one_tail() -> None:
+    running: set[str] = set()
+    started: list[str] = []
+
+    async def start_tail(source: SourceConfig) -> None:
+        path = str(source.settings["path"])
+        started.append(path)
+        running.add(path)
+        try:
+            await asyncio.sleep(3600)
+        finally:
+            # A slow lock release keeps the old runner alive while the next reconcile arrives.
+            await asyncio.sleep(0.02)
+            running.discard(path)
+
+    tails = LogTailSet(start_tail)
+    tails.reconcile({"x": log_tail("x", "/a")})
+    await asyncio.sleep(0.01)
+    tails.reconcile({"x": log_tail("x", "/b")})
+    await asyncio.sleep(0)
+    tails.reconcile({"x": log_tail("x", "/c")})
+    await asyncio.sleep(0.1)
+
+    assert running == {"/c"}
+    assert "/b" not in started
+
+    await tails.stop()
+    await asyncio.sleep(0.05)
+    assert running == set()
