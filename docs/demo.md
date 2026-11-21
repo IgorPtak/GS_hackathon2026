@@ -1,418 +1,353 @@
-# 5-minute demo script
+# 5-minute demo video: script, shot list and editing notes
 
-Step-by-step commands, UI clicks, and expected outcomes for each scene of the 5-minute demo video. Scene timings add up to 5:00; the judges checklist at the end is untimed.
+The finished video: https://youtu.be/n91bGamdULA
 
-## Before you start
+The video is the main thing the judges score, across every category. Everything happens in the
+UI. The heart of it is Scene 2: a team sets up alerting from nothing (a new system, a runbook, a
+rule) and gets its first alert, with no code and no restart. Every click below is a label the UI
+really shows, and every timing was measured on `main`. Terminal equivalents are in the appendix,
+for retakes and for the live Q&A only.
 
-1. Ensure the stack is running (`docker compose ps` shows all services healthy).
-1. Rehearse, then reset (the rehearsal itself creates alerts, so the reset comes last):
+## What the video has to prove
+
+| Judging criterion | Scene | The one thing the viewer must remember |
+|---|---|---|
+| UX: fresh clone to working demo, first-time users | 1 | 3 commands, healthy in 18 s; a welcome and a test alert in one click |
+| Flexibility: new source, schema, rule; rule editor | 2 | An unseen event becomes a mapped system, a runbook and a rule in about 2 minutes, all in the UI |
+| Per-rule routing and presentation | 2 | The rule says who is told, on which channel, and how the alert reads |
+| Runbooks in many formats; actions; approval | 2, 3 | Plain text becomes steps; risky steps wait; the phone reads a code |
+| Channel preferences, working hours | 4 | Each person picks channels and hours in a form |
+| Propose fixes | 4 | Anyone suggests a change; the owning team accepts it; it goes live |
+| Don't flood; survive failure | 5 | 500 events become 1 alert; SMS down means *Paused*, none lost |
+| Scalability, throughput, latency (measured) | 6 | 800 msg/s sustained, p99 about 1 s, 0 lost; more replicas, more lines |
+| Innovation, AI safety, how we used AI | 7 | The AI only proposes; approvals cannot be removed; synthetic data |
+
+## Before recording
+
+1. **Clean slate.** Run on `main`, rehearse, forget what the rehearsal and earlier tries created
+   in the UI, then reset:
 
    ```bash
-   uv run python scripts/demo_rehearsal.py      # expect "9/9 scenes passed" (~20 s)
-   uv run python scripts/reset_demo.py --seed   # resolves every open alert, clears Mailpit, seeds 1 alert per team
+   git pull && docker compose up -d --build
+   uv run python scripts/demo_rehearsal.py           # expect "9/9 scenes passed"
+   uv run python scripts/forget_demo_config.py       # lists UI-made rules, runbooks, mappings
+   uv run python scripts/forget_demo_config.py --yes # removes them and empties the unknown inbox
+   uv run python scripts/reset_demo.py --seed        # clean alerts, Mailpit, 1 alert per team
    ```
 
-   After benchmarks the feed holds thousands of load-test alerts; the reset resolves them in about 20 s.
-1. Record between **08:00 and 20:00 Europe/Warsaw**: Anna's SMS and phone only fire inside her working hours; outside them she gets email only.
-2. Open these browser tabs ahead of recording:
-   - Web UI: http://localhost:5173
-   - Mailpit: http://localhost:8025
-   - Grafana (**Alerting** dashboard): http://localhost:3000
-3. **Browser audio unlock:** Before Scene 4, click once anywhere inside the http://localhost:5173 tab so the browser permits Web Audio to play the incoming-call ring tone.
-4. **Fresh IDs to avoid dedup merging across takes:** The processor deduplicates open alerts by `(rule_id, fingerprint)` inside each rule's dedup window (`60s` for the demo rules). When re-running a scene, change the fingerprint field listed below:
+   Repeat this before every full take of Scene 2. That scene creates `payments-declined` and a
+   "Payment declined check" runbook, and a second take needs them gone.
+2. **AI on:** the LLM endpoint in `.env` must answer, because Scenes 2 and 4 use it. Check it in
+   **Settings**, where the AI assistant card shows the model.
+3. **Browser:** Chrome, a fresh profile or a guest window, no extensions or bookmarks bar, window
+   1440×900 or larger, zoom 100%. Record at 2560×1600 and export at 1080p, so text stays sharp after
+   zoom-ins.
+4. **Theme:** use one theme for the whole video. Light reads best when compressed; dark looks more
+   premium. Do not switch.
+5. **Sound:** turn the volume up. In **Settings → Phone voice**, pick an English voice (Samantha or
+   Daniel) and press **Test voice**. Before Scene 3, click once on the page so audio can play.
+6. **Quiet machine:** Do Not Disturb on, Docker notifications off, Dock hidden.
+7. **Who to sign in as:**
+   - Anna Kowalska (Rates) for Scenes 1, 2, 4 and 7.
+   - Piotr Nowak (Settlements) for Scene 3 and the SMS part of Scene 5. The test console shows the
+     signed-in person's phone, and Piotr gets calls and SMS at any hour.
+   - Sign-in lasts one tab session, so a new window always starts at "choose who you are".
 
-| Fixture (`contracts/fixtures/events/`) | Ingest endpoint | Schema profile fingerprint (`config/schemas/`) | Field to vary for a fresh alert |
-|---|---|---|---|
-| `unknown_payments.json` | `/api/v1/ingest/generic-webhook` | `[evt, svc]` (`generic`) | `evt` or `svc` |
-| `rates_trade_rejected.json` | `/api/v1/ingest/rates-oms` | `[meta.schema, payload.desk, payload.reason]` (`trade-rejected`) | `payload.reason` |
-| `settlements_workflow_failed.json` | `/api/v1/ingest/settlements-engine` | `[eventType, workflowId]` (`workflow-failed`) | `workflowId` (also resets `mock-gateway`'s 2 initial retry failures) |
-| `pricing_engine.log` | Appended to `data/logs/pricing_engine.log` | `[instrument, feed]` (`pricing-log`) | `instrument` |
-| `alertmanager_firing.json` / `alertmanager_resolved.json` | `/api/v1/ingest/alertmanager` | `[labels.alertname, labels.instance]` (`alertmanager`) | `labels.instance` (keep identical across firing + resolved) |
+## Automated recording (what we used)
 
----
+`scripts/demo_video/` records every scene with scripted clicks and builds the film.
 
-## Scene 1 (0:00–0:20) — Problem, pitch, and architecture
-
-- **Show on screen:** Architecture diagram from [docs/architecture.md](architecture.md) (events → Redis Streams `events` → `processor` → Postgres `outbox` → `outbox-relay` → `deliveries` / `runbook-jobs` → channel and action plugins; YAML hot reload; LLM off the hot path).
-- **Key line:** "Teams change alerts without fear and without code, and the AI only proposes."
-
----
-
-## Scene 2 (0:20–1:00) — Quickstart and unknown schema onboarding
-
-### Commands
-
-Show the quickstart (or run against a fresh clone):
+- **Recording:** Chrome screencast at 2880×1620, a drawn cursor, and waits on the AI cut out.
+- **Editing:** zooms, captions, chapter labels, title cards and the benchmark card.
+- **Voice:** a guide voice from macOS `say`. The phone's lines are dubbed exactly where the app
+  speaks them.
 
 ```bash
-git clone https://github.com/IgorPtak/GS_hackathon2026.git && cd GS_hackathon2026
-cp .env.example .env
-docker compose up -d --build
+uv run python scripts/forget_demo_config.py --yes && uv run python scripts/reset_demo.py --seed
+uv run --with playwright python scripts/demo_video/record.py --all    # silent clips, about 8 min
+uv run --with playwright python scripts/demo_video/render.py          # ~/Movies/beacon-demo/beacon-demo.mp4
 ```
 
-Send an unrecognised event shape to `generic-webhook`:
+To put your own voice in, record one file per block of `~/Movies/beacon-demo/VOICE_SCRIPT.md`
+(`s1.wav`, `s3-1.wav`, …) into `~/Movies/beacon-demo/voice/`, then run `render.py --voice
+~/Movies/beacon-demo/voice`. Leading silence is trimmed, and a missing file keeps the guide
+voice. To redo one scene, run `record.py <scene>` and render again. Scene 2c needs the
+`payments-declined` rule deleted first.
+
+## Recording plan by hand: one silent clip per scene, the voice last
+
+1. Record each scene as its own silent clip (`s1-setup.mov` … `s7-ai.mov`), with 2 s of stillness
+   at both ends for transitions. A mistake costs one scene, not the whole video.
+2. Set the start state (table below) before pressing record. Do not record navigation that is not
+   part of the story.
+3. Put the clips on a timeline in order. Cut every wait, then add zooms and captions.
+4. Record the voice last, scene by scene, while watching the cut. Fit the picture to the voice: if a
+   clip is short, hold a still or slow a zoom. Never rush the reading.
+5. Add music and the title card. Watch once muted: the captions alone must tell the story.
+
+| Clip | Sign in as | Start on | Before pressing record | Ends when |
+|---|---|---|---|---|
+| s0 problem | nobody | sign-in screen | new window; let the star finish drawing | after a 6–8 s still |
+| s1 setup | nobody → Anna | sign-in screen | clean slate (above); new window | the test alert is open in the Inbox |
+| s2a connect | Anna | Home | welcome already done | **Save mapping** shows "Saved" |
+| s2b runbook | Anna | Runbooks | the runbook text copied to the clipboard (below) | "Beacon turned this into N steps" |
+| s2c rule | Anna | Rules | nothing | **Save rule** done |
+| s2d first alert | Anna | Home | nothing | the payment alert is open, its runbook in view |
+| s3 phone | Piotr | Home | one click on the page (sound) | the Inbox timeline shows the approval and the escalation |
+| s4 people & fix | Anna | People & channels | Mailpit tab open | the fix card folds away in Approvals |
+| s5a ×500 | Anna | Home | nothing | the ×500 alert is open |
+| s5b SMS outage | Piotr | Insights | console says **Take SMS down** (SMS is up) | SMS is back to **Sending**, nothing waiting |
+| s6 scale | n/a | Insights | start a load run off-camera (appendix) about 15 s before | Grafana shows one line per replica |
+| s7 AI | Anna | Runbooks | nothing | closing card |
+
+## Shot list and voiceover (5:00)
+
+The voiceover is about 570 words: roughly 4:05 at a calm pace, which leaves room for pauses. Text in *[brackets]* is a caption.
+
+### Scene 0 · 0:00–0:15 · The problem
+
+- **Screen:** the sign-in screen with the ASCII star, with a slow push-in.
+- **Voice:** "Every system throws errors, warnings and business events. They end up in logs,
+  dashboards and mailboxes. The right person finds out late, or gets so many alerts they stop
+  reading. Beacon fixes that."
+- *[Beacon · alerts that reach the right person, and help them fix it]*
+
+### Scene 1 · 0:15–0:40 · From a fresh clone to the first alert
+
+- **Screen:**
+  1. A title card (not a terminal) showing the three README commands.
+     *[git clone · cp .env.example .env · docker compose up -d --build — healthy in 18 s]*
+  2. Sign-in: click **Anna Kowalska**.
+  3. Welcome: **Next** to "How an alert reaches you", hold for one beat, **Next**, then **Send a
+     test alert**.
+  4. The Inbox opens with the test alert. *[about 1 s from event to alert]*
+- **Voice:** "From a fresh clone it is three commands, and the stack is healthy in eighteen
+  seconds. There is no password: you pick who you are. A short welcome shows the idea: an event, a
+  rule, one alert, the right person. One click sends a test alert, and here it is, a second later."
+
+### Scene 2 · 0:40–2:30 · A team sets up alerting from nothing, in the UI
+
+This is the scene the judges care about most, so give it time.
+
+**2a · Connect a system (0:40–1:05)**
+
+- **Screen:**
+  1. **Shift + D**, then **Event from a new system**. Beacon opens **Connect a system**, and the
+     payment event is first under "Recently seen unknown events".
+  2. **Map this event.** The AI takes about 8 s; cut it. "Beacon suggests this mapping": Event type
+     ← `evt`, Source ← `svc`, Severity ← `lvl` (WARN → warning), Time ← `at`, Entity ←
+     `data.paymentId`, plus "Group repeats by". Hover on "Why Beacon chose this".
+  3. **Test this mapping** (about 8 s; cut): "Matches your sample", with the values read from the
+     event. Then **Save mapping**.
+- **Voice:** "Say a payments team wants alerts. Beacon has never seen their events. One payment
+  event arrives, and it waits in Connect a system. Beacon suggests how to read it: the type, the
+  severity, the time, and what makes two events the same. We check it against the sample, and
+  save. No code, and nothing restarts."
+
+**2b · A runbook in plain words (1:05–1:30)**
+
+- **Screen:** **Runbooks → Add a runbook**. Name: `Payment declined check`. Paste the text below,
+  click **Turn into steps**, then **Save and read it**. The AI takes about 6 s; cut it. The result
+  reads "Saved. Beacon turned this into 4 steps. 2 need approval before running", with a "Read by
+  AI" chip and a **Needs approval** tag on the risky steps.
+
+  ```text
+  When a payment is declined, first check the payment gateway health. If the gateway is fine,
+  retry the payment once. If it is declined again, escalate to the payments on-call lead, which
+  needs approval. Afterwards tell the customer support team.
+  ```
+
+- **Voice:** "Next, what to do when it happens. Teams write runbooks the way they talk. We paste
+  a few sentences, and Beacon turns them into steps: a health check, a retry, an escalation, a
+  ticket. Anything risky is marked as needing approval. YAML and Markdown work too."
+
+**2c · The rule (1:30–2:15)**
+
+- **Screen:** **Rules → New rule**.
+  - **When:** Rule id `payments-declined`, description "Declined payments". Field `evt` · *matches
+    the pattern* · `payment.declined*`. **Add condition**: field `lvl` · *at least severity* ·
+    Warning. "Rule is valid" appears. **Next**.
+  - **Who & how:** default channels *email* and *the app*, already selected. Under **How the alert
+    looks**, Title `Payment {{data.paymentId}} declined`, Text
+    `{{data.amount}} {{data.currency}} declined: {{data.declineCode}}`. **Runbook**: *Payment
+    declined check*. **Next**.
+  - **Preview** (under 1 s): "In the last hour this rule would have created N alerts and sent M
+    messages", then "Who would be messaged". *[nothing is sent yet]*
+  - Open **Advanced** for 2 s to show the same rule as YAML, then **Save rule**.
+- **Voice:** "Now the rule, as a form, not code. When: the event type matches 'payment declined',
+  at warning or above. Who and how: Anna's team, in the app and by email. How the alert reads,
+  with values from the event in double braces. And which runbook it carries. Before anything goes
+  live, Preview replays the last hour: how many alerts, how many messages, and exactly who. Under Advanced
+  it is plain YAML, ready for Git. Save, and every worker reloads live."
+
+**2d · The first alert (2:15–2:30)**
+
+- **Screen:** **Shift + D → Event from a new system** again, close the console, then the **Inbox**.
+  "Payment P-… declined", with the text "1250 PLN declined: Insufficient funds". Open it and scroll
+  slowly through **What happened** and **Runbook**. The retry step shows **Waiting for approval**
+  with the code. A step whose input is not in the event says **Missing values** instead of
+  guessing.
+- **Voice:** "The next payment event is a real alert: our title, our text, our runbook, filled in
+  with this payment. The risky step is already waiting for a human."
+
+### Scene 3 · 2:30–3:15 · A runbook that acts, and a phone that asks first
+
+- **Screen:**
+  1. Sign in as **Piotr Nowak** and click once on the page.
+  2. **Shift + D → Settlement workflow fails.** Keep the console open: the phone is on its right.
+  3. The phone rings. **Answer**. It reads the alert, then "To approve, enter code: two, four…".
+     Type the code on the keypad. Speed up the ringing, but keep the voice at 1×.
+  4. Close the console, open the alert in the **Inbox**, and scroll through **What happened**: the
+     health check, the failed retries, "waiting for Piotr", approved by phone, escalated.
+- **Voice, part 1** (while it rings): "When a settlement workflow fails, the team's runbook runs
+  on its own. It checks the service and retries the workflow twice. The retries fail, and
+  escalating is risky, so Beacon asks first. It calls Piotr."
+- *The phone's own voice reads the problem and the four-digit code. Leave it alone.*
+- **Voice, part 2** (after the code is typed): "He approves on the keypad. He could also reply to
+  the SMS, or click Approve. Every step is recorded: what ran, who approved, and how."
+
+### Scene 4 · 3:15–3:50 · Everyone picks their channels; anyone can propose a fix
+
+- **Screen:**
+  1. Sign in as **Anna**. **People & channels** → Anna's card → **Edit**. Critical alerts are sent
+     by SMS and phone until 20:00; outside working hours, by email. Change something small and
+     **Save**: "Saved".
+  2. Back in the **Inbox**, open the payment alert. **Propose a fix → Draft with AI** fills in a
+     change, then **Send proposal**.
+  3. **Approvals**: the proposal shows as a before/after diff. **Accept**. The card shows
+     "Accepted. The change is saved and live now", then folds away.
+- **Voice:** "Each person chooses their own channels and hours. Anna gets an SMS and a call while
+  at work, and email after that. And if an alert is too noisy, anyone can propose a fix. The AI
+  can draft it, but it is only a proposal: the owning team sees the diff, accepts it, and it is
+  live, with no restart."
+
+### Scene 5 · 3:50–4:15 · Don't flood people, and never lose an alert
+
+- **Screen:**
+  1. As Anna: **Shift + D → 500 identical events**. The Inbox shows one alert with **×500**.
+     *[500 events → 1 alert]*
+  2. As Piotr: **Take SMS down**, then click **Settlement workflow fails** two or three times.
+     Under **Insights → Channels**, within about 5 s, SMS shows **Paused** with "N waiting, none
+     lost" while the other channels keep **Sending**.
+  3. **Bring SMS back.** Within about 10 s SMS returns to **Sending** with nothing waiting. *[0 lost]*
+- **Voice:** "Five hundred identical errors are one alert with a counter, not five hundred
+  messages. And when a channel goes down, here the SMS gateway, Beacon pauses it, keeps every
+  message, and keeps the other channels working. When it comes back, the queue drains. Nothing is
+  lost."
+
+### Scene 6 · 4:15–4:40 · Built to scale, and measured
+
+- **Screen:**
+  1. **Insights → Pipeline queues and deliveries** during a load run started off-camera, with 3
+     processor replicas: Retries 0, Dead-lettered 0, no stream lag.
+  2. Grafana, the **msg/s processed by replica** panel alone (`viewPanel=8`): one line per
+     replica, sharing the work.
+  3. A "Measured, not estimated" card with the README benchmark table.
+  - Do not show live p99 tiles while recording. Screen capture and the SMS and phone mocks
+    (inside working hours) slow the laptop, so the live p99 does not match the controlled
+    benchmark, and the 5-minute window still includes any outage scene.
+- **Voice, part 1** (live): "Under the hood, every worker is stateless and scales out. Alerts
+  and their deliveries are written in one database transaction, so a crash cannot lose them."
+- **Voice, part 2** (benchmark card): "We measured, not estimated: eight hundred messages a
+  second sustained, p99 around one second, and zero lost in every test, including a gateway
+  outage and killing workers under load."
+
+### Scene 7 · 4:40–5:00 · AI that helps, humans that decide
+
+- **Screen:**
+  1. **Runbooks**: the runbook from Scene 2, with **Advanced** open on the original text next to
+     the steps and the "Read by AI" chip.
+  2. Closing card: the repository link and the tagline. *[github.com/IgorPtak/GS_hackathon2026]*
+- **Voice:** "The AI only reads runbooks and drafts proposals, and never on the alert path. It
+  cannot remove an approval, secrets are redacted before every call, and all the data here is
+  synthetic. Beacon: teams change alerts without fear and without code, and the AI only proposes."
+
+## Editing notes
+
+- **Cut every wait:** the two AI calls in Scene 2 (about 8 s and 6 s), ringing and loading. Speed
+  up with a small "4×" badge. Keep speech and the phone voice at 1×.
+- **Zoom 1.5–2× on proof**, and hold each for about 1.5 s:
+  - "Matches your sample";
+  - "Beacon turned this into 4 steps";
+  - the Preview sentence;
+  - the alert title filled with values;
+  - the approval code;
+  - ×500;
+  - "Paused · N waiting, none lost";
+  - the Grafana p99 tile.
+- **Captions carry every number and claim.** Judges may watch muted.
+- **Typing:** speed up the typing in Scene 2 (2–3×), or paste values. Never let the viewer watch
+  slow typing.
+- **Cursor:** use a larger cursor with a click highlight (Screen Studio, or the cursor size
+  setting in macOS Accessibility). Move slowly and never hunt for a button on camera.
+- **Chapter labels** in a corner: Setup · New team, no code · Runbook & phone · People & fixes ·
+  No flood, no loss · Scale · AI.
+- **Audio:** record the voice with a headset or a lavalier mic in a quiet room. Music only under
+  Scene 0 and the end, at -25 dB, and duck it under the phone's voice.
+- **Length:** at most 5:00. If it runs long, trim Scene 6 first; the README carries the numbers.
+- **Export:** 1080p, H.264, 30 fps.
+- **Suggested tools:** Screen Studio or OBS for capture; DaVinci Resolve, CapCut or iMovie for the
+  cut.
+
+## Retakes
+
+- Test console scenarios make fresh ids on every click, including **500 identical events**, so
+  retakes never merge into old alerts.
+- **Scene 2:** run `forget_demo_config.py --yes` and `reset_demo.py --seed` before every retake,
+  or `payments-declined` and the runbook already exist.
+- **Other scenes:** `reset_demo.py --seed` resolves alerts, rejects pending approvals and fix
+  proposals, clears Mailpit, heals the gateway and seeds one alert per team.
+- **SMS left down:** click **Bring SMS back** in the console.
+- **Welcome again:** open a new window, or use **Settings → Show the welcome again**.
+
+## Appendix: terminal equivalents (retakes and live Q&A only)
+
+All fixtures are in `contracts/fixtures/events/`.
 
 ```bash
-curl -s -X POST http://localhost:8001/api/v1/ingest/generic-webhook \
-  -H "content-type: application/json" \
-  -d @contracts/fixtures/events/unknown_payments.json
-```
-
-Expected response: HTTP 202 with `{"event_ids":["..."],"duplicate_count":0}`.
-
-### UI clicks
-
-1. Open http://localhost:5173 and pick a team in the top-right dropdown (needed to save a schema profile).
-2. Click the **Schemas** tab.
-3. Under **Unknown schema inbox**, locate the `generic-webhook` card and click **Propose a schema** (or paste `contracts/fixtures/events/unknown_payments.json` into **Paste a sample JSON event** and click **Propose a schema**).
-4. Review the prefilled mappings (`type ← evt`, `source ← svc`, `severity ← lvl`, `occurred_at ← at`, `entity ← data.paymentId`, fingerprint `[evt, svc]`).
-5. Under **Test on the last hour**, click **Run test** (nothing is written), then click **Save schema profile** and **Create a rule for this schema**.
-
-### What the viewer must see
-
-- The unknown JSON event lands in the **Unknown schema inbox** with its key paths and count.
-- **Run test** shows normalized rows (`type: payment.declined`, `source: payments-api`, `severity: warning`, `entity: P-99812`).
-- Saving hot-reloads the processor without restarting any container.
-
----
-
-## Scene 3 (1:00–2:20) — Rules, rule validation, runbook actions, Mailpit, and Anna's preferences
-
-### UI clicks (rule preview, operators, and validation)
-
-1. In the header team picker, select **Team Rates**. Open the **Rules** tab and select `rates-large-rejections`.
-2. Under **Preview**, keep **Window** on **Last 1h** and click **Run preview**.
-3. Make a live edit in the YAML editor (for example, adjust the `payload.notional` threshold), verify validation stays green, and click **Save** (the version badge increments, e.g. `Active version v2`).
-4. **Operators (do not save):** Pick **Team Pricing** → **Rules** → `pricing-stale-feed`. Point at `{ field: level, op: severity_gte, value: warning }`: "WARN or above" matches WARN, ERROR and FATAL. Back in **Team Rates**, paste the `time_between` example from [config/README.md](../config/README.md) into `when.all` (`{ field: normalized.occurred_at, op: time_between, value: { range: "08:00-20:00", timezone: Europe/Warsaw } }`) and click **Run preview**. Validation stays green.
-5. **Invalid regex:** add `{ field: msg, op: regex, value: "([" }` to `when.all` and click **Save**. Expected: HTTP 422 `validation_failed`, a field-level error on `when.all[N].value` in the editor, and no new version. Remove the line before continuing.
-
-### Commands
-
-Send a fresh trade-rejected event (use a unique `payload.reason` so it opens a new alert instead of folding into an earlier `LIMIT_BREACH` alert):
-
-```bash
-cat <<'EOF' > /tmp/demo_rates.json
-{
-  "meta": { "schema": "trade.rejected.v1", "producer": "rates-oms", "ts": 1795168502123 },
-  "payload": {
-    "tradeId": "T-20261120-DEMO01",
-    "desk": "rates",
-    "reason": "LIMIT_BREACH_DEMO",
-    "currency": "EUR",
-    "notional": 25000000,
-    "counterparty": "CPTY-0042",
-    "trader": "jdoe"
-  }
-}
-EOF
-
-curl -s -X POST http://localhost:8001/api/v1/ingest/rates-oms \
-  -H "content-type: application/json" \
-  -d @/tmp/demo_rates.json
-```
-
-(Optional: generate mixed events with `uv run python loadtest/generator.py --rate 5 --duration 5 --mix rates:1`.)
-
-### UI clicks (live feed, runbook actions, and Mailpit)
-
-1. Open the **Alerts** tab → `Rejected EUR 25000000 — LIMIT_BREACH_DEMO` appears live via SSE.
-2. Click the row to open the detail drawer: **Fields**, the rendered Markdown **Runbook** (`Trade limit breach`, from `config/runbooks/trade-limit-breach.md`), **Deliveries**, **Audit**, and **Propose a fix**.
-3. In the runbook, click **Run** on the step with the inline action `open-ticket summary="Limit increase for CPTY-0042" team=risk` (`approval: none`). Expected: the action run reaches `succeeded` and appears in **Audit**.
-4. Click **Resolve** on the alert, then trigger **Run** on the same step again. Expected: refused with HTTP 409 `alert_resolved` ("the alert is already resolved"); no new action run is created.
-   - Optional API check: `curl -s -X POST http://localhost:8000/api/v1/alerts/<alert_id>/runbook/steps/<step_index>/run -H "content-type: application/json" -d '{"actor": {"id": "demo-operator"}}'` → 409 `alert_resolved`.
-5. Open Mailpit at http://localhost:8025: the delivered email lists the numbered runbook steps with the values filled in (`T-20261120-DEMO01`, `CPTY-0042`, `jdoe`). SMS and phone carry only a short link.
-6. Return to **Rules** → **Recipients** → **Anna Kowalska** (`anna`): show her working hours (`08:00-20:00` `Europe/Warsaw` → `sms, phone`, otherwise `email`) and click **Save preferences**.
-
-### What the viewer must see
-
-- **Preview** reports scanned and matched events, alerts, and deliveries per recipient and channel before anything is sent.
-- `severity_gte` and `time_between` work as rule conditions, and an invalid regex is refused with a field-level 422.
-- Saving a rule or preference takes effect with no service restart.
-- A markdown runbook step with an inline action runs from the UI and is recorded in **Audit**; the same run is refused once the alert is resolved.
-- The email lists the numbered runbook steps.
-
----
-
-## Scene 4 (2:20–3:10) — `WORKFLOW_FAILED` runbook, phone ringing with keypad approval, and free-text runbook
-
-### UI setup (before posting the event)
-
-1. In the header team picker, select **Team Settlements**.
-2. Open the **Phone** tab and select **Piotr Nowak** in the **Recipient** dropdown.
-3. **Click once anywhere on the page** so the browser permits Web Audio playback for the ring tone.
-
-### Commands
-
-Post `settlements_workflow_failed.json` with a fresh `workflowId` (new fingerprint, and fresh retry counter on `mock-gateway`, which fails the first 2 retry calls with HTTP 502):
-
-```bash
-cat <<'EOF' > /tmp/demo_settlements.json
-{
-  "eventType": "WORKFLOW_FAILED",
-  "workflowId": "wf-settle-20261120-demo01",
-  "service": "settlement-engine",
-  "severity": "CRITICAL",
-  "timestamp": "2026-11-20T10:15:00Z",
-  "attempt": 3,
-  "error": {
-    "code": "UPSTREAM_TIMEOUT",
-    "message": "Custodian API did not respond within 30s"
-  }
-}
-EOF
-
-curl -s -X POST http://localhost:8001/api/v1/ingest/settlements-engine \
-  -H "content-type: application/json" \
-  -d @/tmp/demo_settlements.json
-```
-
-### UI clicks (phone call approval and runbook audit)
-
-1. Watch the **Phone** tab:
-   - The runbook runner executes Step 0 (`http-health-check` → HTTP 200 `succeeded`) and Step 1 (`retry-workflow`, 2 attempts → HTTP 502 `failed`), then pauses at Step 2 (`escalate`, `approval: required`, `run_if: previous_failed`).
-   - Piotr's phone starts ringing with the **Incoming call** overlay.
-2. Click **Answer**: the browser reads the alert and approval request aloud and shows the transcript. Enter the 4-digit approval code on the keypad (`*` rejects, `#` repeats), or reply `APPROVE <code>` in the SMS box, or approve from the **Approvals** tab.
-3. Switch to **Alerts** (Team Settlements) and open `Workflow wf-settle-20261120-demo01 failed — UPSTREAM_TIMEOUT`: the **Runbook** shows Step 0 `succeeded`, Step 1 `failed`, and Step 2 `succeeded` after approval; **Audit** shows `approval_requested`, `approval_decided`, and the escalated action run.
-
-### Free-text runbook normalized at config sync
-
-1. Open the **Runbooks** tab and click **Stale price feed** (`pricing-stale-feed`).
-2. Show the original plain-English text (`config/runbooks/pricing-stale-feed.txt`) next to the structured steps. The normalizer shows `llm` with the model name, and `restart-pricing-adapter` shows `requires approval`: the LLM cannot remove the gate.
-3. The file is normalized when config syncs (cached by content hash, 15 s bound, falls back to one text step if the LLM is unavailable). Optional live re-run through the same normalizer (requires an active Ollama or allowlisted LLM endpoint):
-
-```bash
-curl -s -X PUT http://localhost:8000/api/v1/runbooks/pricing-stale-feed \
-  -H "content-type: application/json" \
-  -d '{
-    "id": "pricing-stale-feed",
-    "title": "Stale price feed",
-    "team": "pricing",
-    "format": "text",
-    "source": "When a price for an instrument goes stale, first look at whether the whole feed is down or just one instrument. If it is just one, restart the pricing adapter for that feed (needs approval from the pricing lead). If the whole feed is down, call the market data vendor and switch to the backup feed. Afterwards tell the traders that prices are fresh again.",
-    "actor": { "id": "pricing-operator" }
-  }'
-```
-
-### What the viewer must see
-
-- The health check and 2 retries run without human intervention; the escalation pauses for human approval.
-- Piotr's phone rings, reads out the request, and the 4-digit code on the keypad runs the escalation and records it in **Audit**.
-- A free-text runbook becomes executable steps with `requires approval` kept on gated actions, and the original prose stays alongside.
-
----
-
-## Scene 5 (3:10–3:30) — Deduplication (`×500`) and SMS gateway outage recovery
-
-### Commands (500 identical events → one alert `×500`)
-
-Generate a batch of 500 identical trade-rejected events with a fresh `payload.reason` and post it to the batch endpoint:
-
-```bash
-python3 -c '
-import json
-evt = json.load(open("contracts/fixtures/events/rates_trade_rejected.json"))
-evt["payload"]["reason"] = "DUP_STORM_DEMO"
-json.dump([evt] * 500, open("/tmp/rates_500.json", "w"))
-'
-
-curl -s -X POST http://localhost:8001/api/v1/ingest/rates-oms/batch \
-  -H "content-type: application/json" \
-  -d @/tmp/rates_500.json
-```
-
-(Alternatively, run `uv run python loadtest/scenarios.py dup-storm --total 500` to fold 500 events under `Team Platform`.)
-
-### Commands (SMS gateway outage and recovery)
-
-1. Simulate an SMS gateway outage on `mock-gateway`:
-
-```bash
-curl -s -X POST http://localhost:8090/admin/outage \
-  -H "content-type: application/json" \
-  -d '{"is_down": true, "channels": ["sms"]}'
-```
-
-Expected response: `{"is_down":true,"channels":["sms"]}`.
-
-2. Send a fresh settlements event (Piotr always receives `sms` regardless of working hours):
-
-```bash
-cat <<'EOF' > /tmp/demo_outage.json
-{
-  "eventType": "WORKFLOW_FAILED",
-  "workflowId": "wf-settle-20261120-outage01",
-  "service": "settlement-engine",
-  "severity": "CRITICAL",
-  "timestamp": "2026-11-20T10:15:00Z",
-  "attempt": 3,
-  "error": {
-    "code": "UPSTREAM_TIMEOUT",
-    "message": "Custodian API did not respond within 30s"
-  }
-}
-EOF
-
-curl -s -X POST http://localhost:8001/api/v1/ingest/settlements-engine \
-  -H "content-type: application/json" \
-  -d @/tmp/demo_outage.json
-```
-
-3. Pause a few seconds so the viewer sees the `sms` delivery in `failed` (retrying) state, then restore the SMS gateway:
-
-```bash
-curl -s -X POST http://localhost:8090/admin/outage \
-  -H "content-type: application/json" \
-  -d '{"is_down": false, "channels": ["sms"]}'
-```
-
-Expected response: `{"is_down":false,"channels":[]}`.
-
-### UI clicks
-
-1. Pick **Team Rates** → **Alerts**: a single `Rejected EUR 25000000 — DUP_STORM_DEMO` row with badge `×500`.
-2. Pick **Team Settlements** → **Alerts** → open `Workflow wf-settle-20261120-outage01 failed — UPSTREAM_TIMEOUT` → **Deliveries**: while the outage is active, `sms` shows `failed` (retrying); after recovery it becomes `delivered` and appears in **Phone** → **Piotr Nowak**.
-
-### What the viewer must see
-
-- 500 identical events collapse into **one alert with `×500`** and one set of deliveries.
-- While the SMS gateway returns HTTP 503, deliveries retry without dropping alerts; once restored, every pending SMS lands in the **Phone** tab.
-
----
-
-## Scene 6 (3:30–4:10) — Metrics, Grafana, load test, and horizontal scaling
-
-### Commands
-
-Run the steady-load scenario (60 s at 200 msg/s = 12,000 events, 24,000 deliveries):
-
-```bash
+# Load run for Scene 6 (start off-camera), and scaling out / back
 uv run python loadtest/scenarios.py steady --duration 60
-```
-
-To demonstrate horizontal scaling of stateless workers and HTTP tiers behind `proxy` (Prometheus discovers new replicas automatically via Compose DNS):
-
-```bash
 docker compose up -d --scale processor=4 --scale delivery=4 --scale ingest=3 --scale api=2
-```
+docker compose up -d --scale processor=1 --scale delivery=2 --scale ingest=1 --scale api=1
 
-(When finished scaling, return to compose defaults with `docker compose up -d --scale processor=1 --scale delivery=2 --scale ingest=1 --scale api=1`.)
+# Rates alert with runbook and email (change payload.reason for a fresh alert)
+curl -s -X POST localhost:8001/api/v1/ingest/rates-oms -H 'content-type: application/json' \
+  -d @contracts/fixtures/events/rates_trade_rejected.json
 
-### UI clicks
-
-1. Open the **Metrics** tab at http://localhost:5173: point out the live tiles updating every 5 s (`Ingest rate`, `Processed rate`, `Events stream lag`, `Deliveries stream lag`, `End-to-end latency p50`, `End-to-end latency p99`, `Delivery retries`, `Dead-lettered`, `Open alerts`).
-2. Click **Open Grafana** (http://localhost:3000, no login) and open the provisioned **Alerting** dashboard. Point at:
-   - the top tiles (p99 green under 1 s, msg/s, alerts/s, deliveries/s, outbox relay lag, dead letters = 0);
-   - **msg/s processed by replica**: after the `--scale` command one line per processor appears within ~15 s and the load splits between them;
-   - **End-to-end p99 by channel**: during the Scene 5 outage only `sms` rises, `ui` and `email` stay flat.
-3. Quote the final A-41 numbers from the README load table (do not re-measure on stage), see [docs/load-test-results.md](load-test-results.md) and [docs/benchmarks.md](benchmarks.md) for the full method and flame graphs:
-   - Steady 60 s at 200 msg/s: 12,000 sent, 24,000 / 24,000 delivered, **0 lost**, p50 **41.1 ms**, p99 **83.8 ms**.
-   - Horizontal scale sweep (`2:2:2:1` behind `proxy`): **500.0 msg/s** (p50 61.7 ms, p99 353.2 ms) and **800.0 msg/s** sustained (p50 **416.9 ms**, p99 **1,000.7 ms**, **0 lost**; peak **983.8 msg/s** on `1:2:1:1`).
-   - 120 s soak at 250 msg/s: 30,000 sent, 60,000 / 60,000 delivered, **0 lost**, p50 **43.2 ms**, p99 **461.3 ms**.
-
-### What the viewer must see
-
-- Live msg/s, stream lag, and latency tiles during load.
-- The horizontal scaling command behind `proxy` and the measured benchmark numbers, with zero lost alerts.
-
----
-
-## Scene 7 (4:10–5:00) — Alertmanager auto-resolve, LLM privacy, and AI usage
-
-### Commands
-
-Send a firing Alertmanager webhook (use a fresh `labels.instance` if repeating the scene), then send the matching resolved webhook:
-
-```bash
-cat <<'EOF' > /tmp/demo_am_firing.json
-{
-  "version": "4",
-  "status": "firing",
-  "receiver": "alerting-service",
-  "groupKey": "{}:{alertname=\"ExporterDown\"}",
-  "alerts": [
-    {
-      "status": "firing",
-      "labels": {
-        "alertname": "ExporterDown",
-        "severity": "critical",
-        "instance": "exporter-demo01:9100",
-        "job": "dynamic-monitoring"
-      },
-      "annotations": { "summary": "Exporter exporter-demo01:9100 is down" },
-      "startsAt": "2026-11-20T10:20:00Z",
-      "endsAt": "0001-01-01T00:00:00Z",
-      "fingerprint": "demo01a1b2c3d4e5"
-    }
-  ]
-}
-EOF
-
-curl -s -X POST http://localhost:8001/api/v1/ingest/alertmanager \
-  -H "content-type: application/json" \
-  -d @/tmp/demo_am_firing.json
-```
-
-After showing the open alert in the UI, resolve it from the source:
-
-```bash
-cat <<'EOF' > /tmp/demo_am_resolved.json
-{
-  "version": "4",
-  "status": "resolved",
-  "receiver": "alerting-service",
-  "groupKey": "{}:{alertname=\"ExporterDown\"}",
-  "alerts": [
-    {
-      "status": "resolved",
-      "labels": {
-        "alertname": "ExporterDown",
-        "severity": "critical",
-        "instance": "exporter-demo01:9100",
-        "job": "dynamic-monitoring"
-      },
-      "annotations": { "summary": "Exporter exporter-demo01:9100 is down" },
-      "startsAt": "2026-11-20T10:20:00Z",
-      "endsAt": "2026-11-20T10:25:00Z",
-      "fingerprint": "demo01a1b2c3d4e5"
-    }
-  ]
-}
-EOF
-
-curl -s -X POST http://localhost:8001/api/v1/ingest/alertmanager \
-  -H "content-type: application/json" \
-  -d @/tmp/demo_am_resolved.json
-```
-
-### UI clicks
-
-1. Pick **Team Platform** → **Alerts**: `ExporterDown on exporter-demo01:9100` appears as `open`.
-2. After posting the resolved webhook, set the **Status** filter to **Resolved** (or **All**) and open the alert: `status: resolved`, `resolution_reason: source_resolved`, and the audit entry from `system:processor`.
-3. Close with the privacy and AI points from [README.md](../README.md): local Ollama by default, an opt-in allowlisted cloud host via `LLM_ALLOWED_HOSTS`, `redact_secrets` before every call, zero LLM calls on the hot path, synthetic data only.
-
-### What the viewer must see
-
-- A firing Alertmanager event opens an alert, and the matching resolved event auto-resolves it with an audit trail.
-- A clear summary of how the AI is used safely: it proposes, humans approve.
-
----
-
-## Live-judging checklist ("judges bring a schema and runbook")
-
-Untimed; use it when judges bring their own material.
-
-1. **Onboard schema:** Paste the judge's JSON in **Schemas** → **Paste a sample JSON event** → **Propose a schema** → **Run test** → **Save schema profile**.
-2. **Create rule:** Click **Create a rule for this schema** (or save via `PUT /api/v1/rules/{rule_id}`), run **Preview**, and **Save**.
-3. **Add runbook:** Save the judge's YAML, Markdown, or free-text runbook via `PUT /api/v1/runbooks/{runbook_id}` and inspect the normalized steps in the **Runbooks** tab.
-4. **Send live event:** `POST http://localhost:8001/api/v1/ingest/generic-webhook` with the judge's JSON → watch the alert, rendered runbook, and deliveries appear live in **Alerts**.
-5. **New source by YAML only (no restart):** Copy the source file and change its id, then post a fixture to the new endpoint:
-
-```bash
-sed 's/^id: generic-webhook$/id: judges/' config/sources/generic-webhook.yaml > config/sources/judges.yaml
-
-curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8001/api/v1/ingest/judges \
-  -H "content-type: application/json" \
+# An unknown system (lands in Connect a system)
+curl -s -X POST localhost:8001/api/v1/ingest/generic-webhook -H 'content-type: application/json' \
   -d @contracts/fixtures/events/unknown_payments.json
+
+# SMS gateway down / up
+curl -s -X POST localhost:8090/admin/outage -H 'content-type: application/json' -d '{"is_down": true, "channels": ["sms"]}'
+curl -s -X POST localhost:8090/admin/outage -H 'content-type: application/json' -d '{"is_down": false, "channels": ["sms"]}'
+
+# Alertmanager firing, then resolved: the alert closes itself (keep labels.instance identical)
+curl -s -X POST localhost:8001/api/v1/ingest/alertmanager -H 'content-type: application/json' \
+  -d @contracts/fixtures/events/alertmanager_firing.json
+curl -s -X POST localhost:8001/api/v1/ingest/alertmanager -H 'content-type: application/json' \
+  -d @contracts/fixtures/events/alertmanager_resolved.json
 ```
 
-   Expected: `202`, with no `docker compose restart`. Cleanup: `rm config/sources/judges.yaml`; the same POST then answers `404` because the source was removed.
+Measured numbers to quote, from the README and [docs/benchmarks.md](benchmarks.md):
+
+- **Sustained:** 800.0 msg/s (1,600 deliveries/s), p50 416.9 ms, p99 1,000.7 ms, with replicas
+  `2:2:2:1` behind `proxy`.
+- **Steady:** 200 msg/s, p50 41.1 ms, p99 83.8 ms.
+- **Peak:** 983.8 msg/s, which is not sustainable.
+- **Losses:** 0 lost in every scenario, including a 60 s gateway outage, `docker kill` of a
+  processor mid-load, and a 120 s soak.
+
+## Live judging: "the judges bring a schema and a runbook"
+
+Untimed, all in the UI. It is Scene 2 with their material.
+
+1. **Their event:** POST it to `localhost:8001/api/v1/ingest/generic-webhook`, or paste it under
+   **Connect a system → Paste a sample event**. Then **Map this event**, **Test this mapping** and
+   **Save mapping**.
+2. **Their runbook:** **Runbooks → Add a runbook**, paste YAML, Markdown or plain text, then **Turn
+   into steps** and save.
+3. **A rule:** **Rules → New rule**. Fill in **When**, then **Who & how** (channels, title and
+   text, their runbook), check **Preview**, and **Save rule**.
+4. **Their event again:** the alert, the filled-in runbook and the deliveries appear live in the
+   Inbox; the email is in Mailpit.

@@ -2,6 +2,8 @@
 
 Teams change alerts without fear and without code, and the AI only proposes.
 
+**▶ Demo video (5 min): https://youtu.be/n91bGamdULA**
+
 Flexible Alerting & Notification Service ingests events from HTTP webhooks (including Prometheus Alertmanager) and tailed log files into Redis Streams (`events`), evaluates YAML rules and schema profiles in stateless `processor` workers, persists alerts and outbox rows atomically in Postgres, relays them (`FOR UPDATE SKIP LOCKED`) to Redis Streams (`deliveries` and `runbook-jobs`), and dispatches deliveries through pluggable channels (`ui`, `email`, `sms`, `phone`, `webhook`) while running automated or human-approved runbook actions. Schema profiles, rules, recipients, channel preferences, channels, runbooks, and actions are YAML configuration synced to Postgres and hot-reloaded across every worker via Redis pub/sub (`config.changed`) with no restart; a new source of an existing type is one YAML file in `config/sources/`, also with no restart. The LLM never runs on the hot path; it is used only at save time for free-text runbooks and for proposals that a human approves.
 
 ![Architecture](docs/diagrams/architecture.svg)
