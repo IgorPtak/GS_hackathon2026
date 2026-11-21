@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 
-from alerting_contracts.config import ActionConfig
+from alerting_contracts.config import ActionConfig, ApprovalPolicy
 from alerting_contracts.runbooks import RunbookFormat, RunbookStep, StepKind
 
 from plugins.runbook_formats.base import RunbookFormatPlugin
@@ -32,12 +32,66 @@ _HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$")
 _ITEM = re.compile(r"^\s*(?:\d+[.)]|[-*+])\s+(.*\S)\s*$")
 
 
+_INLINE_ACTION = re.compile(r"\s*(?:[-–—:]\s*)?`([^`]+)`\s*[.;]?\s*$")
+_PAIR = re.compile(r'([A-Za-z_][\w.-]*)=("[^"]*"|\S+)')
+_NEEDS_APPROVAL = re.compile(r"\bneeds?\s+(?:human\s+)?approval\b", re.I)
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+
+
+def _parse_inline_action(
+    text: str, actions: Mapping[str, ActionConfig]
+) -> tuple[str, str, dict[str, str], ApprovalPolicy | None] | None:
+    """Split a trailing `action key=value` code span off ``text``.
+
+    Returns (text without the span, action id, params, explicit approval) or None when the item
+    has no such span or the span does not start with a known action id.
+    """
+    match = _INLINE_ACTION.search(text)
+    if not match:
+        return None
+    head, _, rest = match.group(1).strip().partition(" ")
+    action_id = head.replace("_", "-")
+    if action_id not in actions:
+        return None
+    declared = actions[action_id].params
+    params: dict[str, str] = {}
+    approval: ApprovalPolicy | None = None
+    for key, raw in _PAIR.findall(rest):
+        value = raw[1:-1] if raw.startswith('"') else raw
+        if key == "approval":
+            approval = ApprovalPolicy(value) if value in list(ApprovalPolicy) else None
+            continue
+        snake = _CAMEL_BOUNDARY.sub("_", key).lower().replace("-", "_")
+        params[snake if snake in declared else key] = value
+    return text[: match.start()].strip() or text, action_id, params, approval
+
+
 def _classify(text: str, actions: Mapping[str, ActionConfig]) -> dict[str, object]:
-    for pattern, action_id, kind, text_param in KEYWORD_ACTIONS:
-        if action_id in actions and pattern.search(text):
-            params = {text_param: text} if text_param else {}
-            return {"kind": kind, "action": action_id, "params": params}
-    return {"kind": StepKind.text}
+    fields: dict[str, object] = {}
+    action_id: str | None = None
+    params: dict[str, str] = {}
+    approval: ApprovalPolicy | None = None
+    kind = StepKind.action
+    if inline := _parse_inline_action(text, actions):
+        fields["text"], action_id, params, approval = inline
+        kind = next((k for _, a, k, _ in KEYWORD_ACTIONS if a == action_id), StepKind.action)
+    else:
+        for pattern, keyword_action, keyword_kind, text_param in KEYWORD_ACTIONS:
+            if keyword_action in actions and pattern.search(text):
+                action_id, kind = keyword_action, keyword_kind
+                params = {text_param: text} if text_param else {}
+                break
+    if _NEEDS_APPROVAL.search(text):
+        approval = ApprovalPolicy.required
+    if approval is not None:
+        fields["approval"] = approval
+    if action_id is None:
+        return {**fields, "kind": StepKind.text}
+    specs = actions[action_id].params
+    if any(spec.is_required and name not in params for name, spec in specs.items()):
+        # A step that would fail at run time for lack of params is a manual instruction instead.
+        return {**fields, "kind": StepKind.text}
+    return {**fields, "kind": kind, "action": action_id, "params": params}
 
 
 def heading_text(source: str) -> str | None:
@@ -78,5 +132,5 @@ class MarkdownRunbookFormat(RunbookFormatPlugin):
         steps: list[RunbookStep] = []
         for index, (is_heading, text) in enumerate(entries):
             fields = {"kind": StepKind.text} if is_heading else _classify(text, actions)
-            steps.append(RunbookStep(index=index, text=text, **fields))  # type: ignore[arg-type]
+            steps.append(RunbookStep(index=index, **{"text": text, **fields}))  # type: ignore[arg-type]
         return steps

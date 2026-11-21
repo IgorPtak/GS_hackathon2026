@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import pytest
+import yaml
 from alerting_contracts.config import ActionConfig
 from alerting_contracts.runbooks import RunbookFormat, StepKind
 from pydantic import ValidationError
@@ -118,3 +121,54 @@ def test_yaml_non_contiguous_indexes():
 def test_yaml_not_a_mapping():
     with pytest.raises(ValueError):
         get_runbook_format("yaml").normalize("- a", ACTIONS)
+
+
+def _real_actions():
+    root = Path(__file__).resolve().parents[3] / "config"
+    return {
+        p.stem: ActionConfig.model_validate(yaml.safe_load(p.read_text()))
+        for p in (root / "actions").glob("*.yaml")
+    }
+
+
+def test_markdown_inline_action_params_and_approval():
+    steps = md(
+        "1. Retry the workflow `retry_workflow workflowId={{workflowId}}`\n"
+        "2. Escalate `escalate workflow_id={{workflowId}}"
+        ' reason="stale feed, again" approval=required`\n'
+        "3. Open it `open-ticket summary=x approval=none`\n",
+        actions=_real_actions(),
+    )
+    assert steps[0].action == "retry-workflow"
+    assert steps[0].text == "Retry the workflow"
+    assert steps[0].params == {"workflow_id": "{{workflowId}}"}
+    assert steps[1].params == {"workflow_id": "{{workflowId}}", "reason": "stale feed, again"}
+    assert steps[1].approval == "required"
+    assert steps[2].approval == "none"
+    assert not any(s.is_automatic for s in steps)
+
+
+def test_markdown_missing_required_params_becomes_text():
+    steps = md("1. Retry the workflow\n2. Escalate now", actions=_real_actions())
+    assert [s.kind for s in steps] == [StepKind.text, StepKind.text]
+    assert all(s.action is None for s in steps)
+
+
+def test_markdown_prose_needs_approval():
+    steps = md("1. Restart it (needs approval from the lead)\n2. Plain step")
+    assert steps[0].approval == "required"
+    assert steps[1].approval is None
+
+
+def test_appendix_b_markdown_runbook():
+    actions = _real_actions()
+    path = Path(__file__).resolve().parents[3] / "config/runbooks/trade-limit-breach.md"
+    steps = md(path.read_text(), actions=actions)
+    by_text = {s.text.split(" ")[0]: s for s in steps}
+    assert by_text["Confirm"].approval == "required"
+    assert by_text["If"].action == "open-ticket"
+    assert by_text["If"].params["team"] == "risk"
+    for step in steps:
+        if step.action:
+            required = {n for n, p in actions[step.action].params.items() if p.is_required}
+            assert required <= set(step.params)

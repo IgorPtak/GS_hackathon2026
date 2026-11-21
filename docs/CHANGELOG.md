@@ -86,3 +86,5 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - A-35 loadtest: raw result files committed under loadtest/results (cpu-bench and profile logs excluded), results doc summary and 500 msg/s row added, compose header corrected
 - A-37 ingest: sources come from the ConfigRegistry and reload on config.changed (new/removed sources and log-tail start/stop/restart, no restart needed)
 - A-39 processor: `events` XTRIM MINID is now min(now − 2 h, every group's oldest pending / last-delivered id), compared numerically; skips the round (`events_trim_skipped`) when XINFO GROUPS/XPENDING fail, quietly when the stream is missing (new `services/processor/trimming.py`)
+
+- A-45 runbook formats: markdown inline `action key=value` params and approval, "needs approval" prose, actions with missing required params become text steps
