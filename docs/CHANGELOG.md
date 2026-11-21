@@ -72,3 +72,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - Redis persistence: AOF (fsync every second) on a named volume; a hard Redis kill under 200 msg/s lost 378 deliveries before, 0 after
 - Relay reconciler: re-publishes relayed delivery jobs still pending after 30 s (lost in Redis), at most once per 11 min per delivery; recovered all 378 jobs lost in the Redis-kill test
 - A-24 in-network loadgen and per-request CPU fixes: run steady load inside the compose network, add sniffio (-11.5% normalized delivery CPU/event), disable ingest access log (-8.7% normalized ingest CPU/event), and add cgroup cpu_bench.py
+- A-27 docker hardening: python image runs as non-root appuser (10001) with dependency layer cached on source changes (rebuild after touching ingest main.py: 4.5 s); root .dockerignore; Grafana anonymous role Viewer and grafana 11.6.16; mailpit v1.34.0, ollama 0.40.16 replace :latest.
