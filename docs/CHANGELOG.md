@@ -85,3 +85,4 @@ One line per task: `- <ID> <title>: <what changed>`. Newest at the bottom.
 - S-04 contract v1.1: `severity_gte` and `time_between` condition operators, 404/409/422 on the manual step-run route, 422 on rule preview
 - A-35 loadtest: raw result files committed under loadtest/results (cpu-bench and profile logs excluded), results doc summary and 500 msg/s row added, compose header corrected
 - A-37 ingest: sources come from the ConfigRegistry and reload on config.changed (new/removed sources and log-tail start/stop/restart, no restart needed)
+- A-39 processor: `events` XTRIM MINID is now min(now − 2 h, every group's oldest pending / last-delivered id), compared numerically; skips the round (`events_trim_skipped`) when XINFO GROUPS/XPENDING fail, quietly when the stream is missing (new `services/processor/trimming.py`)
