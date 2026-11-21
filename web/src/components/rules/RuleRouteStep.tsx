@@ -2,6 +2,8 @@ import type { ConfigLists } from "../../api/types";
 import { teamShortName } from "../../lib/teams";
 import { channelWord } from "../recipients/preferenceSentence";
 import { MultiSelect } from "../ui/MultiSelect";
+import { RulePresentFields } from "./RulePresentFields";
+import { RuleRunbookPicker } from "./RuleRunbookPicker";
 import { parseRouteFromRuleYaml, replaceRouteInRuleYaml, type RouteDraft } from "./routeYaml";
 
 interface RuleRouteStepProps {
@@ -30,7 +32,7 @@ function routeSentence(route: RouteDraft, ownerTeam: string, names: Map<string, 
   return `Alerts go to ${list.format(who)}. Each person is reached the way their own channel preferences say. If none match, by ${how}.`;
 }
 
-/** Step 2: people and channels, written to the rule's `route:` block. */
+/** Step 2: people and channels (`route:`), how the alert reads (`present:`) and its runbook. */
 export function RuleRouteStep({ yaml, ownerTeam, config, onChange }: RuleRouteStepProps) {
   const route = parseRouteFromRuleYaml(yaml);
   if (route === null) {
@@ -102,6 +104,8 @@ export function RuleRouteStep({ yaml, ownerTeam, config, onChange }: RuleRouteSt
           }}
         />
       </div>
+      <RulePresentFields yaml={yaml} onChange={onChange} />
+      <RuleRunbookPicker yaml={yaml} ownerTeam={ownerTeam} onChange={onChange} />
     </div>
   );
 }
