@@ -1,0 +1,34 @@
+@startuml runbook-approval
+!include style.iuml
+title Runbook with a human gate: automatic steps run, risky ones wait
+
+participant "outbox-relay" as relay <<hot>>
+participant "runbook-runner" as runner
+participant "Action plugin" as act
+database "Postgres" as pg
+participant "delivery" as del <<hot>>
+actor "On-call\n(phone / SMS / UI)" as human
+participant "api" as api
+
+relay -> runner : runbook-jobs entry
+group one transaction under pg_advisory_xact_lock(alert_id)
+  runner -> act : step 0  http-health-check
+  act --> runner : succeeded
+  runner -> act : step 1  retry-workflow
+  act --> runner : failed
+  runner -> pg : step 2 escalate (run_if: previous_failed,\napproval: required) → ApprovalRequest + 4-digit code
+  runner -> pg : outbox: approval_request deliveries
+end
+pg -> del : via relay
+del -> human : phone rings / SMS with the code
+human -> api : keypad code, "APPROVE <code>" or Approvals tab
+api -> pg : approval_decided (one decision path)\n+ outbox runbook_job (resume)
+pg -> runner : via relay
+runner -> act : step 2  escalate
+act --> runner : succeeded
+runner -> pg : action_run_succeeded + audit
+note over runner, api
+  A rejection stops the walk for that alert.
+  A resolved alert refuses manual runs with 409 alert_resolved.
+end note
+@enduml

@@ -2,8 +2,6 @@
 
 Runtime configuration loaded into Postgres (`config_documents`) and hot-reloaded across services. One subdirectory per kind.
 
-Owner: A: schemas, rules, recipients, teams, channels, sources · B: runbooks, actions. Tasks: S-03, A-03. See `docs/IMPLEMENTATION_PLAN.md`.
-
 ## Conventions and validation
 
 - Every document lives in its kind's subdirectory under `config/` with filename `<id>.yaml` (or `.yml`; **runbooks** also accept `.md` and `.txt`).

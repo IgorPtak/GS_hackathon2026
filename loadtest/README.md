@@ -2,8 +2,6 @@
 
 Event generator and load-test scenarios.
 
-Owner: track A. Tasks: A-05, A-21. See `docs/IMPLEMENTATION_PLAN.md`.
-
 ## Event generator (`generator.py`)
 
 Sends a mix of the fixture events to ingest with open-loop pacing (send times are computed from the

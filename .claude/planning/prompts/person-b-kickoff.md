@@ -15,9 +15,9 @@ in place.
 ## Read first, in this order
 
 1. `CLAUDE.md`: conventions, model routing policy, definition of done, delegation rules.
-2. `docs/IMPLEMENTATION_PLAN.md`: sections 0–2, then the task details for **S-01, S-03, B-00, B-01, B-05, B-08**, and section 5 (the 3 h gate).
+2. `.claude/planning/IMPLEMENTATION_PLAN.md`: sections 0–2, then the task details for **S-01, S-03, B-00, B-01, B-05, B-08**, and section 5 (the 3 h gate).
 3. `OWNERSHIP.md` (track B paths), `contracts/README.md`.
-4. `contracts/alerting_contracts/{api,sse,runbooks,proposals}.py`, the `paths` section of `contracts/openapi.yaml`, and `docs/glossary.md`. Do not read `docs/plan.md` unless a task needs it.
+4. `contracts/alerting_contracts/{api,sse,runbooks,proposals}.py`, the `paths` section of `contracts/openapi.yaml`, and `docs/glossary.md`. Do not read `.claude/planning/plan.md` unless a task needs it.
 
 ## Hour 0–1 sequence
 
@@ -42,7 +42,7 @@ each a one-line diff idea with its reason. I relay them to my teammate's session
 **Step 3 — Dispatch S-01 and B-00 in parallel (0:35).**
 Their file lists do not overlap: S-01 writes only `scripts/generate_contracts.py`, `contracts/schemas/`,
 `openapi.yaml` components and `web/src/api/schema.gen.ts`, while B-00 owns the rest of `web/`. Use the
-exact format of `docs/agent-brief-template.md`, filled from the plan.
+exact format of `.claude/planning/agent-brief-template.md`, filled from the plan.
 - **S-01** → `backend-engineer`. Add: "`paths` in `openapi.yaml` must stay byte-identical; include `--check` mode; if `web/` does not exist yet, create only `web/src/api/schema.gen.ts`."
 - **B-00** → `scaffolder`. Add: "UI tabs: Alerts, Rules, Runbooks, Approvals, Schemas, Phone, Metrics; `TeamPicker` reads its options from `GET /api/v1/config`; localStorage access in try/catch; `web/Dockerfile` serves the build with nginx, proxying `/api/v1/ingest` to `ingest:8001` and `/api` to `api:8000`."
 

@@ -6,8 +6,8 @@ Alertmanager and log files go through Redis Streams (`events` → processor → 
 YAML config, hot-reloaded. A React UI shows the live feed, rule editor with preview, runbooks with
 approvals and a phone simulator. An LLM (local Ollama by default, an allowlisted cloud endpoint opt-in) only proposes; humans approve.
 
-Read before working: `docs/IMPLEMENTATION_PLAN.md` (your task) · `docs/glossary.md` (names) ·
-`contracts/` (interfaces) · `OWNERSHIP.md` (what you may edit) · `docs/plan.md` (architecture, Polish).
+Read before working: `.claude/planning/IMPLEMENTATION_PLAN.md` (your task) · `docs/glossary.md` (names) ·
+`contracts/` (interfaces) · `OWNERSHIP.md` (what you may edit) · `.claude/planning/plan.md` (architecture, Polish).
 
 ## Commands
 
@@ -73,7 +73,7 @@ to an external service; all other outbound URLs point at compose services or loc
 
 ## Delegation
 
-Every delegation uses `docs/agent-brief-template.md`, filled from the task in the plan. Agents live in
+Every delegation uses `.claude/planning/agent-brief-template.md`, filled from the task in the plan. Agents live in
 `.claude/agents/`: `backend-engineer`, `frontend-engineer`, `plugin-author`, `test-engineer`
 (sonnet), `code-reviewer` (sonnet, read-only), `scaffolder`, `docs-writer`, `verifier` (haiku;
 verifier is read-only). Every agent ends with: task ID, files changed, commands run + results, open

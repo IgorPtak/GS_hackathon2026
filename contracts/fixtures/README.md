@@ -1,8 +1,7 @@
 # Fixtures
 
-**RECONSTRUCTED** from `docs/plan.md`; replace with the official Appendix A/B content from
-`docs/task.md` as soon as it is available (commit `feat(contracts): …`). Used by unit tests,
-`scripts/smoke_test.py` and the load generator.
+Synthetic sample events and runbooks, one per demo team. Used by unit tests,
+`scripts/smoke_test.py`, the load generator and `docs/demo.md`.
 
 | File | Team | Source | Expected rule / runbook |
 |---|---|---|---|

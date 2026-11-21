@@ -21,4 +21,3 @@ Semantics to know:
   unparsable entries go straight to `runbook-jobs-dlq`.
 - Plugin calls are bounded by the action timeout + 5 s; the lock wait by `lock_timeout` 120 s.
 
-Owner: track B. Tasks: B-11. See `docs/IMPLEMENTATION_PLAN.md`.

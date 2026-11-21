@@ -128,13 +128,13 @@ def scene_rates_alert_and_email(ctx: RehearsalContext) -> SceneResult:
             reason=f"no delivered {channel} for rates alert {alert.id}",
         )
         if channel == "sms":  # working hours: Anna's preference routes to sms/phone, no email
-            return f"alert {alert.id[:8]} open, sms delivered (Anna's working hours)"
+            return f"alert {alert.id[-8:]} open, sms delivered (Anna's working hours)"
         poll_until(
             lambda: _probe_mailpit_query(ctx, trade_id),
             timeout=ctx.timeout,
             reason=f"no Mailpit email mentioning {trade_id}",
         )
-        return f"alert {alert.id[:8]} open, email delivered, Mailpit matched {trade_id}"
+        return f"alert {alert.id[-8:]} open, email delivered, Mailpit matched {trade_id}"
 
     return run_scene("rates_alert_and_email", body)
 
@@ -209,7 +209,7 @@ def scene_dedup_500(ctx: RehearsalContext) -> SceneResult:
             timeout=DEDUP_TIMEOUT_SECONDS,
             reason=f"expected 1 alert with count {DEDUP_TOTAL}",
         )
-        return f"1 alert ({alert.id[:8]}), count={alert.count} across {len(batches)} batches"
+        return f"1 alert ({alert.id[-8:]}), count={alert.count} across {len(batches)} batches"
 
     return run_scene("dedup_500", body)
 

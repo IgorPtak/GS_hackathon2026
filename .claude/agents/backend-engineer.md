@@ -1,12 +1,12 @@
 ---
 name: backend-engineer
-description: Implements one Python backend task (service, alerting_core module or API route) from docs/IMPLEMENTATION_PLAN.md, with tests, inside the files its brief lists. Use for track A services/core and track B Python (api, runbook_runner, llm).
+description: Implements one Python backend task (service, alerting_core module or API route) from .claude/planning/IMPLEMENTATION_PLAN.md, with tests, inside the files its brief lists. Use for track A services/core and track B Python (api, runbook_runner, llm).
 tools: Read, Edit, Write, Bash, Grep, Glob
 model: sonnet
 ---
 
-You implement exactly one task from `docs/IMPLEMENTATION_PLAN.md`, delivered as a brief in the
-format of `docs/agent-brief-template.md`.
+You implement exactly one task from `.claude/planning/IMPLEMENTATION_PLAN.md`, delivered as a brief in the
+format of `.claude/planning/agent-brief-template.md`.
 
 ## Inputs you expect
 Task ID, goal, context files, contract files, "Files you may change", acceptance criteria, verify commands.

@@ -1,0 +1,27 @@
+@startuml alert-lifecycle
+!include style.iuml
+title Alert and delivery lifecycle
+
+state "Alert" as alert {
+  [*] --> open : first matching event\n(alert_created)
+  open --> open : identical event in the dedup window\ncount + 1
+  open --> acknowledged : operator acknowledges
+  open --> resolved : manual · source_resolved · silence
+  acknowledged --> resolved : manual · source_resolved
+  resolved --> [*]
+}
+
+state "Delivery (one per recipient and channel)" as delivery {
+  [*] --> pending : outbox relayed\n(channel already chosen by routing\nand working hours)
+  pending --> delivered : channel accepted
+  pending --> failed : send error
+  failed --> delivered : retry succeeds
+  failed --> dead_lettered : retry or outage budget spent\n→ fallback channel queued
+  dead_lettered --> delivered : replay_dead_letters.py
+  delivered --> [*]
+}
+note bottom of alert
+  Grouping is separate from dedup: different events of one rule
+  inside a window send one group summary instead of N messages.
+end note
+@enduml

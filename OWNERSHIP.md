@@ -11,10 +11,10 @@ something from the other track's path, ask its owner, or return `BLOCKED` when y
 | `docs/glossary.md` | shared | Contract rule |
 | `deploy/postgres/migrations/**` | shared | Contract rule; new migration file per change |
 | `pyproject.toml`, `uv.lock` | shared | New dependencies need both people's ack |
-| `CLAUDE.md`, `OWNERSHIP.md`, `.claude/agents/**`, `docs/agent-brief-template.md` | shared | Orchestrator edits |
-| `docs/IMPLEMENTATION_PLAN.md` | shared | Each person ticks their own tasks; re-scoping by the orchestrator |
+| `CLAUDE.md`, `OWNERSHIP.md`, `.claude/agents/**`, `.claude/planning/agent-brief-template.md` | shared | Orchestrator edits |
+| `.claude/planning/IMPLEMENTATION_PLAN.md` | shared | Each person ticks their own tasks; re-scoping by the orchestrator |
 | `docs/CHANGELOG.md` | shared | Append-only, one line per task |
-| `docs/plan.md`, `docs/task.md` | shared | Read-only after hour 0 |
+| `.claude/planning/plan.md`, `.claude/planning/task.md` | shared | Read-only after hour 0 |
 | `scripts/generate_contracts.py` | shared | S-01 |
 | `scripts/validate_config.py` | shared | S-03 |
 | `services/ingest/**` | A | |

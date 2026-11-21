@@ -2,8 +2,6 @@
 
 Channel plugins: base interface, registry, one file per channel type: `ui`, `email`, `sms`, `phone` (mock gateway + phone simulator; `sms.py`/`phone.py` share `_gateway.py`) and `webhook` (renders `settings.body_template` to JSON; 5xx/timeout retryable, 4xx permanent).
 
-Owner: track A. Tasks: A-12, A-15. See `docs/IMPLEMENTATION_PLAN.md`.
-
 ## Add a new channel in under ten lines
 
 Create `plugins/channels/<type>.py`, add the type to `ChannelType` if new, and import the module in `__init__.py`:
@@ -18,7 +16,6 @@ class SlackChannel(ChannelPlugin):
             raise ChannelUnavailableError(f"http {response.status_code}")  # retryable
         if response.status_code >= 400:
             raise ChannelRejectedError(f"http {response.status_code}")  # permanent
-
 
 register_channel_plugin(SlackChannel())
 ```

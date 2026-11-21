@@ -192,7 +192,7 @@ def _wait_seeded(ctx: h.RehearsalContext, reason: str, inst: str | None, host: s
         ctx.timeout,
         f"seeded platform warning ({host}) missing",
     )
-    parts = [f"rates={rates.id[:8]}(x{rates.count})", f"platform={plat.id[:8]}(warning)"]
+    parts = [f"rates={rates.id[-8:]}(x{rates.count})", f"platform={plat.id[-8:]}(warning)"]
     if inst is not None:
         pr = wait(
             "pricing",
@@ -200,7 +200,7 @@ def _wait_seeded(ctx: h.RehearsalContext, reason: str, inst: str | None, host: s
             max(ctx.timeout, PRICING_GROUP_TIMEOUT_SECONDS),
             f"seeded pricing ({inst}) missing",
         )
-        parts.append(f"pricing={pr.id[:8]}({pr.severity.value})")
+        parts.append(f"pricing={pr.id[-8:]}({pr.severity.value})")
     return parts
 
 

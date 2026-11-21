@@ -1,7 +1,7 @@
 # Audit fix plan (backend and infra)
 
 Source: backend audit of 2026-11-21 (four read-only reviewers plus orchestrator spot checks). Task IDs
-continue `docs/IMPLEMENTATION_PLAN.md` (last used: S-03, A-34, B-26). Definition of done follows
+continue `.claude/planning/IMPLEMENTATION_PLAN.md` (last used: S-03, A-34, B-26). Definition of done follows
 `CLAUDE.md` (tests, lint, smoke `--gate 14h`, no contract drift, one CHANGELOG line, only listed files
 changed). One branch per task.
 

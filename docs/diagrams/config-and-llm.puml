@@ -1,0 +1,38 @@
+@startuml config-and-llm
+!include style.iuml
+title Config without restarts, and an LLM that only proposes
+
+actor "Operator" as op
+participant "web" as web
+participant "api" as api
+participant "LLM client" as llm <<human>>
+database "Postgres\nconfig_documents" as pg
+queue "Redis pub/sub\nconfig.changed" as bus
+participant "processor · ingest\ndelivery · runner" as workers <<hot>>
+
+== Edit a rule ==
+op -> web : edit YAML
+web -> api : POST rule preview (last 1 h)
+api --> web : matched events, alerts, deliveries per channel\n(nothing is sent)
+web -> api : PUT /api/v1/rules/{id}
+api -> api : Pydantic + rule validation\n(422 with the field path)
+api -> pg : new version
+api -> bus : publish
+bus -> workers : ConfigRegistry reloads in place
+
+== Ask the LLM ==
+op -> web : Propose a schema / a fix / runbook steps
+web -> api : request
+api -> api : redact_secrets
+api -> llm : schema-constrained JSON\n(host must be in LLM_ALLOWED_HOSTS)
+llm --> api : proposal
+api -> api : validate with Pydantic,\nserialize YAML in Python
+api --> web : proposal + diff + preview
+op -> web : approve
+web -> api : save → same path as "Edit a rule"
+note over llm, workers
+  The hot path never calls the LLM. Free-text runbooks are
+  normalized once at config sync, cached by content hash,
+  and approval gates cannot be removed by the model.
+end note
+@enduml

@@ -2,8 +2,6 @@
 
 Dockerfile, nginx reverse proxy, Postgres migrations (shared), Prometheus, Grafana, Alertmanager config.
 
-Owner: track A (migrations shared). Tasks: A-00, S-02, A-20, A-22, A-41. See `docs/IMPLEMENTATION_PLAN.md`.
-
 ## `proxy` service (`deploy/nginx/nginx.conf`)
 
 The `proxy` container (`nginx:1.27.5-alpine`) owns host ports `8000` and `8001` in `compose.yaml` so `api` and `ingest` can scale horizontally with `docker compose up -d --scale api=N --scale ingest=M` without port conflicts:

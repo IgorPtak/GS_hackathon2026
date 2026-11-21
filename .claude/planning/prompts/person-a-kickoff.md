@@ -13,14 +13,14 @@ foundation moving, while doing the opus-tier work yourself and delegating everyt
 ## Read first, in this order
 
 1. `CLAUDE.md`: conventions, model routing policy, definition of done, delegation rules.
-2. `docs/IMPLEMENTATION_PLAN.md`: sections 0–2, then the task details for **S-00, S-02, A-00, A-01, A-02, A-04**, and section 5 (the 3 h gate).
+2. `.claude/planning/IMPLEMENTATION_PLAN.md`: sections 0–2, then the task details for **S-00, S-02, A-00, A-01, A-02, A-04**, and section 5 (the 3 h gate).
 3. `OWNERSHIP.md`, `contracts/README.md`, `contracts/storage.md`.
-4. Skim `contracts/alerting_contracts/*.py` and `docs/glossary.md`. Do not read `docs/plan.md` unless a task needs it.
+4. Skim `contracts/alerting_contracts/*.py` and `docs/glossary.md`. Do not read `.claude/planning/plan.md` unless a task needs it.
 
 ## Hour 0–1 sequence
 
 **Step 1 — Official brief (0:00–0:15).**
-Check `docs/task.md`. If the official brief has been pasted under the line at the bottom, diff it
+Check `.claude/planning/task.md`. If the official brief has been pasted under the line at the bottom, diff it
 against the reconstructed requirements, judging criteria and appendices above it. Then:
 - replace `contracts/fixtures/` with the official Appendix A events and Appendix B runbooks, keeping the file names;
 - update `contracts/fixtures/README.md` and `contracts/examples/` where the shapes changed;
@@ -40,7 +40,7 @@ use it).
 
 **Step 3 — Dispatch A-00 (at 0:20, in parallel with step 2).**
 Delegate **A-00** to the `scaffolder` agent with a brief in the exact format of
-`docs/agent-brief-template.md`, filled from the plan. Add these explicit points:
+`.claude/planning/agent-brief-template.md`, filled from the plan. Add these explicit points:
 - one Python image for all services (`deploy/python.Dockerfile`);
 - stub services answer `/healthz` and nothing else;
 - the `api` and `runbook-runner` stubs (track B) are created now under the hour-0 exception in `OWNERSHIP.md`;

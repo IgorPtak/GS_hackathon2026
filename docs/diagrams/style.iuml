@@ -1,0 +1,86 @@
+' Shared look for every diagram in docs/diagrams (render: plantuml -tsvg docs/diagrams/*.puml).
+!$ink = "#1F2933"
+!$muted = "#52606D"
+!$line = "#7B8794"
+!$card = "#FFFFFF"
+!$storeFill = "#EEF2FF"
+!$storeLine = "#6366F1"
+!$hotFill = "#ECFDF5"
+!$hotLine = "#10B981"
+!$edgeFill = "#FFF7ED"
+!$edgeLine = "#F59E0B"
+!$humanFill = "#FDF2F8"
+!$humanLine = "#EC4899"
+
+skinparam {
+  BackgroundColor #FFFFFF
+  DefaultFontName "Helvetica"
+  DefaultFontSize 13
+  DefaultFontColor $ink
+  RoundCorner 14
+  Shadowing false
+  ArrowColor $line
+  ArrowFontColor $muted
+  ArrowFontSize 11
+  ArrowThickness 1.3
+  NoteBackgroundColor #FFFBEB
+  NoteBorderColor #FCD34D
+  NoteFontColor $muted
+  NoteFontSize 11
+  ParticipantBackgroundColor $card
+  ParticipantBorderColor $line
+  ParticipantPadding 12
+  BoxPadding 10
+  SequenceGroupBorderColor $line
+  SequenceGroupBackgroundColor #F8FAFC
+  SequenceLifeLineBorderColor #CBD2D9
+  SequenceDividerBackgroundColor #F1F5F9
+  SequenceDividerBorderColor #CBD2D9
+  ComponentBackgroundColor $card
+  ComponentBorderColor $line
+  DatabaseBackgroundColor $storeFill
+  DatabaseBorderColor $storeLine
+  QueueBackgroundColor $storeFill
+  QueueBorderColor $storeLine
+  RectangleBorderColor $line
+  PackageBorderColor #CBD2D9
+  PackageFontColor $muted
+  StateBackgroundColor $card
+  StateBorderColor $line
+  StateStartColor $ink
+  StateEndColor $ink
+  ActivityBackgroundColor $card
+  ActivityBorderColor $line
+  ActivityDiamondBackgroundColor #F8FAFC
+  ActivityDiamondBorderColor $line
+  ActorBorderColor $humanLine
+  ActorBackgroundColor $humanFill
+  TitleFontSize 17
+  TitleFontColor $ink
+  LegendBackgroundColor #F8FAFC
+  LegendBorderColor #CBD2D9
+  LegendFontSize 11
+}
+
+' Stereotypes colour elements by role; the stereotype label itself is hidden.
+skinparam component<<hot>> {
+  BackgroundColor $hotFill
+  BorderColor $hotLine
+}
+skinparam component<<human>> {
+  BackgroundColor $humanFill
+  BorderColor $humanLine
+}
+skinparam rectangle<<edge>> {
+  BackgroundColor $edgeFill
+  BorderColor $edgeLine
+}
+skinparam participant<<hot>> {
+  BackgroundColor $hotFill
+  BorderColor $hotLine
+}
+skinparam participant<<human>> {
+  BackgroundColor $humanFill
+  BorderColor $humanLine
+}
+hide stereotype

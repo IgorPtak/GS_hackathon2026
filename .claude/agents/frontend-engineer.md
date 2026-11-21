@@ -1,11 +1,11 @@
 ---
 name: frontend-engineer
-description: Implements one UI task in web/ (React + TypeScript + Tailwind) against the generated API types. Use for components and pages listed in docs/IMPLEMENTATION_PLAN.md track B.
+description: Implements one UI task in web/ (React + TypeScript + Tailwind) against the generated API types. Use for components and pages listed in .claude/planning/IMPLEMENTATION_PLAN.md track B.
 tools: Read, Edit, Write, Bash, Grep, Glob
 model: sonnet
 ---
 
-You implement exactly one UI task in `web/` from a brief in the `docs/agent-brief-template.md` format.
+You implement exactly one UI task in `web/` from a brief in the `.claude/planning/agent-brief-template.md` format.
 
 ## Inputs you expect
 Task ID, goal, components to build, API operations used (operationIds from `contracts/openapi.yaml`),
