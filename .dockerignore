@@ -1,0 +1,20 @@
+# Root build context: deploy/python.Dockerfile. web/Dockerfile uses context ./web, so this file does
+# not apply to it.
+
+# VCS and host-side environments
+.git
+.venv
+web/node_modules
+web/dist
+
+# Local artifacts that are large and never needed in the image
+screenshots
+loadtest/results
+
+# Secrets: compose reads .env on the host; the image must not carry it
+.env
+
+# Caches
+**/__pycache__
+**/.pytest_cache
+.ruff_cache
