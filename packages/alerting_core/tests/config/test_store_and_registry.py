@@ -267,6 +267,47 @@ async def test_sync_loads_files_off_the_event_loop_with_llm_opt_in(
         return LoadResult()
 
     monkeypatch.setattr(config_store, "load_config_directory", fake_load)
-    await sync_config_files(None, None, tmp_path)  # type: ignore[arg-type]
+    await sync_config_files(None, None, tmp_path, normalize_text_with_llm=True)  # type: ignore[arg-type]
     assert seen["thread"] is not threading.main_thread() and seen["llm"] is True
+    await sync_config_files(None, None, tmp_path)  # type: ignore[arg-type]
+    assert seen["llm"] is False  # default: no LLM (every service except the api)
     assert config_store.NORMALIZE_TEXT_WITH_LLM.get() is False  # caller context untouched
+
+
+def _llm_runbook(source: str, normalized_by: str) -> dict:
+    return {
+        "id": "rb",
+        "title": "rb",
+        "format": "text",
+        "source": source,
+        "steps": [{"index": 0, "kind": "text", "text": source}],
+        "normalized_by": normalized_by,
+    }
+
+
+async def _file_upsert(pool: asyncpg.Pool, document: dict, mtime: float) -> int | None:
+    from datetime import UTC, datetime
+
+    from alerting_contracts.runbooks import Runbook
+    from alerting_core.config import store
+
+    return await store._upsert(
+        pool, "runbook", Runbook.model_validate(document), ACTOR, datetime.fromtimestamp(mtime, UTC)
+    )
+
+
+async def test_flag_off_sync_keeps_llm_runbook_with_unchanged_source(pool: asyncpg.Pool) -> None:
+    future = time.time() + 3600  # the file looks newer than the row: only the guard can stop it
+    assert await _file_upsert(pool, _llm_runbook("text", "llm"), future) == 1
+    assert await _file_upsert(pool, _llm_runbook("text", "fallback"), future + 10) is None
+    row = await pool.fetchrow("SELECT document FROM config_documents WHERE id = 'rb'")
+    assert row["document"]["normalized_by"] == "llm"
+    # A changed source is a real edit and still wins.
+    assert await _file_upsert(pool, _llm_runbook("new text", "fallback"), future + 20) == 2
+
+
+async def test_llm_runbook_replaces_fallback_written_first_by_another_service(
+    pool: asyncpg.Pool,
+) -> None:
+    assert await _file_upsert(pool, _llm_runbook("text", "fallback"), 1.0) == 1
+    assert await _file_upsert(pool, _llm_runbook("text", "llm"), 1.0) == 2  # older file, still wins
